@@ -15,11 +15,11 @@ Each phase is a shippable slice with an acceptance gate. The design behind every
 
 | Phase | Slice | Gate | Lane |
 |---|---|---|---|
-| 0 | **Core** — capture document, renderer, cut geometry + torn seam, coordinate map, gap detection, edits in `iTXt` | Golden-image tests for cuts and annotations; edits round-trip through a PNG | Not started |
-| 1 | **Capture shell** — menu bar, hotkeys, area (frozen) / window / fullscreen, library save, clipboard, thumbnail; signed `.app` via `just app` | A capture lands in the library with the dated name and on the clipboard | Not started |
-| 2 | **Editor** — canvas over Core's renderer, the eight tools, undo, save to primary + master | Cut a spreadsheet capture, reopen it from the library, adjust the cut | Not started |
+| 0 | **Core** — capture document, renderer, cut geometry + torn seam, coordinate map, gap detection, edits in `iTXt`, library naming and store | Golden-image tests for cuts; edits round-trip through the master PNG | Not started |
+| 1 | **Capture shell** — menu bar, default hotkeys, area (frozen) / window / fullscreen, library save, clipboard, thumbnail, settings; signed `.app` via `just app` | A capture lands in the library with the dated name and on the clipboard | Not started |
+| 2 | **Editor** — annotation model + rendering in Core, canvas over Core's renderer, the eight tools, undo, save to primary + master | Cut a spreadsheet capture, reopen it from the library, adjust the cut | Not started |
 | 3 | **Scrolling capture** — auto-scroll, stitcher, sticky regions, manual fallback, uncertain-stop | Stitcher fixtures (sticky header, long form, animated element) pass; a real long page captures cleanly | Not started |
-| 4 | **Text + Claude** — capture text (⌘⇧5), all-in-one selector (⌘⇧6), For Claude export | A 10,000px capture pastes into Claude Code as legible tiles + `text.md` with cut markers | Not started |
+| 4 | **Text + Claude** — capture text (⌘⇧5), all-in-one selector (⌘⇧6), hotkey rebinding, For Claude export | A 10,000px capture pastes into Claude Code as legible tiles + `text.md` with cut markers | Not started |
 | 5 | **v1 release** — notarized build, `install.sh` + `/excerpt:install`, README curation | Fresh-machine install from the curl one-liner | Not started |
 
 ## After v1

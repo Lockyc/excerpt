@@ -16,7 +16,8 @@ in a shape Claude can read.
 
 ## Modules
 
-SwiftPM only — no `.xcodeproj`. macOS 15+, Swift 6 language mode.
+SwiftPM only — no `.xcodeproj`. macOS 15+. `ExcerptCore` builds in Swift 6 language mode; the
+AppKit / ScreenCaptureKit targets build in Swift 5 mode (see `Package.swift`).
 
 | Module | Owns | Depends on |
 |---|---|---|
@@ -37,9 +38,9 @@ Captures land in the **library** — `~/Documents/Screenshots/` by default (a se
 - **The dated file is the primary**: the flattened render, carrying no metadata beyond standard
   PNG fields. It is what gets copied, dragged and shared, so it must never contain pixels the
   user removed — an embedded original would hand every recipient the unredacted capture.
-- **`… original.png` is the private master**, written the first time a capture is edited and
-  never rewritten: the untouched capture, with the edit document (`excerpt.edits`, JSON) in a
-  PNG `iTXt` chunk. An unedited capture is one file.
+- **`… original.png` is the private master**, written the first time a capture is edited. Its
+  pixels are the untouched capture and never change; the edit document (`excerpt.edits`, JSON)
+  lives in a PNG `iTXt` chunk, the only part a re-save rewrites. An unedited capture is one file.
 - **Re-editing** either file loads the original plus its edits; saving re-renders the primary.
   A primary whose original is gone opens as a flat image.
 - Sidecar files and a separate edits database are both wrong here: library files get moved and
@@ -63,7 +64,7 @@ within ~12pt — so a cut never bisects a line of text or a table row; `⌥` dis
 Selecting a seam shows a handle per side; dragging one reveals or hides content on that side.
 `Delete` removes the cut.
 
-**The seam.** Both edges get a jagged torn edge with a soft shadow, separated by a ~14pt gap in
+**The seam.** Both edges get a jagged torn edge with a soft shadow, separated by an ~18pt gap in
 a neutral fill holding a pill: `⋯ 1,240 px hidden`, in points (rotated 90° on vertical cuts).
 The tear's shape is seeded from the cut's position, so identical edits render identical pixels.
 
