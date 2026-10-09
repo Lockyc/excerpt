@@ -1,0 +1,17 @@
+name    = "excerpt"
+summary = "macOS screenshot tool - capture, scrolling capture, annotation, and a cut tool that removes the middle of a screenshot behind a torn seam."
+kind    = "app"
+status  = "active"
+tags    = ["screenshot", "scrolling-capture", "annotation", "ocr", "macos"]
+stack   = ["swift", "swiftui", "screencapturekit"]
+
+[fleet]
+exempt      = ["ci"]
+exempt_note = "macOS-only: the local `just gate` covers the one platform it ships on"
+
+[github]
+topics_extra = ["screenshot-tool", "scrolling-screenshot", "menu-bar-app", "claude"]
+
+[[provides]]
+name    = "screenshot-capture"
+summary = "Screenshot capture with scrolling capture, annotation, cut-out-the-middle editing, and a Claude-readable tiled export"
