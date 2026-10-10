@@ -6,6 +6,9 @@ public enum StitchStep: Equatable, Sendable {
     case noMovement
     /// The frame didn't match; the stitch is unchanged.
     case uncertain
+    /// The page moved `offset` rows, outside the travel the caller expected; the stitch is
+    /// unchanged.
+    case unexpectedTravel(offset: Int)
     /// The stitch is at its maximum height. Rows up to the limit were kept.
     case reachedLimit
 }
@@ -42,12 +45,16 @@ public struct Stitcher: Sendable {
         reference = first
     }
 
-    public mutating func add(_ frame: PixelBuffer) -> StitchStep {
+    /// Joins `frame` to the stitch. With `travel`, a move by an offset outside it is not
+    /// joined: the caller knows how far the page should have moved, and repeated content can
+    /// alias a jump of more than a frame as a small move.
+    public mutating func add(_ frame: PixelBuffer, travel: ClosedRange<Int>? = nil) -> StitchStep {
         guard !full else { return .reachedLimit }
         switch StitchMatcher.match(reference, frame, ignoringRightColumns: ignoredRightColumns) {
         case .still: return .noMovement
         case .uncertain: return .uncertain
         case .moved(let offset, _, let footer):
+            if let travel, !travel.contains(offset) { return .unexpectedTravel(offset: offset) }
             let rowBytes = width * 4
             // The sticky rows on the stitch's tail: the last move's footer, or for the first
             // move the footer it just revealed on the first frame.

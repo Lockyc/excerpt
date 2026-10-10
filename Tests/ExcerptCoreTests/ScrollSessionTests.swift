@@ -21,28 +21,28 @@ import Testing
 
     @Test func twoStillStepsAfterMovingAreTheEnd() {
         var s = session()
-        s.stepped(frame(120))
-        s.stepped(frame(120))
+        s.stepped(frame(120), travel: 120)
+        s.stepped(frame(120), travel: 120)
         #expect(s.phase == .auto)
-        s.stepped(frame(120))
+        s.stepped(frame(120), travel: 120)
         #expect(s.phase == .finished)
         #expect(s.stitcher.height == 320)
     }
 
     @Test func aStillStepBetweenMovesDoesNotEndIt() {
         var s = session()
-        s.stepped(frame(120))
-        s.stepped(frame(120))
-        s.stepped(frame(240))
-        s.stepped(frame(240))
+        s.stepped(frame(120), travel: 120)
+        s.stepped(frame(120), travel: 120)
+        s.stepped(frame(240), travel: 120)
+        s.stepped(frame(240), travel: 120)
         #expect(s.phase == .auto)
     }
 
     @Test func twoStillStepsBeforeAnyMovementHandScrollingToTheUser() {
         var s = session()
-        s.stepped(frame(0))
+        s.stepped(frame(0), travel: 120)
         #expect(s.phase == .auto)
-        s.stepped(frame(0))
+        s.stepped(frame(0), travel: 120)
         #expect(s.phase == .manual(.noMovement))
         #expect(
             s.hud
@@ -62,7 +62,7 @@ import Testing
 
     @Test func losingAccessibilityMidCaptureFallsBackKeepingTheStitch() {
         var s = session()
-        s.stepped(frame(120))
+        s.stepped(frame(120), travel: 120)
         s.fallBack(.accessibility)
         #expect(s.phase == .manual(.accessibility))
         #expect(s.stitcher.height == 320)
@@ -72,8 +72,8 @@ import Testing
 
     @Test func anUncertainStepHaltsAndSaysWhere() {
         var s = ScrollSession(first: frame(0), scale: 2, canAutoScroll: true)
-        s.stepped(frame(120))
-        s.stepped(ScrollFixtures.page(width: 90, height: 200, seed: 5))
+        s.stepped(frame(120), travel: 120)
+        s.stepped(ScrollFixtures.page(width: 90, height: 200, seed: 5), travel: 120)
         #expect(s.phase == .halted(.uncertain))
         #expect(
             s.hud
@@ -85,7 +85,7 @@ import Testing
 
     @Test func theLimitHalts() {
         var s = session(maximumHeight: 300)
-        s.stepped(frame(120))
+        s.stepped(frame(120), travel: 120)
         #expect(s.phase == .halted(.limit))
         #expect(s.hud.title == "Stopped at the 300 px height limit")
         #expect(s.stitcher.height == 300)
@@ -108,13 +108,13 @@ import Testing
         s.sampled(frame(120))
         #expect(s.stitcher.height == 200)
         var m = session(canAutoScroll: false)
-        m.stepped(frame(120))
+        m.stepped(frame(120), travel: 120)
         #expect(m.stitcher.height == 200)
     }
 
     @Test func heightIsShownInPoints() {
         var s = ScrollSession(first: frame(0), scale: 2, canAutoScroll: true)
-        s.stepped(frame(120))
+        s.stepped(frame(120), travel: 120)
         #expect(s.heightText == "160 px")
     }
 
@@ -130,7 +130,7 @@ import Testing
 
     @Test func aPointerThatLeftTheRegionHasItsOwnWording() {
         var s = session()
-        s.stepped(frame(120))
+        s.stepped(frame(120), travel: 120)
         s.fallBack(.pointerMoved)
         #expect(s.phase == .manual(.pointerMoved))
         #expect(s.hud.detail == "Move the pointer back over the region, or scroll it yourself")
@@ -145,10 +145,10 @@ import Testing
 
     @Test func truncationByThePointerNeverReadsAsTheEnd() {
         var s = session()
-        s.stepped(frame(120))
+        s.stepped(frame(120), travel: 120)
         s.fallBack(.pointerMoved)
-        s.stepped(frame(120))
-        s.stepped(frame(120))
+        s.stepped(frame(120), travel: 120)
+        s.stepped(frame(120), travel: 120)
         #expect(s.phase == .manual(.pointerMoved))
         #expect(s.hud.title != "Reached the end of the page")
     }
@@ -180,11 +180,48 @@ import Testing
                 footer: ScrollFixtures.rows(footer, 0..<rows))
         }
         var s = ScrollSession(first: f(0, 10), scale: 1, canAutoScroll: true)
-        s.stepped(f(120, 10))
-        s.stepped(f(120, 10))  // still: 1
-        s.stepped(f(130, 30))  // the page moved under a grown footer: appended(rows: 0)
-        s.stepped(f(130, 30))  // still: 1, not 2
+        s.stepped(f(120, 10), travel: 120)
+        s.stepped(f(120, 10), travel: 120)  // still: 1
+        // A 10-row step: the page moved under a grown footer, appended(rows: 0).
+        s.stepped(f(130, 30), travel: 10)
+        s.stepped(f(130, 30), travel: 10)  // still: 1, not 2
         #expect(s.phase == .auto)
+    }
+
+    @Test func aStepFarBeyondTheExpectedTravelHalts() {
+        var s = session()
+        s.stepped(frame(160), travel: 100)
+        #expect(s.phase == .halted(.uncertain))
+        #expect(s.stitcher.height == 200)
+    }
+
+    @Test func aShortStepIsKeptOnceTheNextShowsThePageEnded() {
+        var s = session()
+        s.stepped(frame(20), travel: 120)
+        #expect(s.phase == .auto)
+        #expect(s.stitcher.height == 200)
+        s.stepped(frame(20), travel: 120)
+        #expect(s.phase == .auto)
+        #expect(s.stitcher.height == 220)
+        s.stepped(frame(20), travel: 120)
+        #expect(s.phase == .finished)
+        #expect(s.stitcher.image == ScrollFixtures.rows(page, 0..<220))
+    }
+
+    @Test func aShortStepFollowedByMovementHalts() {
+        var s = session()
+        s.stepped(frame(20), travel: 120)
+        s.stepped(frame(140), travel: 120)
+        #expect(s.phase == .halted(.uncertain))
+        #expect(s.stitcher.height == 200)
+    }
+
+    @Test func fallingBackDropsAShortStepNotYetBelieved() {
+        var s = session()
+        s.stepped(frame(20), travel: 120)
+        s.fallBack(.pointerMoved)
+        s.sampled(frame(100))
+        #expect(s.stitcher.image == ScrollFixtures.rows(page, 0..<300))
     }
 
     @Test func theCapInManualModeHalts() {

@@ -46,6 +46,10 @@ public struct ScrollSession: Sendable {
     public static let stepShare = 0.6
     /// Consecutive auto-scroll steps that don't move the page before it counts as stopped.
     public static let stillStepsToStop = 2
+    /// How far an auto step may move the page, as a share of the travel posted. Further is a
+    /// false match: repeated content aliases a jump of more than a frame. Shorter is believed only
+    /// once the next step shows the page has ended there; otherwise it halts as uncertain.
+    public static let travelShare: ClosedRange<Double> = 0.25...1.5
 
     public private(set) var stitcher: Stitcher
     public private(set) var phase: ScrollPhase
@@ -54,6 +58,9 @@ public struct ScrollSession: Sendable {
     public let scale: Double
     private var stillSteps = 0
     private var moved = false
+    /// Auto: a frame that moved less than a step, held out of the stitch until the next step
+    /// shows whether the page ended.
+    private var shortStep: PixelBuffer?
 
     /// Starts in `.auto` when Excerpt can scroll the page, `.manual(.accessibility)` when not.
     public init(
@@ -70,11 +77,39 @@ public struct ScrollSession: Sendable {
         regionHeightPoints * stepShare
     }
 
-    /// Auto: the settled frame after one scroll step. Any `.appended`, even of zero rows (the
-    /// page moved under a footer that grew), is movement.
-    public mutating func stepped(_ frame: PixelBuffer) {
+    /// Auto: the settled frame after one scroll step that posted `travel` image pixels. Any
+    /// `.appended`, even of zero rows (the page moved under a footer that grew), is movement.
+    public mutating func stepped(_ frame: PixelBuffer, travel: Int) {
         guard phase == .auto else { return }
-        switch stitcher.add(frame) {
+        if let short = shortStep {
+            shortStep = nil
+            let after = StitchMatcher.match(
+                short, frame, ignoringRightColumns: stitcher.ignoredRightColumns)
+            guard after == .still else {
+                phase = .halted(.uncertain)
+                return
+            }
+            // The page ended after the short step: it joins the stitch, and this frame is a still
+            // step.
+            record(stitcher.add(short))
+            if phase == .auto { record(.noMovement) }
+            return
+        }
+        let expected = Double(travel)
+        let range =
+            Int(
+                (expected * Self.travelShare.lowerBound).rounded(.up))...Int(
+                (expected * Self.travelShare.upperBound).rounded(.down))
+        let step = stitcher.add(frame, travel: range)
+        if case .unexpectedTravel(let offset) = step, offset < range.lowerBound {
+            shortStep = frame
+            return
+        }
+        record(step)
+    }
+
+    private mutating func record(_ step: StitchStep) {
+        switch step {
         case .appended:
             moved = true
             stillSteps = 0
@@ -83,7 +118,7 @@ public struct ScrollSession: Sendable {
             if stillSteps >= Self.stillStepsToStop {
                 phase = moved ? .finished : .manual(.noMovement)
             }
-        case .uncertain: phase = .halted(.uncertain)
+        case .uncertain, .unexpectedTravel: phase = .halted(.uncertain)
         case .reachedLimit: phase = .halted(.limit)
         }
     }
@@ -94,15 +129,18 @@ public struct ScrollSession: Sendable {
         guard case .manual = phase else { return }
         switch stitcher.add(frame) {
         case .appended, .noMovement: offTrack = false
-        case .uncertain: offTrack = true
+        case .uncertain, .unexpectedTravel: offTrack = true
         case .reachedLimit: phase = .halted(.limit)
         }
     }
 
     /// Auto-scroll can't go on (Accessibility was turned off, the pointer left the region, or
-    /// a scroll event couldn't be made): the user scrolls from here.
+    /// a scroll event couldn't be made): the user scrolls from here. A short step not yet
+    /// believed is dropped: the user's frames are matched against the stitch's end.
     public mutating func fallBack(_ reason: ManualReason) {
-        if phase == .auto { phase = .manual(reason) }
+        guard phase == .auto else { return }
+        phase = .manual(reason)
+        shortStep = nil
     }
 
     /// The stitch's height, as the preview labels it.

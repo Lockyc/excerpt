@@ -88,6 +88,16 @@ import Testing
                 == .appended(rows: 120))
     }
 
+    @Test func aMoveOutsideTheExpectedTravelLeavesTheStitchAsItWas() {
+        let page = ScrollFixtures.page(width: 90, height: 1000)
+        var stitcher = Stitcher(
+            first: ScrollFixtures.frame(page, offset: 0, viewport: 200), scale: 1)
+        let frame = ScrollFixtures.frame(page, offset: 120, viewport: 200)
+        #expect(stitcher.add(frame, travel: 30...90) == .unexpectedTravel(offset: 120))
+        #expect(stitcher.height == 200)
+        #expect(stitcher.add(frame, travel: 30...180) == .appended(rows: 120))
+    }
+
     @Test func noMovementChangesNothing() {
         let page = ScrollFixtures.page(width: 90, height: 1000)
         var stitcher = Stitcher(
