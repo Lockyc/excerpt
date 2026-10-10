@@ -8,8 +8,9 @@ public enum EditDocumentError: Error, Equatable, LocalizedError {
     /// would trap or exhaust memory.
     case invalidScale(Double)
     /// A cut bound, crop, annotation coordinate or annotation id outside
-    /// `EditDocument.coordinateLimit` or `EditDocument.idLimit`, an id used twice, or more than
-    /// `EditDocument.maximumCutsPerAxis` cuts on an axis.
+    /// `EditDocument.coordinateLimit` or `EditDocument.idLimit`, an id used twice, more than
+    /// `EditDocument.maximumCutsPerAxis` cuts on an axis, or more than
+    /// `EditDocument.maximumAnnotations` annotations.
     case invalidGeometry
     /// The edits JSON isn't a readable edit document at all.
     case damaged
@@ -130,12 +131,19 @@ public struct EditDocument: Codable, Equatable, Sendable {
     /// The most cuts a document may make on either axis. Each one is a seam to draw and
     /// multiplies the regions read for text, so a crafted master's thousands are refused.
     public static let maximumCutsPerAxis = 1_000
+    /// The most annotations a document may hold. Every blur is grouped against the others before
+    /// it is drawn, so a crafted master's hundred thousand are refused.
+    public static let maximumAnnotations = 10_000
     /// Annotation ids are in `0..<idLimit`, which keeps `nextAnnotationID` clear of overflow.
     public static let idLimit = Int.max / 2
 
     /// Throws `invalidGeometry` unless every stored coordinate, size and id is in range and
-    /// neither axis has more than `maximumCutsPerAxis` cuts.
+    /// neither axis has more than `maximumCutsPerAxis` cuts nor the document more than
+    /// `maximumAnnotations` annotations.
     private func validateGeometry() throws {
+        guard annotations.count <= Self.maximumAnnotations else {
+            throw EditDocumentError.invalidGeometry
+        }
         for axis in [Axis.horizontal, .vertical]
         where cuts.lazy.filter({ $0.axis == axis }).count > Self.maximumCutsPerAxis {
             throw EditDocumentError.invalidGeometry

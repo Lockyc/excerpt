@@ -174,6 +174,24 @@ import Testing
         }
     }
 
+    /// Every blur is grouped against the others, so a crafted master's 100,000 are refused.
+    @Test(.timeLimit(.minutes(1))) func rejectsMoreThanTenThousandAnnotations() throws {
+        func document(_ count: Int) throws -> Data {
+            try EditDocument(
+                scale: 2,
+                annotations: (0..<count).map {
+                    Annotation(id: $0, shape: .blur(rect: CGRect(x: $0, y: 0, width: 4, height: 4)))
+                }, salt: 7
+            ).encoded()
+        }
+        let limit = EditDocument.maximumAnnotations
+        #expect(limit == 10_000)
+        #expect(try EditDocument.decode(try document(limit)).annotations.count == limit)
+        #expect(throws: EditDocumentError.invalidGeometry) {
+            try EditDocument.decode(try document(limit + 1))
+        }
+    }
+
     @Test func rejectsAnEmptyOrNegativeCrop() {
         rejects(#""crop":{"x":0,"y":0,"width":0,"height":10}"#)
         rejects(#""crop":{"x":0,"y":0,"width":10,"height":-5}"#)

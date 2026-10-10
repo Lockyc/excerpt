@@ -179,9 +179,9 @@ change re-renders the cache. Undo is a stack of document values.
   as its own pixels, so a redaction drawn over it holds. Any other file is treated as uncut,
   upright, with Retina scale read from its DPI metadata (anything outside 1×–3× reads as 1×). A
   file it can't use exits non-zero with the reason. Input limits derive from the largest capture
-  Excerpt makes. Edits with more than `EditDocument.maximumCutsPerAxis` cuts on an axis read as
-  damaged, and a capture whose cuts split it into more than `CaptureText.maximumRegions` parts
-  to read is refused, so a crafted master can't hold Vision for hours.
+  Excerpt makes. Edits past `EditDocument.maximumCutsPerAxis` cuts an axis or `maximumAnnotations`
+  read as damaged, and a capture cut into over `CaptureText.maximumRegions` parts to read is
+  refused, so a crafted master can't hold Vision or the renderer for hours.
 
   Known limits: `text.md` reads two-column layouts row by row; `@path` references assume a home
   folder without spaces; Vision can miss text on busy synthetic backgrounds. Tiles split on height
