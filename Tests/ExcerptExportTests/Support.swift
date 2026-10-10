@@ -57,15 +57,6 @@ struct ColourWords: TextRecognizer {
     }
 }
 
-/// Counts the images it is shown and reads nothing.
-final class CountingRecognizer: TextRecognizer, @unchecked Sendable {
-    private(set) var sizes: [CGSize] = []
-    func recognize(_ image: CGImage) throws -> [RecognizedText] {
-        sizes.append(CGSize(width: image.width, height: image.height))
-        return []
-    }
-}
-
 /// Keeps every image it is shown, in order, and reads nothing.
 final class RecordingRecognizer: TextRecognizer, @unchecked Sendable {
     private(set) var images: [CGImage] = []

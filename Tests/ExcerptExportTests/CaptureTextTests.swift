@@ -42,32 +42,41 @@ import Testing
         #expect(!text.contains("cutaway"))
     }
 
+    static let privacyBlur = Annotation(
+        id: 1, shape: .blur(rect: CGRect(x: 10, y: 195, width: 80, height: 20)))
+    static let privacyCuts = [
+        Cut(axis: .horizontal, lower: 280, upper: 340),
+        Cut(axis: .vertical, lower: 150, upper: 250),
+    ]
+
     /// Review focus: the recogniser sees only kept rows by kept columns of the render. Every
     /// image it is handed is a crop of the render clear of every seam, and away from the torn
-    /// edges each of its pixels is the blurred source pixel the map places there, so no seam, no
-    /// label, no cut band and no unblurred pixel reaches it.
-    @Test func theRecogniserSeesOnlyKeptPixelsOfTheRender() throws {
+    /// edges each of its pixels is the blurred source pixel the map places there (through the
+    /// crop's offset), so no seam, no label, no cut band and no unblurred pixel reaches it.
+    @Test(arguments: [
+        EditDocument(scale: 1, cuts: privacyCuts, annotations: [privacyBlur], salt: 7),
+        EditDocument(
+            scale: 2, cuts: privacyCuts, crop: PixelRect(x: 10, y: 15, width: 375, height: 560),
+            annotations: [privacyBlur], salt: 7),
+    ])
+    func theRecogniserSeesOnlyKeptPixelsOfTheRender(edits: EditDocument) throws {
         let original = ColourWords.page(width: 400, height: 600, words: Self.words)
-        let blur = Annotation(
-            id: 1, shape: .blur(rect: CGRect(x: 10, y: 195, width: 80, height: 20)))
-        let edits = EditDocument(
-            scale: 1,
-            cuts: [
-                Cut(axis: .horizontal, lower: 280, upper: 340),
-                Cut(axis: .vertical, lower: 150, upper: 250),
-            ],
-            annotations: [blur], salt: 7)
         let render = Renderer.render(original, edits: edits)
         let blurred = PixelBuffer(
-            Renderer.render(original, edits: EditDocument(scale: 1, annotations: [blur], salt: 7))
-                .image)
+            Renderer.render(
+                original,
+                edits: EditDocument(
+                    scale: edits.scale, annotations: edits.annotations, salt: edits.salt)
+            ).image)
         let recorder = RecordingRecognizer()
-        _ = try CaptureText.read(render.image, map: render.map, scale: 1, recognizer: recorder)
+        _ = try CaptureText.read(
+            render.image, map: render.map, scale: edits.scale, recognizer: recorder)
 
-        let regions = CaptureText.regions(of: render.map, scale: 1)
+        let crop = render.map.crop
+        let regions = CaptureText.regions(of: render.map, scale: edits.scale)
         #expect(recorder.images.count == regions.count)
         #expect(recorder.images.count == 4)
-        let tornEdge = 8
+        let tornEdge = Int(8 * edits.scale)
         let hidden = [ColourWords.palette[2].colour, ColourWords.palette[3].colour]
         for (image, region) in zip(recorder.images, regions) {
             let rect = region.rect
@@ -88,13 +97,13 @@ import Testing
                     if hidden.contains(seen[x: x, y: y]) { leaked += 1 }
                     let nearSeam =
                         (rows.source.lowerBound > 0 && y < tornEdge)
-                        || (rows.source.upperBound < original.height && y >= seen.height - tornEdge)
+                        || (rows.source.upperBound < crop.height && y >= seen.height - tornEdge)
                         || (columns.source.lowerBound > 0 && x < tornEdge)
-                        || (columns.source.upperBound < original.width
-                            && x >= seen.width - tornEdge)
+                        || (columns.source.upperBound < crop.width && x >= seen.width - tornEdge)
                     if !nearSeam {
                         let source = blurred[
-                            x: columns.source.lowerBound + x, y: rows.source.lowerBound + y]
+                            x: crop.x + columns.source.lowerBound + x,
+                            y: crop.y + rows.source.lowerBound + y]
                         if seen[x: x, y: y] != source {
                             Issue.record("pixel (\(x), \(y)) of region \(rect) is not its source")
                             return
@@ -161,12 +170,16 @@ import Testing
         #expect(regions.last?.owned.upperBound == map.renderedHeight)
     }
 
+    /// Slices are 0..<1500, 1400..<2900 and 1900..<3400, owning 0..<1450, 1450..<2400 and the
+    /// rest. `alpha` lies wholly in the first two slices; `beta` straddles the first slice's bottom
+    /// edge, so that slice reads only its top rows and the second reads it whole.
     @Test func aRunTwoSlicesShareIsReadOnce() throws {
-        let image = ColourWords.page(width: 200, height: 3_400, words: ["alpha": (20, 1_440)])
+        let image = ColourWords.page(
+            width: 200, height: 3_400, words: ["alpha": (20, 1_440), "beta": (20, 1_495)])
         let render = Renderer.render(image, edits: EditDocument(scale: 1))
         let text = try CaptureText.read(
             render.image, map: render.map, scale: 1, recognizer: ColourWords())
-        #expect(text == "alpha\n")
+        #expect(text == "alpha\n\nbeta\n")
     }
 
     @Test func aThinSegmentIsNotRead() throws {
@@ -174,8 +187,8 @@ import Testing
         let render = Renderer.render(
             image,
             edits: EditDocument(scale: 1, cuts: [Cut(axis: .horizontal, lower: 4, upper: 300)]))
-        let counter = CountingRecognizer()
-        _ = try CaptureText.read(render.image, map: render.map, scale: 1, recognizer: counter)
-        #expect(counter.sizes.isEmpty)
+        let recorder = RecordingRecognizer()
+        _ = try CaptureText.read(render.image, map: render.map, scale: 1, recognizer: recorder)
+        #expect(recorder.images.isEmpty)
     }
 }
