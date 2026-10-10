@@ -2,6 +2,9 @@
 /// one colour within `tolerance`, which is whitespace or a gridline. That keeps cuts from
 /// splitting a line of text or a table row.
 public enum GapSnapper {
+    /// How far an edge looks for a line to snap to, in points.
+    public static let radiusPoints = 12.0
+
     public static func snap(
         _ position: Int, axis: Axis, in buffer: PixelBuffer, radius: Int, tolerance: UInt8 = 6
     ) -> Int {

@@ -63,6 +63,19 @@ public enum Shape: Codable, Equatable, Sendable {
     /// Destructive: pixelated over noise in the render, before crop and cuts.
     case blur(rect: CGRect)
 
+    /// The same shape moved by `dx`, `dy`.
+    public func offset(dx: Double, dy: Double) -> Shape {
+        func move(_ p: CGPoint) -> CGPoint { CGPoint(x: Double(p.x) + dx, y: Double(p.y) + dy) }
+        func move(_ r: CGRect) -> CGRect { r.offsetBy(dx: dx, dy: dy) }
+        switch self {
+        case .arrow(let tail, let head): return .arrow(tail: move(tail), head: move(head))
+        case .rectangle(let rect): return .rectangle(rect: move(rect))
+        case .text(let origin, let string): return .text(origin: move(origin), string: string)
+        case .highlight(let rect): return .highlight(rect: move(rect))
+        case .blur(let rect): return .blur(rect: move(rect))
+        }
+    }
+
     public var isBlur: Bool {
         if case .blur = self { return true }
         return false

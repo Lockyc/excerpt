@@ -1,0 +1,160 @@
+import CoreGraphics
+
+/// Which side of a seam a handle moves: `before` is the removed band's first line, `after` is
+/// one past its last.
+public enum SeamEdge: Sendable {
+    case before
+    case after
+}
+
+/// What a click lands on, in the coordinates the editor has: original pixels for annotations,
+/// rendered pixels for seams.
+public enum HitTest {
+    /// The topmost annotation under `p` (original pixels): within `slop` of an arrow's shaft, or
+    /// of any other annotation's bounds. With a `map`, an annotation the render doesn't draw
+    /// (`AnnotationGeometry.isDrawn`) can't be hit.
+    public static func annotation(
+        at p: CGPoint, in annotations: [Annotation], scale: Double, slop: Double,
+        map: RenderMap? = nil
+    ) -> Int? {
+        for annotation in annotations.reversed() {
+            if let map, !AnnotationGeometry.isDrawn(annotation, map: map, scale: scale) {
+                continue
+            }
+            switch annotation.shape {
+            case .arrow(let tail, let head):
+                let reach = AnnotationGeometry.lineWidth(annotation, scale: scale) / 2 + slop
+                if distance(from: p, toSegment: tail, head) <= reach { return annotation.id }
+            default:
+                let bounds = AnnotationGeometry.bounds(of: annotation, scale: scale)
+                if bounds.insetBy(dx: -slop, dy: -slop).contains(p) { return annotation.id }
+            }
+        }
+        return nil
+    }
+
+    /// The seam whose gap is nearest rendered point `p`, within `slop` rendered pixels.
+    public static func seam(at p: CGPoint, map: RenderMap, slop: Double) -> Seam? {
+        let candidates =
+            map.seams(.horizontal).map { ($0, distance(Double(p.y), to: $0.gap)) }
+            + map.seams(.vertical).map { ($0, distance(Double(p.x), to: $0.gap)) }
+        return candidates.filter { $0.1 <= slop }.min { $0.1 < $1.1 }?.0
+    }
+
+    static func distance(_ v: Double, to range: Range<Int>) -> Double {
+        if v < Double(range.lowerBound) { return Double(range.lowerBound) - v }
+        if v > Double(range.upperBound) { return v - Double(range.upperBound) }
+        return 0
+    }
+
+    static func distance(from p: CGPoint, toSegment a: CGPoint, _ b: CGPoint) -> Double {
+        let dx = Double(b.x - a.x)
+        let dy = Double(b.y - a.y)
+        let lengthSquared = dx * dx + dy * dy
+        let t =
+            lengthSquared == 0
+            ? 0 : min(1, max(0, (Double(p.x - a.x) * dx + Double(p.y - a.y) * dy) / lengthSquared))
+        let x = Double(a.x) + t * dx - Double(p.x)
+        let y = Double(a.y) + t * dy - Double(p.y)
+        return (x * x + y * y).squareRoot()
+    }
+}
+
+/// Turning drags into cuts and crops, in original pixels. Snapping goes through `GapSnapper`
+/// over the original pixels; pass `snapping: nil` (⌥ held) to keep the dragged positions.
+public enum Gestures {
+    /// The rect a rectangle, highlight or blur drag makes: standardised, so a drag up and to the
+    /// left never yields the negative size `EditDocument` refuses to decode.
+    public static func rect(from start: CGPoint, to end: CGPoint) -> CGRect {
+        CGRect(
+            x: min(start.x, end.x), y: min(start.y, end.y), width: abs(end.x - start.x),
+            height: abs(end.y - start.y))
+    }
+
+    /// The cut a drag makes. A mostly vertical drag removes rows (a horizontal cut); a mostly
+    /// horizontal one removes columns. nil when the drag is shorter than `minimum` along its
+    /// axis.
+    public static func cut(
+        from start: CGPoint, to end: CGPoint, minimum: Double, snapping buffer: PixelBuffer?,
+        radius: Int
+    ) -> Cut? {
+        let dx = abs(Double(end.x - start.x))
+        let dy = abs(Double(end.y - start.y))
+        let axis: Axis = dy >= dx ? .horizontal : .vertical
+        let a = Double(axis == .horizontal ? start.y : start.x)
+        let b = Double(axis == .horizontal ? end.y : end.x)
+        guard abs(b - a) >= minimum, abs(b - a) > 0 else { return nil }
+        var lower = Int(min(a, b).rounded())
+        var upper = Int(max(a, b).rounded())
+        if let buffer {
+            let snappedLower = GapSnapper.snap(lower, axis: axis, in: buffer, radius: radius)
+            let snappedUpper = GapSnapper.snap(upper, axis: axis, in: buffer, radius: radius)
+            if snappedLower < snappedUpper {
+                lower = snappedLower
+                upper = snappedUpper
+            }
+        }
+        return Cut(axis: axis, lower: lower, upper: upper)
+    }
+
+    /// `cuts` with the seam removing `band` on `axis` moved so that its `edge` is at `position`:
+    /// every cut making up the band is replaced by one cut. The edge stays at least one line
+    /// from the other edge and inside `0...extent`.
+    public static func adjusting(
+        _ cuts: [Cut], axis: Axis, band: Range<Int>, edge: SeamEdge, to position: Int,
+        extent: Int, snapping buffer: PixelBuffer?, radius: Int
+    ) -> [Cut] {
+        var target = position
+        if let buffer { target = GapSnapper.snap(target, axis: axis, in: buffer, radius: radius) }
+        var lower = band.lowerBound
+        var upper = band.upperBound
+        switch edge {
+        case .before: lower = min(max(0, target), upper - 1)
+        case .after: upper = max(min(extent, target), lower + 1)
+        }
+        return removing(cuts, axis: axis, band: band) + [
+            Cut(axis: axis, lower: lower, upper: upper)
+        ]
+    }
+
+    /// `cuts` without every cut making up the seam that removes `band` on `axis`.
+    public static func removing(_ cuts: [Cut], axis: Axis, band: Range<Int>) -> [Cut] {
+        cuts.filter { cut in
+            cut.axis != axis || cut.upper <= cut.lower || cut.upper < band.lowerBound
+                || cut.lower > band.upperBound
+        }
+    }
+
+    /// The crop a drag makes: the dragged rect clamped to the image, its edges snapped to
+    /// uniform lines. nil when either side ends up shorter than `minimum`.
+    public static func crop(
+        from start: CGPoint, to end: CGPoint, width: Int, height: Int, minimum: Double,
+        snapping buffer: PixelBuffer?, radius: Int
+    ) -> PixelRect? {
+        func clamp(_ v: CGFloat, _ extent: Int) -> Int { min(max(0, Int(v.rounded())), extent) }
+        var left = clamp(min(start.x, end.x), width)
+        var right = clamp(max(start.x, end.x), width)
+        var top = clamp(min(start.y, end.y), height)
+        var bottom = clamp(max(start.y, end.y), height)
+        if let buffer {
+            func snap(_ v: Int, _ axis: Axis, _ extent: Int) -> Int {
+                // An edge on the far boundary has no line of its own to test; it stays put.
+                v >= extent ? v : GapSnapper.snap(v, axis: axis, in: buffer, radius: radius)
+            }
+            let l = snap(left, .vertical, width)
+            let r = snap(right, .vertical, width)
+            let t = snap(top, .horizontal, height)
+            let b = snap(bottom, .horizontal, height)
+            if l < r {
+                left = l
+                right = r
+            }
+            if t < b {
+                top = t
+                bottom = b
+            }
+        }
+        guard Double(right - left) >= minimum, Double(bottom - top) >= minimum else { return nil }
+        return PixelRect(x: left, y: top, width: right - left, height: bottom - top)
+    }
+}
