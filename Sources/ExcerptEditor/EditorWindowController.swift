@@ -38,6 +38,7 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
     private let capture: LoadedCapture
     private let save: (EditDocument) throws -> Void
     private let copy: (() throws -> Data) -> Void
+    private let forClaude: (CGImage, EditDocument) -> Void
     private let onClose: () -> Void
     private let model: EditorModel
     private let canvas: CanvasView
@@ -51,18 +52,27 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
     private let redoButton = NSButton()
     private let deleteButton = NSButton()
     private let copyButton = NSButton(title: "Copy", target: nil, action: nil)
+    private let claudeButton = NSButton(title: "For Claude", target: nil, action: nil)
     private let saveButton = NSButton(title: "Save", target: nil, action: nil)
+
+    /// While the app prepares this capture for Claude, For Claude is disabled and says why.
+    public var isPreparingForClaude = false {
+        didSet { update() }
+    }
 
     /// `save` writes the document (the app's `LibraryStore.saveEdits`); `copy` is handed a
     /// closure that renders the current PNG, puts it on the pasteboard and reports any failure,
-    /// the render's included; `onClose` runs once the window has closed.
+    /// the render's included; `forClaude` exports the original with the current edits, saved or
+    /// not; `onClose` runs once the window has closed.
     public init(
         capture: LoadedCapture, save: @escaping (EditDocument) throws -> Void,
-        copy: @escaping (() throws -> Data) -> Void, onClose: @escaping () -> Void
+        copy: @escaping (() throws -> Data) -> Void,
+        forClaude: @escaping (CGImage, EditDocument) -> Void, onClose: @escaping () -> Void
     ) {
         self.capture = capture
         self.save = save
         self.copy = copy
+        self.forClaude = forClaude
         self.onClose = onClose
         model = EditorModel(original: capture.original, document: capture.edits)
         canvas = CanvasView(model: model)
@@ -144,11 +154,14 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         copyButton.target = self
         copyButton.action = #selector(copyPressed)
         copyButton.toolTip = "Copy the current image (⌘C)"
+        claudeButton.target = self
+        claudeButton.action = #selector(forClaudePressed)
         saveButton.target = self
         saveButton.action = #selector(saveDocument)
 
         for control in [
-            tools, colors, widths, undoButton, redoButton, deleteButton, copyButton, saveButton,
+            tools, colors, widths, undoButton, redoButton, deleteButton, copyButton,
+            claudeButton, saveButton,
         ] as [NSControl] {
             control.refusesFirstResponder = true
         }
@@ -159,7 +172,7 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         let actionRow = Self.row(
             [
                 snapHint, hiddenNote, spacer, undoButton, redoButton, deleteButton, copyButton,
-                saveButton,
+                claudeButton, saveButton,
             ])
         let bar = NSStackView(views: [styleRow, actionRow])
         bar.orientation = .vertical
@@ -299,6 +312,11 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
             model.canDelete
             ? "Delete the \(model.selection == nil ? "crop" : "selection") (⌫)"
             : "Select an annotation, seam or crop to delete"
+        claudeButton.isEnabled = !isPreparingForClaude
+        claudeButton.toolTip =
+            isPreparingForClaude
+            ? "Preparing for Claude…"
+            : "Copy tiles and text of the current image for Claude (⇧⌘C)"
         saveButton.isEnabled = model.isDirty
         saveButton.toolTip = model.isDirty ? "Save (⌘S)" : "No unsaved changes"
         window?.isDocumentEdited = model.isDirty
@@ -336,6 +354,12 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
             let image = Renderer.render(original, edits: document).image
             return try PNGCodec.encode(image, scale: document.scale)
         }
+    }
+
+    /// ⇧⌘C: the current render, unsaved edits included, like Copy.
+    @objc func forClaudePressed() {
+        canvas.endText()
+        forClaude(model.original, model.document)
     }
 
     /// ⌘S: with nothing unsaved there is nothing to write, so an unedited capture stays one file.
@@ -404,10 +428,14 @@ final class EditorWindow: NSWindow {
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         let flags = event.modifierFlags.intersection([.command, .shift, .option, .control])
         let key = event.charactersIgnoringModifiers?.lowercased()
-        // Save and close work everywhere, including while a text field is being edited.
+        // Save, For Claude and close work everywhere, including while a text field is being
+        // edited.
         switch (flags, key) {
         case ([.command], "s"):
             editor?.saveDocument()
+            return true
+        case ([.command, .shift], "c"):
+            editor?.forClaudePressed()
             return true
         case ([.command], "w"):
             performClose(nil)

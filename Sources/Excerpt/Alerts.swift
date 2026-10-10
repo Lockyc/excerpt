@@ -1,6 +1,7 @@
 import AppKit
 import ExcerptCapture
 import ExcerptCore
+import ExcerptExport
 
 @MainActor
 enum Alerts {
@@ -75,6 +76,29 @@ enum Alerts {
             "Couldn't stop recording the region",
             "Excerpt couldn't stop recording the screen: \(error.localizedDescription)."
                 + (saved ? " The capture is saved." : ""))
+    }
+
+    /// The For Claude bundle could not be built: the cache, or text recognition, failed.
+    static func claudeExportFailed(_ name: String, _ error: Error) {
+        show("Couldn't prepare \(name) for Claude", error.localizedDescription + ".")
+    }
+
+    /// The For Claude bundle is written but its references could not go on the clipboard.
+    static func claudeCopyFailed(_ folder: URL, _ error: Error) {
+        show(
+            "Couldn't copy to the clipboard",
+            "The tiles and text.md are in \(folder.path), but Excerpt couldn't copy their references: \(error.localizedDescription)."
+        )
+    }
+
+    /// Expired For Claude bundles stayed in the cache; the export itself went through.
+    static func claudeCacheNotPruned(_ failures: [ClaudeCacheError]) {
+        let days = Int(ClaudeCache.maximumAge / (24 * 60 * 60))
+        show(
+            "Couldn't remove old Claude bundles",
+            "Excerpt removes For Claude bundles after \(days) days, but couldn't remove "
+                + failures.map(\.description).joined(separator: "; ")
+                + ". Remove them in Finder.")
     }
 
     /// The editor's current image could not be put on the clipboard.

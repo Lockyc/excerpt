@@ -1,6 +1,7 @@
 import AppKit
 import ExcerptCore
 import ExcerptEditor
+import ExcerptExport
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -18,6 +19,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             openLibrary: { [weak self] in self?.openLibrary() },
             openSettings: { [weak self] in self?.openSettings() },
             hotKeyStatus: { [weak self] in self?.hotKeyStatus() ?? [:] })
+        claude.onBusyChange = { [weak self] name in self?.showPreparingForClaude(name) }
+        claude.startPruning()
     }
 
     /// The one source of hotkey state; read when the menu opens and when Settings is shown.
@@ -29,9 +32,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return status
     }
 
-    private lazy var thumbnails = ThumbnailStack(preferences: preferences) { [weak self] url in
-        self?.openEditor(url)
-    }
+    private lazy var thumbnails = ThumbnailStack(
+        preferences: preferences, onEdit: { [weak self] url in self?.openEditor(url) },
+        onClaude: { [weak self] url in self?.forClaude(url) })
+    private let claude = ClaudeExporter()
     /// Open editors by primary, so opening a capture again (or its master) brings its window
     /// forward.
     private var editors: [URL: EditorWindowController] = [:]
@@ -61,13 +65,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         let store = preferences.store
-        let capture: LoadedCapture
-        do {
-            capture = try store.load(url)
-        } catch {
-            Alerts.openFailed(url, error)
-            return
-        }
+        guard let capture = load(url) else { return }
         let primary = capture.primary.standardizedFileURL
         if let open = editors[primary] {
             open.show()
@@ -86,12 +84,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     Alerts.copyFailed(capture.primary, error)
                 }
             },
+            forClaude: { [weak self] original, document in
+                self?.claude.export(
+                    original: original, edits: document,
+                    name: ClaudeExporter.name(of: capture.primary))
+            },
             onClose: { [weak self] in
                 // The window is still mid-close; release it on the next turn, not under itself.
                 DispatchQueue.main.async { self?.editors[primary] = nil }
             })
         editors[primary] = editor
+        editor.isPreparingForClaude = claude.isExporting(ClaudeExporter.name(of: primary))
         editor.show()
+    }
+
+    /// A capture for the editor or For Claude, or nil after an alert: unreadable, or edited to
+    /// render past the size limits, which is refused before anything is drawn.
+    private func load(_ url: URL) -> LoadedCapture? {
+        do {
+            let capture = try preferences.store.load(url)
+            try ImageInput.checkRender(
+                url.path, width: capture.original.width, height: capture.original.height,
+                edits: capture.edits)
+            return capture
+        } catch {
+            Alerts.openFailed(url, error)
+            return nil
+        }
+    }
+
+    /// For Claude from a thumbnail: the capture as saved, its master's edits included.
+    func forClaude(_ url: URL) {
+        guard let capture = load(url) else { return }
+        claude.export(
+            original: capture.original, edits: capture.edits,
+            name: ClaudeExporter.name(of: capture.primary))
+    }
+
+    /// Brings every For Claude button of the capture called `name` in line with its export.
+    private func showPreparingForClaude(_ name: String) {
+        let busy = claude.isExporting(name)
+        thumbnails.setPreparingForClaude(busy, name: name)
+        for (primary, editor) in editors where ClaudeExporter.name(of: primary) == name {
+            editor.isPreparingForClaude = busy
+        }
     }
 
     /// Each unsaved editor asks Save / Don't Save / Cancel; Cancel keeps the app running.

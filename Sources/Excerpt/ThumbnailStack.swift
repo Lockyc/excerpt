@@ -8,18 +8,24 @@ import ExcerptCapture
 final class ThumbnailStack {
     private let preferences: Preferences
     private let onEdit: (URL) -> Void
+    private let onClaude: (URL) -> Void
     private var panels: [ThumbnailPanel] = []
     static let width: CGFloat = 300
     static let margin: CGFloat = 20
 
-    init(preferences: Preferences, onEdit: @escaping (URL) -> Void) {
+    init(
+        preferences: Preferences, onEdit: @escaping (URL) -> Void,
+        onClaude: @escaping (URL) -> Void
+    ) {
         self.preferences = preferences
         self.onEdit = onEdit
+        self.onClaude = onClaude
     }
 
     func show(url: URL, image: CGImage) {
         let panel = ThumbnailPanel(
-            url: url, image: image, seconds: preferences.thumbnailSeconds, onEdit: onEdit
+            url: url, image: image, seconds: preferences.thumbnailSeconds, onEdit: onEdit,
+            onClaude: onClaude
         ) { [weak self] closing in
             self?.panels.removeAll { $0 === closing }
             self?.layout()
@@ -28,6 +34,14 @@ final class ThumbnailStack {
         if panels.count > 4 { panels.last?.dismiss() }
         layout()
         panel.orderFrontRegardless()
+    }
+
+    /// Shows For Claude as busy on the thumbnails of the capture called `name` while its
+    /// export runs.
+    func setPreparingForClaude(_ busy: Bool, name: String) {
+        for panel in panels where ClaudeExporter.name(of: panel.url) == name {
+            panel.setPreparingForClaude(busy)
+        }
     }
 
     private func layout() {
@@ -42,18 +56,22 @@ final class ThumbnailStack {
 
 @MainActor
 final class ThumbnailPanel: NSPanel {
-    private let url: URL
+    let url: URL
     private let onEdit: (URL) -> Void
+    private let onClaude: (URL) -> Void
+    private let claudeButton: NSButton
     private let onClose: (ThumbnailPanel) -> Void
     private var timer: Timer?
     private let seconds: Double
 
     init(
         url: URL, image: CGImage, seconds: Double, onEdit: @escaping (URL) -> Void,
-        onClose: @escaping (ThumbnailPanel) -> Void
+        onClaude: @escaping (URL) -> Void, onClose: @escaping (ThumbnailPanel) -> Void
     ) {
         self.url = url
         self.onEdit = onEdit
+        self.onClaude = onClaude
+        claudeButton = FirstMouseButton(title: "For Claude", target: nil, action: nil)
         self.onClose = onClose
         self.seconds = seconds
         let width = ThumbnailStack.width
@@ -88,10 +106,9 @@ final class ThumbnailPanel: NSPanel {
         bar.distribution = .fillEqually
         bar.addArrangedSubview(button("Copy", #selector(copyImage)))
         bar.addArrangedSubview(button("Edit", #selector(editTapped)))
-        let claude = button("For Claude", nil)
-        claude.isEnabled = false
-        claude.toolTip = "The Claude export isn't in this build yet"
-        bar.addArrangedSubview(claude)
+        style(claudeButton, #selector(claudeTapped))
+        setPreparingForClaude(false)
+        bar.addArrangedSubview(claudeButton)
         bar.addArrangedSubview(button("Close", #selector(closeTapped)))
         container.addSubview(bar)
         contentView = container
@@ -103,11 +120,24 @@ final class ThumbnailPanel: NSPanel {
         startTimer()
     }
 
-    private func button(_ title: String, _ action: Selector?) -> NSButton {
-        let b = FirstMouseButton(title: title, target: self, action: action)
+    private func button(_ title: String, _ action: Selector) -> NSButton {
+        let b = FirstMouseButton(title: title, target: nil, action: nil)
+        style(b, action)
+        return b
+    }
+
+    private func style(_ b: NSButton, _ action: Selector) {
+        b.target = self
+        b.action = action
         b.bezelStyle = .recessed
         b.controlSize = .small
-        return b
+    }
+
+    /// While the capture's export runs, For Claude is disabled and says why.
+    func setPreparingForClaude(_ busy: Bool) {
+        claudeButton.isEnabled = !busy
+        claudeButton.toolTip =
+            busy ? "Preparing for Claude…" : "Copy tiles and text Claude can read, as @ references"
     }
 
     private func startTimer() {
@@ -131,6 +161,7 @@ final class ThumbnailPanel: NSPanel {
         onEdit(url)
         dismiss()
     }
+    @objc private func claudeTapped() { onClaude(url) }
     @objc private func closeTapped() { dismiss() }
 
     func dismiss() {
