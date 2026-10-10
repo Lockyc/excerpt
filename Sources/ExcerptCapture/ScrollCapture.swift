@@ -24,11 +24,13 @@ public enum ScrollOutcome {
 public enum ScrollCaptureError: Error, Equatable, LocalizedError {
     case noFrames
     case displayGone
+    case cannotExcludeExcerpt
 
     public var errorDescription: String? {
         switch self {
         case .noFrames: "The screen sent no picture of the region."
         case .displayGone: "The display the region was on is no longer connected."
+        case .cannotExcludeExcerpt: "Excerpt couldn't keep its own windows out of the capture."
         }
     }
 }

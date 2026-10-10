@@ -31,6 +31,8 @@ public final class FrameMailbox: FrameSource {
     private let sleep: Sleep
 
     var isWaiting: Bool { reader != nil }
+    /// Whether the stream has failed or stopped.
+    public var hasFailed: Bool { failure != nil }
 
     public init(sleep: @escaping Sleep = { try await Task.sleep(for: $0) }) {
         self.sleep = sleep

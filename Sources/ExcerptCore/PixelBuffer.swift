@@ -73,7 +73,7 @@ public struct PixelBuffer: Equatable, Sendable {
         return Double(differing) / Double(width * height)
     }
 
-    static let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
+    public static let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
     static let bitmapInfo = CGBitmapInfo(
         rawValue: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue
     )
