@@ -15,8 +15,9 @@ public protocol FrameSource: AnyObject {
 /// Hands frames from a stream to one reader at a time. Keeps only the newest unread frame: a
 /// reader that falls behind skips to the present instead of working through a backlog. Every
 /// wait is resumed exactly once — by a frame, a failure, its own timeout or cancellation,
-/// whichever comes first — and a timeout left over from an earlier wait never resumes a later
-/// one.
+/// whichever comes first, or by the next read, which ends a wait still registered — and a
+/// timeout left over from an earlier wait never resumes a later one. One mailbox serves one
+/// capture.
 @MainActor
 public final class FrameMailbox: FrameSource {
     /// Suspends for a duration; replaced in tests by a clock the test fires by hand.
@@ -59,7 +60,9 @@ public final class FrameMailbox: FrameSource {
             waiting = nil
             return frame
         }
-        precondition(reader == nil, "FrameMailbox has one reader at a time")
+        // One reader at a time: a wait still registered is one whose cancellation hasn't hopped
+        // back to the main actor yet. It ends now, as it would have, so a new read never traps.
+        resume(readerID, with: .failure(CancellationError()))
         readerID += 1
         let id = readerID
         return try await withTaskCancellationHandler {

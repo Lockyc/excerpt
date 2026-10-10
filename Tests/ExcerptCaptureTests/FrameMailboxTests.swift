@@ -146,6 +146,19 @@ final class ManualTimers {
         #expect(try await next.value == a)
     }
 
+    @Test func aReadRightAfterACancelledOneEndsTheStaleWaitInsteadOfTrapping() async throws {
+        let mailbox = makeMailbox()
+        let read = await startRead(mailbox, timersStarted: 1)
+        // The cancelled wait is resumed by a hop to the main actor, which runs after the next
+        // read below has started.
+        read.cancel()
+        Task { @MainActor in mailbox.deliver(a) }
+        #expect(try await mailbox.nextFrame(timeout: .seconds(1)) == a)
+        await #expect(throws: CancellationError.self) { try await read.value }
+        timers.fire(0)
+        timers.fire(1)
+    }
+
     @Test func aReadStartedAlreadyCancelledThrowsAndLeavesNoWait() async throws {
         let mailbox = makeMailbox()
         let read = Task { @MainActor in
