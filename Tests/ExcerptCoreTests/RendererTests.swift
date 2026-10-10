@@ -37,6 +37,24 @@ import Testing
         #expect(Renderer.render(image, edits: edits).image.height == 100)
     }
 
+    @Test func bandsTouchingEveryEdgeRender() {
+        let image = Fixtures.sheet(width: 100, height: 100)
+        let edits = EditDocument(
+            scale: 1,
+            cuts: [
+                Cut(axis: .horizontal, lower: 0, upper: 10),
+                Cut(axis: .horizontal, lower: 90, upper: 100),
+                Cut(axis: .vertical, lower: 0, upper: 10),
+                Cut(axis: .vertical, lower: 90, upper: 100),
+            ])
+        let result = Renderer.render(image, edits: edits)
+        let gap = SeamStyle.standard.gapPixels(scale: 1)
+        #expect(result.image.height == 100 - 20 + 2 * gap)
+        #expect(result.image.width == 100 - 20 + 2 * gap)
+        #expect(result.rows.gaps.count == 2)
+        #expect(result.columns.gaps.count == 2)
+    }
+
     @Test func bothAxesGolden() throws {
         let image = Fixtures.sheet(width: 600, height: 800)
         let edits = EditDocument(

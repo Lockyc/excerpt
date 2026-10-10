@@ -112,7 +112,13 @@ final class ThumbnailPanel: NSPanel {
     override func mouseEntered(with event: NSEvent) { timer?.invalidate() }
     override func mouseExited(with event: NSEvent) { startTimer() }
 
-    @objc private func copyImage() { Pasteboard.copyPNG(at: url) }
+    @objc private func copyImage() {
+        do {
+            try Pasteboard.copyPNG(at: url)
+        } catch {
+            Alerts.clipboardFailed(url, error)
+        }
+    }
     @objc private func closeTapped() { dismiss() }
 
     func dismiss() {

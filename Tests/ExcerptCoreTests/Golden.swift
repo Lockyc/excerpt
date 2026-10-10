@@ -6,8 +6,6 @@ import UniformTypeIdentifiers
 
 @testable import ExcerptCore
 
-/// Golden-image comparison. A missing golden, or `EXCERPT_RECORD_GOLDENS=1`, writes the image
-/// to `Goldens/<name>.png` and fails the test so the new image is looked at before committing.
 struct GoldenError: Error, CustomStringConvertible {
     let description: String
     static func writeFailed(_ path: String) -> GoldenError {
@@ -15,6 +13,8 @@ struct GoldenError: Error, CustomStringConvertible {
     }
 }
 
+/// Golden-image comparison. A missing golden, or `EXCERPT_RECORD_GOLDENS=1`, writes the image
+/// to `Goldens/<name>.png` and fails the test so the new image is looked at before committing.
 enum Golden {
     static let directory = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent()

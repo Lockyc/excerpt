@@ -13,4 +13,10 @@ import Testing
         #expect(out[x: 10, y: 10] == Fixtures.rowColor(0))
         #expect(out[x: 25, y: 29] == Fixtures.rowColor(19))
     }
+
+    @Test func negativePaddingIsTreatedAsZero() {
+        let image = Fixtures.rowStripes(width: 30, height: 20)
+        let out = Backdrop.compose(image, padding: -5, color: RGBA(r: 1, g: 2, b: 3, a: 255))
+        #expect(out.width == 30 && out.height == 20)
+    }
 }

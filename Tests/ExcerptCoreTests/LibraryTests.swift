@@ -27,6 +27,17 @@ import Testing
         #expect(LibraryNaming.primaryName(forOriginal: "Excerpt 2026-10-10 at 09.43.29.png") == nil)
     }
 
+    @Test func prefixIsSanitisedForFileNames() {
+        func base(_ prefix: String) -> String {
+            LibraryNaming(prefix: prefix, timeZone: utc).baseName(for: date)
+        }
+        #expect(base("a/b:c") == "a-b-c 2026-10-10 at 09.43.29")
+        #expect(base("  Shots \n") == "Shots 2026-10-10 at 09.43.29")
+        #expect(base("") == "Excerpt 2026-10-10 at 09.43.29")
+        #expect(base(" / ") == "- 2026-10-10 at 09.43.29")
+        #expect(base("   ") == "Excerpt 2026-10-10 at 09.43.29")
+    }
+
     @Test func saveCaptureCreatesTheFolderAndWritesTheDatedFile() throws {
         let store = LibraryStore(folder: tempFolder(), naming: LibraryNaming(timeZone: utc))
         let url = try store.saveCapture(Fixtures.sheet(width: 60, height: 40), scale: 2, at: date)

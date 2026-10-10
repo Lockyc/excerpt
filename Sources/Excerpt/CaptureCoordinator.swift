@@ -44,9 +44,8 @@ final class CaptureCoordinator {
                     let scale = stills.first { $0.frame.intersects(window.frame) }?.scale ?? 2
                     var image = try await capturer.image(of: window, scale: scale)
                     if preferences.windowBackdrop {
-                        // The padding is a user setting; compose traps on a negative one.
                         image = Backdrop.compose(
-                            image, padding: max(0, Int(preferences.windowPaddingPoints * scale)),
+                            image, padding: Int(preferences.windowPaddingPoints * scale),
                             color: preferences.backdropColor)
                     }
                     deliver(image, scale: scale)
@@ -66,9 +65,15 @@ final class CaptureCoordinator {
         let store = preferences.store
         do {
             let url = try store.saveCapture(image, scale: Double(scale), at: Date())
-            Pasteboard.copyPNG(at: url)
+            do {
+                try Pasteboard.copyPNG(at: url)
+            } catch {
+                Alerts.clipboardFailed(url, error)
+            }
             if preferences.playSound { Self.shutter?.play() }
             onDelivered(url, image)
+        } catch let error as PNGError {
+            Alerts.encodeFailed(error)
         } catch {
             Alerts.libraryUnwritable(store.folder, error)
         }

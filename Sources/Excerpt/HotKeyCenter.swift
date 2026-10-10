@@ -4,20 +4,25 @@ import Foundation
 
 /// System-wide hotkeys through Carbon's RegisterEventHotKey: no Accessibility permission and
 /// no dependency. Lives for the process lifetime (the event handler is never removed).
-/// Detected conflicts: `.inUse` for a duplicate in this process or another app's exclusive
-/// registration; `.system` for an enabled macOS symbolic hotkey (e.g. the built-in screenshot
-/// shortcuts), which Carbon registration does not report.
+/// Conflicts: `.inUse` for a duplicate in this process or another app's exclusive registration
+/// (not registered); `.system` for an enabled macOS symbolic hotkey (e.g. the built-in
+/// screenshot shortcuts), which Carbon registration does not report. A `.system` hotkey is
+/// registered and fires as soon as the macOS shortcut is turned off, so `status(id:)` reads the
+/// symbolic hotkeys live.
 @MainActor
 final class HotKeyCenter {
     enum Registration: Equatable {
         case registered
         case inUse
+        /// Registered, but an enabled macOS shortcut currently holds the same keys.
         case system
         case failed(OSStatus)
     }
 
     private var actions: [UInt32: () -> Void] = [:]
     private var references: [UInt32: EventHotKeyRef] = [:]
+    private var bindings: [UInt32: HotKeyBinding] = [:]
+    private var failures: [UInt32: Registration] = [:]
     private var installStatus: OSStatus = noErr
     nonisolated private static let signature: OSType = 0x4558_4350  // 'EXCP'
 
@@ -42,14 +47,11 @@ final class HotKeyCenter {
             }, 1, &spec, Unmanaged.passUnretained(self).toOpaque(), nil)
     }
 
-    func register(_ binding: HotKeyBinding, id: UInt32, action: @escaping () -> Void)
-        -> Registration
-    {
-        guard installStatus == noErr else { return .failed(installStatus) }
-        if systemShortcutHolds(
-            keyCode: binding.keyCode, modifiers: binding.modifiers, in: Self.symbolicHotKeys())
-        {
-            return .system
+    func register(_ binding: HotKeyBinding, id: UInt32, action: @escaping () -> Void) {
+        bindings[id] = binding
+        guard installStatus == noErr else {
+            failures[id] = .failed(installStatus)
+            return
         }
         var reference: EventHotKeyRef?
         let status = RegisterEventHotKey(
@@ -59,12 +61,21 @@ final class HotKeyCenter {
         case noErr:
             actions[id] = action
             references[id] = reference
-            return .registered
         case OSStatus(eventHotKeyExistsErr):
-            return .inUse
+            failures[id] = .inUse
         default:
-            return .failed(status)
+            failures[id] = .failed(status)
         }
+    }
+
+    /// The hotkey's state now: its registration outcome, or `.system` while a macOS shortcut
+    /// holds the same keys.
+    func status(id: UInt32) -> Registration {
+        if let failure = failures[id] { return failure }
+        guard let binding = bindings[id] else { return .registered }
+        return systemShortcutHolds(
+            keyCode: binding.keyCode, modifiers: binding.modifiers, in: Self.symbolicHotKeys())
+            ? .system : .registered
     }
 
     private static func symbolicHotKeys() -> [SymbolicHotKey] {

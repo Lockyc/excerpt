@@ -43,7 +43,8 @@ public struct AxisMap: Equatable, Sendable {
     }
 
     /// The rendered position of original position `v`, or nil when `v` lies strictly inside a
-    /// removed band. A band's boundary maps to the edge of the kept segment beside it.
+    /// removed band, or beyond an outer image edge that a
+    /// band touches. A band's boundary maps to the edge of the kept segment beside it.
     public func map(_ v: Double) -> Double? {
         for segment in segments
         where v >= Double(segment.source.lowerBound) && v <= Double(segment.source.upperBound) {

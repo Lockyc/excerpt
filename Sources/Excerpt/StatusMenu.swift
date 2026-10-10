@@ -1,23 +1,37 @@
 import AppKit
 
 @MainActor
-final class StatusMenu: NSObject {
+final class StatusMenu: NSObject, NSMenuDelegate {
     private let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
     private let perform: (HotKeyAction) -> Void
     private let openLibrary: () -> Void
     private let openSettings: () -> Void
+    private let hotKeyStatus: () -> [HotKeyAction: HotKeyCenter.Registration]
 
     init(
         perform: @escaping (HotKeyAction) -> Void, openLibrary: @escaping () -> Void,
-        openSettings: @escaping () -> Void, hotKeyStatus: [HotKeyAction: HotKeyCenter.Registration]
+        openSettings: @escaping () -> Void,
+        hotKeyStatus: @escaping () -> [HotKeyAction: HotKeyCenter.Registration]
     ) {
         self.perform = perform
         self.openLibrary = openLibrary
         self.openSettings = openSettings
+        self.hotKeyStatus = hotKeyStatus
         super.init()
         item.button?.image = NSImage(
             systemSymbolName: "scissors", accessibilityDescription: "Excerpt")
         let menu = NSMenu()
+        menu.delegate = self
+        item.menu = menu
+        rebuild(menu)
+    }
+
+    /// Hotkey notes reflect the state at the moment the menu opens.
+    func menuNeedsUpdate(_ menu: NSMenu) { rebuild(menu) }
+
+    private func rebuild(_ menu: NSMenu) {
+        menu.removeAllItems()
+        let status = hotKeyStatus()
         for action in HotKeyAction.allCases {
             let entry = NSMenuItem(
                 title: action.title, action: #selector(capture(_:)), keyEquivalent: "")
@@ -28,9 +42,9 @@ final class StatusMenu: NSObject {
                 // Shown, not bound: the hotkey itself is global (HotKeyCenter).
                 entry.keyEquivalent = binding.menuKey
                 entry.keyEquivalentModifierMask = binding.modifierFlags
-                if let status = hotKeyStatus[action], status != .registered {
+                if let state = status[action], state != .registered {
                     let title: String
-                    switch status {
+                    switch state {
                     case .inUse: title = "\(binding.display) is in use by another app"
                     case .system:
                         title =
@@ -54,7 +68,6 @@ final class StatusMenu: NSObject {
         menu.addItem(
             withTitle: "Quit Excerpt", action: #selector(NSApplication.terminate(_:)),
             keyEquivalent: "q")
-        item.menu = menu
     }
 
     @objc private func capture(_ sender: NSMenuItem) {

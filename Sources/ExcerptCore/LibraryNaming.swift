@@ -5,11 +5,17 @@ import Foundation
 public struct LibraryNaming: Sendable {
     public static let originalSuffix = " original.png"
 
-    public var prefix: String
+    public static let defaultPrefix = "Excerpt"
+
+    public let prefix: String
     public var timeZone: TimeZone
 
-    public init(prefix: String = "Excerpt", timeZone: TimeZone = .current) {
-        self.prefix = prefix
+    /// `/` and `:` become `-` (they are path separators to Finder and POSIX), surrounding
+    /// whitespace is trimmed, and an empty result falls back to `defaultPrefix`.
+    public init(prefix: String = defaultPrefix, timeZone: TimeZone = .current) {
+        let cleaned = String(prefix.map { $0 == "/" || $0 == ":" ? "-" : $0 })
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        self.prefix = cleaned.isEmpty ? Self.defaultPrefix : cleaned
         self.timeZone = timeZone
     }
 

@@ -2,21 +2,29 @@ import AppKit
 import ExcerptCore
 import SwiftUI
 
+@MainActor
 final class SettingsWindowController {
-    private let preferences: Preferences
-    private let hotKeyStatus: [HotKeyAction: HotKeyCenter.Registration]
+    private let hotKeyStatus: () -> [HotKeyAction: HotKeyCenter.Registration]
+    private let model: SettingsModel
     private var window: NSWindow?
+    private var hosting: NSHostingController<SettingsView>?
 
-    init(preferences: Preferences, hotKeyStatus: [HotKeyAction: HotKeyCenter.Registration]) {
-        self.preferences = preferences
+    init(
+        preferences: Preferences,
+        hotKeyStatus: @escaping () -> [HotKeyAction: HotKeyCenter.Registration]
+    ) {
         self.hotKeyStatus = hotKeyStatus
+        self.model = SettingsModel(preferences: preferences)
     }
 
     func show() {
-        if window == nil {
-            let view = SettingsView(
-                model: SettingsModel(preferences: preferences), hotKeyStatus: hotKeyStatus)
-            let window = NSWindow(contentViewController: NSHostingController(rootView: view))
+        let view = SettingsView(model: model, hotKeyStatus: hotKeyStatus())
+        if let hosting {
+            hosting.rootView = view
+        } else {
+            let hosting = NSHostingController(rootView: view)
+            self.hosting = hosting
+            let window = NSWindow(contentViewController: hosting)
             window.title = "Excerpt Settings"
             window.styleMask = [.titled, .closable]
             window.isReleasedWhenClosed = false
@@ -28,6 +36,7 @@ final class SettingsWindowController {
     }
 }
 
+@MainActor
 final class SettingsModel: ObservableObject {
     private let preferences: Preferences
     @Published var folder: String {

@@ -3,16 +3,17 @@ import Foundation
 
 /// User settings, backed by UserDefaults. Defaults match the workflow excerpt replaces.
 final class Preferences {
+    private static let defaultBackdropHex = "E5E5EA"
     private let defaults = UserDefaults.standard
 
     init() {
         defaults.register(defaults: [
             "libraryFolder": ("~/Documents/Screenshots" as NSString).expandingTildeInPath,
-            "namePrefix": "Excerpt",
+            "namePrefix": LibraryNaming.defaultPrefix,
             "playSound": true,
             "windowBackdrop": true,
             "windowPaddingPoints": 40.0,
-            "backdropColor": "E5E5EA",
+            "backdropColor": Self.defaultBackdropHex,
             "thumbnailSeconds": 15.0,
         ])
     }
@@ -34,8 +35,8 @@ final class Preferences {
         set { defaults.set(newValue, forKey: "windowBackdrop") }
     }
     var windowPaddingPoints: Double {
-        get { max(0, defaults.double(forKey: "windowPaddingPoints")) }
-        set { defaults.set(max(0, newValue), forKey: "windowPaddingPoints") }
+        get { defaults.double(forKey: "windowPaddingPoints") }
+        set { defaults.set(newValue, forKey: "windowPaddingPoints") }
     }
     var thumbnailSeconds: Double { max(1, defaults.double(forKey: "thumbnailSeconds")) }
 
@@ -44,8 +45,9 @@ final class Preferences {
         get {
             var text = defaults.string(forKey: "backdropColor") ?? ""
             if text.hasPrefix("#") { text.removeFirst() }
+            let fallback = UInt32(Self.defaultBackdropHex, radix: 16)!
             let valid = text.count == 6 && text.allSatisfy(\.isHexDigit)
-            let hex = valid ? UInt32(text, radix: 16) ?? 0xE5E5EA : 0xE5E5EA
+            let hex = valid ? UInt32(text, radix: 16) ?? fallback : fallback
             return RGBA(
                 r: UInt8(hex >> 16 & 0xFF), g: UInt8(hex >> 8 & 0xFF), b: UInt8(hex & 0xFF), a: 255)
         }
