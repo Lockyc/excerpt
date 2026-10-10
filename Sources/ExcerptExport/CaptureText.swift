@@ -39,6 +39,46 @@ public enum CaptureText {
     /// into more is refused before any is read rather than recognised for hours.
     public static let maximumRegions = 4_000
 
+    /// The most a region's longer side may be, in multiples of its shorter side, as the
+    /// recogniser is shown it. Vision finds nothing on a strip much flatter than this (a short
+    /// kept segment below a seam, full width), so such a region is padded first.
+    public static let maximumAspect = 8
+
+    /// What the recogniser is shown for a `width`×`height` region: a white canvas whose shorter
+    /// side is at least the longer over `maximumAspect`, with the region whole and centred at
+    /// `content`. A region already within the aspect is its own canvas.
+    public struct Canvas: Equatable, Sendable {
+        public let width: Int
+        public let height: Int
+        /// Where the region sits on the canvas, in the canvas's pixels, top-left origin.
+        public let content: PixelRect
+
+        public init(width regionWidth: Int, height regionHeight: Int) {
+            let longer = max(regionWidth, regionHeight)
+            let shortest = (longer + CaptureText.maximumAspect - 1) / CaptureText.maximumAspect
+            width = max(regionWidth, regionWidth < regionHeight ? shortest : 0)
+            height = max(regionHeight, regionHeight <= regionWidth ? shortest : 0)
+            content = PixelRect(
+                x: (width - regionWidth) / 2, y: (height - regionHeight) / 2, width: regionWidth,
+                height: regionHeight)
+        }
+
+        /// `piece` drawn at `content` on white; `piece` itself when there is no padding.
+        func image(of piece: CGImage) -> CGImage {
+            guard width != content.width || height != content.height else { return piece }
+            let context = PixelBuffer.makeContext(width: width, height: height)
+            context.setFillColor(CGColor(gray: 1, alpha: 1))
+            context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+            context.interpolationQuality = .none
+            context.draw(
+                piece,
+                in: CGRect(
+                    x: content.x, y: height - content.y - content.height, width: content.width,
+                    height: content.height))
+            return context.makeImage()!
+        }
+    }
+
     /// Regions too thin to hold a line of text are not read.
     public static let minimumRegionSide = 8
 
@@ -67,7 +107,8 @@ public enum CaptureText {
         return regions
     }
 
-    /// Reads every region of `image`, the render `map` describes, and writes the text. Throws
+    /// Reads every region of `image`, the render `map` describes, each shown to the recogniser
+    /// on its `Canvas`, and writes the text. Throws
     /// `tooManyRegions` before reading any when there are more than `maximumRegions`.
     public static func read(
         _ image: CGImage, map: RenderMap, scale: Double, recognizer: any TextRecognizer
@@ -82,9 +123,11 @@ public enum CaptureText {
         var runs: [RecognizedText] = []
         for region in regions {
             let piece = image.cropping(to: region.rect.cgRect)!
-            for run in try recognizer.recognize(piece) {
+            let canvas = Canvas(width: piece.width, height: piece.height)
+            for run in try recognizer.recognize(canvas.image(of: piece)) {
                 let bounds = run.bounds.offsetBy(
-                    dx: CGFloat(region.rect.x), dy: CGFloat(region.rect.y))
+                    dx: CGFloat(region.rect.x - canvas.content.x),
+                    dy: CGFloat(region.rect.y - canvas.content.y))
                 if usable(bounds), region.owned.contains(Int(bounds.midY)) {
                     runs.append(RecognizedText(run.string, bounds))
                 }

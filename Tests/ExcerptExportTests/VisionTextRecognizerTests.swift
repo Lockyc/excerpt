@@ -1,6 +1,8 @@
 import CoreGraphics
+import CoreText
 import ExcerptCore
 import ExcerptTestSupport
+import Foundation
 import Testing
 
 @testable import ExcerptExport
@@ -91,5 +93,47 @@ import Testing
         for digit in "4729" {
             #expect(!text.contains(digit), "\(fontSize)pt at \(scale)×: \(text)")
         }
+    }
+}
+
+/// A short, wide kept segment below a cut, its top rows holding the seam's torn edge: read by
+/// real Vision only once the region is padded to a readable shape.
+@Suite struct ShortRegionTests {
+    @Test(.timeLimit(.minutes(3))) func aShortWideStripBelowACutIsRead() throws {
+        let scale = 2.0
+        let (widthPt, heightPt) = (1500, 410)
+        let lines: [(String, top: Double, lineHeight: Double)] = [
+            ("Quarterly revenue report 2026", 0, 40), ("CUTAWAY 5512 band", 320, 50),
+            ("Footer totals carried forward", 370, 40),
+        ]
+        let (w, h) = (Int(Double(widthPt) * scale), Int(Double(heightPt) * scale))
+        let context = PixelBuffer.makeContext(width: w, height: h)
+        context.setFillColor(CGColor(gray: 1, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: w, height: h))
+        let font = CTFontCreateUIFontForLanguage(.system, CGFloat(18 * scale), nil)!
+        for (text, top, lineHeight) in lines {
+            let attributes: [NSAttributedString.Key: Any] = [
+                NSAttributedString.Key(kCTFontAttributeName as String): font,
+                NSAttributedString.Key(kCTForegroundColorAttributeName as String): CGColor(
+                    gray: 0, alpha: 1),
+            ]
+            let line = CTLineCreateWithAttributedString(
+                NSAttributedString(string: text, attributes: attributes))
+            context.textPosition = CGPoint(
+                x: 30 * scale, y: Double(h) - (top + 0.75 * lineHeight) * scale)
+            CTLineDraw(line, context)
+        }
+        let edits = EditDocument(
+            scale: scale, cuts: [Cut(axis: .horizontal, lower: 640, upper: 740)],
+            crop: PixelRect(x: 10, y: 0, width: w - 20, height: h - 4), salt: 7)
+        let render = Renderer.render(context.makeImage()!, edits: edits)
+        let below = CaptureText.regions(of: render.map, scale: scale).last!.rect
+        #expect(below.height < below.width / 30)
+        let text = try CaptureText.read(
+            render.image, map: render.map, scale: scale, recognizer: VisionTextRecognizer())
+        #expect(
+            text
+                == "Quarterly revenue report 2026\n[⋯ 50 px hidden]\nFooter totals carried forward\n"
+        )
     }
 }

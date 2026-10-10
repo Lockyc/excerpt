@@ -53,13 +53,29 @@ import Testing
     /// image it is handed is a crop of the render clear of every seam, and away from the torn
     /// edges each of its pixels is the blurred source pixel the map places there (through the
     /// crop's offset), so no seam, no label, no cut band and no unblurred pixel reaches it.
+    /// A region padded to `Canvas` shows the same pixels at its `content`, and white around it.
     @Test(arguments: [
-        EditDocument(scale: 1, cuts: privacyCuts, annotations: [privacyBlur], salt: 7),
-        EditDocument(
-            scale: 2, cuts: privacyCuts, crop: PixelRect(x: 10, y: 15, width: 375, height: 560),
-            annotations: [privacyBlur], salt: 7),
+        (EditDocument(scale: 1, cuts: privacyCuts, annotations: [privacyBlur], salt: 7), 4, 0),
+        (
+            EditDocument(
+                scale: 2, cuts: privacyCuts,
+                crop: PixelRect(x: 10, y: 15, width: 375, height: 560),
+                annotations: [privacyBlur], salt: 7), 4, 0
+        ),
+        // Full-width 40-pixel strips between and below the cuts are padded.
+        (
+            EditDocument(
+                scale: 1,
+                cuts: [
+                    Cut(axis: .horizontal, lower: 280, upper: 340),
+                    Cut(axis: .horizontal, lower: 380, upper: 560),
+                ],
+                annotations: [privacyBlur], salt: 7), 3, 2
+        ),
     ])
-    func theRecogniserSeesOnlyKeptPixelsOfTheRender(edits: EditDocument) throws {
+    func theRecogniserSeesOnlyKeptPixelsOfTheRender(
+        edits: EditDocument, regionCount: Int, paddedCount: Int
+    ) throws {
         let original = ColourWords.page(width: 400, height: 600, words: Self.words)
         let render = Renderer.render(original, edits: edits)
         let blurred = PixelBuffer(
@@ -75,9 +91,12 @@ import Testing
         let crop = render.map.crop
         let regions = CaptureText.regions(of: render.map, scale: edits.scale)
         #expect(recorder.images.count == regions.count)
-        #expect(recorder.images.count == 4)
+        #expect(recorder.images.count == regionCount)
+        let white = ColourWords.white
         let tornEdge = Int(8 * edits.scale)
         let hidden = [ColourWords.palette[2].colour, ColourWords.palette[3].colour]
+        var padded = 0
+        defer { #expect(padded == paddedCount) }
         for (image, region) in zip(recorder.images, regions) {
             let rect = region.rect
             for gap in render.map.rows.gaps {
@@ -86,7 +105,23 @@ import Testing
             for gap in render.map.columns.gaps {
                 #expect(!(rect.x..<(rect.x + rect.width)).overlaps(gap.destination))
             }
-            let seen = PixelBuffer(image)
+            let canvas = CaptureText.Canvas(width: rect.width, height: rect.height)
+            let shown = PixelBuffer(image)
+            #expect(shown.width == canvas.width && shown.height == canvas.height)
+            if canvas.width != rect.width || canvas.height != rect.height { padded += 1 }
+            let content = canvas.content
+            for y in 0..<shown.height {
+                for x in 0..<shown.width
+                where !(content.x..<(content.x + content.width)).contains(x)
+                    || !(content.y..<(content.y + content.height)).contains(y)
+                {
+                    if shown[x: x, y: y] != white {
+                        Issue.record("padding pixel (\(x), \(y)) of region \(rect) isn't white")
+                        return
+                    }
+                }
+            }
+            let seen = PixelBuffer(image.cropping(to: content.cgRect)!)
             var leaked = 0
             defer { #expect(leaked == 0, "a cut or blurred word reached the recogniser") }
             #expect(seen == PixelBuffer(render.image.cropping(to: rect.cgRect)!))
@@ -234,5 +269,17 @@ import Testing
             RecognizedText("kept", CGRect(x: 2, y: 2, width: 10, height: 10)),
         ]
         #expect(CaptureText.compose(runs, map: render.map, scale: 1) == "kept\n")
+    }
+
+    @Test func aRegionFlatterThanTheAspectIsPaddedOnItsShortSide() {
+        let strip = CaptureText.Canvas(width: 2980, height: 76)
+        #expect(strip.width == 2980 && strip.height == 373)
+        #expect(strip.content == PixelRect(x: 0, y: 148, width: 2980, height: 76))
+        let column = CaptureText.Canvas(width: 20, height: 400)
+        #expect(column.width == 50 && column.height == 400)
+        #expect(column.content == PixelRect(x: 15, y: 0, width: 20, height: 400))
+        let page = CaptureText.Canvas(width: 800, height: 100)
+        #expect(page.width == 800 && page.height == 100)
+        #expect(page.content == PixelRect(x: 0, y: 0, width: 800, height: 100))
     }
 }
