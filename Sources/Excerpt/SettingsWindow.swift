@@ -141,9 +141,10 @@ final class HotKeyModel: ObservableObject {
     /// says why under the row. The default is stored as no override. True when kept.
     @discardableResult
     private func apply(_ candidate: HotKeyBinding?, to action: HotKeyAction) -> Bool {
+        // A refused hotkey isn't registered, so it holds nothing.
         let bindings = Dictionary(
-            states.map { ($0.key.title, $0.value.binding) }, uniquingKeysWith: { first, _ in first }
-        )
+            states.filter { $0.value.refusal == nil }.map { ($0.key.title, $0.value.binding) },
+            uniquingKeysWith: { first, _ in first })
         let verdict = HotKeyRules.judge(
             candidate, for: action.title, bindings: bindings,
             reserved: HotKeyAction.reservedShortcuts, system: HotKeyCenter.symbolicHotKeys())

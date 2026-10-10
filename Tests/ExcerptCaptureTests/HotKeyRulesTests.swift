@@ -99,4 +99,22 @@ import Testing
             system: [])
         #expect(verdict.message(for: quit) == "⌘Q is already Quit in every app")
     }
+
+    /// Review focus: settings are a file anyone can edit. Stored hotkeys are judged in action
+    /// order as they are registered: a reserved, duplicated or unguarded one is refused, naming
+    /// what holds it, and holds nothing itself.
+    @Test func storedHotkeysAreJudgedInOrder() {
+        let save = HotKeyBinding(keyCode: UInt32(kVK_ANSI_S), modifiers: UInt32(cmdKey))
+        let bare = HotKeyBinding(keyCode: UInt32(kVK_ANSI_A), modifiers: 0)
+        let verdicts = HotKeyRules.judgeStored(
+            [
+                ("Capture Area", save), ("Capture Window", four), ("Capture Text", four),
+                ("Capture Fullscreen", bare), ("Choose Capture Mode…", five),
+            ], reserved: ["Save in the editor": save])
+        #expect(
+            verdicts == [
+                .taken(by: "Save in the editor"), .accepted, .taken(by: "Capture Window"),
+                .needsModifier, .accepted,
+            ])
+    }
 }

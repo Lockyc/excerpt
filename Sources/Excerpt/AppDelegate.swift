@@ -8,10 +8,13 @@ import ExcerptExport
 struct HotKeyState: Equatable {
     let binding: HotKeyBinding
     let registration: HotKeyCenter.Registration
+    /// Why the stored hotkey was refused, so never registered; nil when it was kept.
+    let refusal: HotKeyVerdict?
 
     /// Why the hotkey may not fire, as the menu and Settings show it; nil when it will.
     var note: String? {
-        switch registration {
+        if let refusal { return refusal.message(for: binding) }
+        return switch registration {
         case .registered: nil
         case .inUse: "\(binding.display) is in use by another app"
         case .system: HotKeyVerdict.heldBySystem.message(for: binding)
@@ -37,13 +40,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         claude.startPruning()
     }
 
-    /// Registers every action's current binding in place of whatever was registered.
+    /// Registers every action's current binding that the rules keep, in place of whatever was
+    /// registered.
     func applyHotKeys() {
-        for action in HotKeyAction.allCases {
-            hotKeys.unregister(id: action.id)
-            guard let binding = preferences.binding(for: action) else { continue }
+        for action in HotKeyAction.allCases { hotKeys.unregister(id: action.id) }
+        for (action, binding, verdict) in judgedHotKeys() where verdict.keeps {
             hotKeys.register(binding, id: action.id) { [weak self] in self?.perform(action) }
         }
+    }
+
+    /// Every action's stored hotkey with the verdict it is registered under, in action order.
+    private func judgedHotKeys() -> [(HotKeyAction, HotKeyBinding, HotKeyVerdict)] {
+        let stored = HotKeyAction.allCases.compactMap { action in
+            preferences.binding(for: action).map { (action, $0) }
+        }
+        let verdicts = HotKeyRules.judgeStored(
+            stored.map { ($0.0.title, $0.1) }, reserved: HotKeyAction.reservedShortcuts)
+        return zip(stored, verdicts).map { ($0.0, $0.1, $1) }
     }
 
     /// Unregisters every hotkey, so a press reaches Settings' recorder instead of starting a
@@ -56,10 +69,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// opens and whenever Settings shows the hotkeys.
     func hotKeyStates() -> [HotKeyAction: HotKeyState] {
         var states: [HotKeyAction: HotKeyState] = [:]
-        for action in HotKeyAction.allCases {
-            guard let binding = preferences.binding(for: action) else { continue }
+        for (action, binding, verdict) in judgedHotKeys() {
             states[action] = HotKeyState(
-                binding: binding, registration: hotKeys.status(id: action.id))
+                binding: binding, registration: hotKeys.status(id: action.id),
+                refusal: verdict.keeps ? nil : verdict)
         }
         return states
     }

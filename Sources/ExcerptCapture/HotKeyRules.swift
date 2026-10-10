@@ -72,4 +72,19 @@ public enum HotKeyRules {
             .merging(reserved) { binding, _ in binding }
         return judge(candidate, others: others, system: system)
     }
+
+    /// Judges the stored hotkeys as they are registered, in action order: each against the
+    /// `reserved` shortcuts and the ones kept before it, so a hand-edited setting can't take a
+    /// reserved or duplicated combination. A refused hotkey is not registered and holds nothing.
+    /// macOS's shortcuts are left to the registration's own state.
+    public static func judgeStored(
+        _ stored: [(action: String, binding: HotKeyBinding)], reserved: [String: HotKeyBinding]
+    ) -> [HotKeyVerdict] {
+        var kept = reserved
+        return stored.map { action, binding in
+            let verdict = judge(binding, others: kept, system: [])
+            if verdict.keeps { kept[action] = binding }
+            return verdict
+        }
+    }
 }
