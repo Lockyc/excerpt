@@ -152,4 +152,45 @@ import Testing
         #expect(s.phase == .manual(.pointerMoved))
         #expect(s.hud.title != "Reached the end of the page")
     }
+
+    @Test func scrollingBackToWhereTheStitchEndsClearsTheOffTrackNote() {
+        var s = session(canAutoScroll: false)
+        s.sampled(frame(60))
+        s.sampled(frame(500))
+        #expect(s.offTrack)
+        s.sampled(frame(60))
+        #expect(!s.offTrack)
+        #expect(!s.hud.detail.contains("doesn't match"))
+    }
+
+    @Test func aZeroRowAppendBetweenStillStepsKeepsAutoGoing() {
+        let plain = ScrollFixtures.page(width: 90, height: 1000)
+        let footer = ScrollFixtures.paint(width: 90, height: 30) { _, _ in
+            RGBA(r: 20, g: 90, b: 160, a: 255)
+        }
+        let blank = ScrollFixtures.paint(width: 90, height: 20) { _, _ in
+            RGBA(r: 20, g: 90, b: 160, a: 255)
+        }
+        let page = ScrollFixtures.stack([
+            ScrollFixtures.rows(plain, 0..<290), blank, ScrollFixtures.rows(plain, 310..<1000),
+        ])
+        func f(_ offset: Int, _ rows: Int) -> PixelBuffer {
+            ScrollFixtures.frame(
+                page, offset: offset, viewport: 200, header: nil,
+                footer: ScrollFixtures.rows(footer, 0..<rows))
+        }
+        var s = ScrollSession(first: f(0, 10), scale: 1, canAutoScroll: true)
+        s.stepped(f(120, 10))
+        s.stepped(f(120, 10))  // still: 1
+        s.stepped(f(130, 30))  // the page moved under a grown footer: appended(rows: 0)
+        s.stepped(f(130, 30))  // still: 1, not 2
+        #expect(s.phase == .auto)
+    }
+
+    @Test func theCapInManualModeHalts() {
+        var s = session(canAutoScroll: false, maximumHeight: 300)
+        s.sampled(frame(120))
+        #expect(s.phase == .halted(.limit))
+        #expect(s.stitcher.height == 300)
+    }
 }

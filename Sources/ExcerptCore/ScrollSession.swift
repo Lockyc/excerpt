@@ -25,6 +25,7 @@ public enum ManualReason: Equatable, Sendable {
 public enum HaltReason: Equatable, Sendable {
     /// The next frame didn't match.
     case uncertain
+    /// The stitch reached its maximum height; what is stitched so far is kept.
     case limit
 }
 
@@ -92,8 +93,7 @@ public struct ScrollSession: Sendable {
     public mutating func sampled(_ frame: PixelBuffer) {
         guard case .manual = phase else { return }
         switch stitcher.add(frame) {
-        case .appended: offTrack = false
-        case .noMovement: break
+        case .appended, .noMovement: offTrack = false
         case .uncertain: offTrack = true
         case .reachedLimit: phase = .halted(.limit)
         }
