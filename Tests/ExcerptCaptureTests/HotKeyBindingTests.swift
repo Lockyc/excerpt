@@ -18,6 +18,17 @@ import Testing
         #expect(HotKeyBinding(keyCode: 0xFF, modifiers: 0).display == "key 255")
     }
 
+    /// The editor's key equivalents (characters + flags) all map to bindings.
+    @Test func aTypedCharacterWithFlagsMakesABinding() {
+        for key in ["s", "c", "w", "x", "v", "a", "z"] {
+            #expect(HotKeyBinding(character: key, flags: [.command]) != nil)
+        }
+        let forClaude = HotKeyBinding(character: "c", flags: [.command, .shift])
+        #expect(forClaude?.display == "⌘⇧C")
+        #expect(forClaude?.keyCode == UInt32(kVK_ANSI_C))
+        #expect(HotKeyBinding(character: "é", flags: [.command]) == nil)
+    }
+
     @Test func menuKeysAreWhatAMenuItemTakes() {
         #expect(HotKeyBinding(keyCode: UInt32(kVK_ANSI_T), modifiers: 0).menuKey == "t")
         #expect(HotKeyBinding(keyCode: UInt32(kVK_ANSI_5), modifiers: 0).menuKey == "5")

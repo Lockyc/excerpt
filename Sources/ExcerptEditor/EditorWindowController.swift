@@ -500,7 +500,8 @@ final class EditorWindow: NSWindow {
             case .paste: action = #selector(NSText.paste(_:))
             case .selectAll: action = #selector(NSText.selectAll(_:))
             case .undo: action = Selector(("undo:"))
-            default: action = Selector(("redo:"))
+            case .redo: action = Selector(("redo:"))
+            default: return super.performKeyEquivalent(with: event)
             }
             return NSApp.sendAction(action, to: nil, from: self)
         }

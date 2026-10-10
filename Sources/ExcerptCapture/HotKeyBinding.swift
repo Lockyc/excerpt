@@ -114,6 +114,15 @@ public struct HotKeyBinding: Hashable, Sendable {
         self.init(keyCode: UInt32(keyCode), modifiers: modifiers)
     }
 
+    /// The binding for a typed character and AppKit modifier flags, e.g. an editor key
+    /// equivalent; nil for a character no hotkey key produces. Covers US key positions, as
+    /// hotkeys do.
+    public init?(character: String, flags: NSEvent.ModifierFlags) {
+        guard let code = Self.keys.first(where: { $0.value.menuKey == character.lowercased() })?.key
+        else { return nil }
+        self.init(keyCode: UInt16(code), flags: flags)
+    }
+
     /// True when the binding is allowed: an F-key alone, or any key with ⌘, ⌃ or ⌥. False for a
     /// bare or Shift-only letter, which would swallow that key system-wide.
     public var hasRequiredModifier: Bool {

@@ -44,17 +44,6 @@ import Testing
         #expect(HotKeyRules.judge(control, others: [:], system: []) == .accepted)
     }
 
-    /// Editor shortcuts reach `judge` among `others`, so a global hotkey can't take the press
-    /// before the editor sees it.
-    @Test func anEditorShortcutIsRefusedNamingTheCommand() {
-        let forClaude = HotKeyBinding(
-            keyCode: UInt32(kVK_ANSI_C), modifiers: HotKeyBinding.commandShift)
-        let verdict = HotKeyRules.judge(
-            forClaude, others: ["For Claude in the editor": forClaude], system: [])
-        #expect(verdict == .taken(by: "For Claude in the editor"))
-        #expect(verdict.message(for: forClaude) == "⌘⇧C is already For Claude in the editor")
-    }
-
     @Test func anFKeyMayStandAlone() {
         let f6 = HotKeyBinding(keyCode: UInt32(kVK_F6), modifiers: 0)
         #expect(HotKeyRules.judge(f6, others: [:], system: []) == .accepted)
