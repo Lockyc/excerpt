@@ -1,7 +1,6 @@
 import AppKit
 import ExcerptCore
 import ExcerptEditor
-import ExcerptExport
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -65,7 +64,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         let store = preferences.store
-        guard let capture = load(url) else { return }
+        let capture: LoadedCapture
+        do {
+            capture = try store.loadForRendering(url)
+        } catch {
+            Alerts.openFailed(url, error)
+            return
+        }
         let primary = capture.primary.standardizedFileURL
         if let open = editors[primary] {
             open.show()
@@ -98,27 +103,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         editor.show()
     }
 
-    /// A capture for the editor or For Claude, or nil after an alert: unreadable, or edited to
-    /// render past the size limits, which is refused before anything is drawn.
-    private func load(_ url: URL) -> LoadedCapture? {
-        do {
-            let capture = try preferences.store.load(url)
-            try ImageInput.checkRender(
-                url.path, width: capture.original.width, height: capture.original.height,
-                edits: capture.edits)
-            return capture
-        } catch {
-            Alerts.openFailed(url, error)
-            return nil
-        }
-    }
-
     /// For Claude from a thumbnail: the capture as saved, its master's edits included.
     func forClaude(_ url: URL) {
-        guard let capture = load(url) else { return }
-        claude.export(
-            original: capture.original, edits: capture.edits,
-            name: ClaudeExporter.name(of: capture.primary))
+        claude.export(primary: url, store: preferences.store)
     }
 
     /// Brings every For Claude button of the capture called `name` in line with its export.

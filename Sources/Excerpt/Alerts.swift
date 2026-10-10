@@ -13,18 +13,27 @@ enum Alerts {
         alert.runModal()
     }
 
+    /// `text` closed with a full stop, unless it already ends in punctuation: error
+    /// descriptions arrive both ways.
+    static func sentence(_ text: String) -> String {
+        guard let last = text.last, !".!?…".contains(last) else { return text }
+        return text + "."
+    }
+
     /// The library folder can't be created or written; names the path so the fix is obvious.
     static func libraryUnwritable(_ folder: URL, _ error: Error) {
         show(
             "Couldn't use the library folder",
-            "Excerpt couldn't write to \(folder.path): \(error.localizedDescription). Choose another library folder in Settings."
+            sentence("Excerpt couldn't write to \(folder.path): \(error.localizedDescription)")
+                + " Choose another library folder in Settings."
         )
     }
 
     /// The captured pixels could not be encoded as a PNG; nothing was written.
     static func encodeFailed(_ error: Error) {
         show(
-            "Couldn't encode the capture", "Excerpt couldn't make a PNG from the capture: \(error)."
+            "Couldn't encode the capture",
+            sentence("Excerpt couldn't make a PNG from the capture: \(error)")
         )
     }
 
@@ -32,7 +41,9 @@ enum Alerts {
     static func clipboardFailed(_ file: URL, _ error: Error) {
         show(
             "Couldn't copy to the clipboard",
-            "The capture is saved as \(file.lastPathComponent), but Excerpt couldn't read it back to copy: \(error.localizedDescription)."
+            sentence(
+                "The capture is saved as \(file.lastPathComponent), but Excerpt couldn't read it back to copy: \(error.localizedDescription)"
+            )
         )
     }
 
@@ -42,7 +53,7 @@ enum Alerts {
         let cause =
             error as? ScrollCaptureError == .displayChanged
             ? "The displays changed, so the capture ended."
-            : "Excerpt lost the picture of the region: \(error.localizedDescription)"
+            : sentence("Excerpt lost the picture of the region: \(error.localizedDescription)")
         show(
             "Scrolling capture stopped",
             cause + " "
@@ -74,38 +85,52 @@ enum Alerts {
     static func recordingNotStopped(_ error: Error, saved: Bool) {
         show(
             "Couldn't stop recording the region",
-            "Excerpt couldn't stop recording the screen: \(error.localizedDescription)."
+            sentence("Excerpt couldn't stop recording the screen: \(error.localizedDescription)")
                 + (saved ? " The capture is saved." : ""))
     }
 
     /// The For Claude bundle could not be built: the cache, or text recognition, failed.
     static func claudeExportFailed(_ name: String, _ error: Error) {
-        show("Couldn't prepare \(name) for Claude", error.localizedDescription + ".")
+        show("Couldn't prepare \(name) for Claude", sentence(error.localizedDescription))
     }
 
     /// The For Claude bundle is written but its references could not go on the clipboard.
     static func claudeCopyFailed(_ folder: URL, _ error: Error) {
         show(
             "Couldn't copy to the clipboard",
-            "The tiles and text.md are in \(folder.path), but Excerpt couldn't copy their references: \(error.localizedDescription)."
+            sentence(
+                "The tiles and text.md are in \(folder.path), but Excerpt couldn't copy their references: \(error.localizedDescription)"
+            )
         )
     }
 
-    /// Expired For Claude bundles stayed in the cache; the export itself went through.
+    /// Expired For Claude bundles stayed in the cache; any export alongside went through.
     static func claudeCacheNotPruned(_ failures: [ClaudeCacheError]) {
         let days = Int(ClaudeCache.maximumAge / (24 * 60 * 60))
         show(
             "Couldn't remove old Claude bundles",
-            "Excerpt removes For Claude bundles after \(days) days, but couldn't remove "
-                + failures.map(\.description).joined(separator: "; ")
-                + ". Remove them in Finder.")
+            sentence(
+                "Excerpt removes For Claude bundles after \(days) days, but couldn't remove "
+                    + failures.map(\.description).joined(separator: "; "))
+                + " Remove them in Finder.")
+    }
+
+    /// The Claude cache folder couldn't be read, so nothing in it could be pruned.
+    static func claudeCacheUnlistable(_ root: URL, _ error: Error) {
+        let days = Int(ClaudeCache.maximumAge / (24 * 60 * 60))
+        show(
+            "Couldn't clean up old Claude bundles",
+            sentence(
+                "Excerpt removes For Claude bundles after \(days) days, but couldn't read \(root.path): \(error.localizedDescription)"
+            ))
     }
 
     /// The editor's current image could not be put on the clipboard.
     static func copyFailed(_ file: URL, _ error: Error) {
         show(
             "Couldn't copy to the clipboard",
-            "Excerpt couldn't copy \(file.lastPathComponent): \(error.localizedDescription).")
+            sentence(
+                "Excerpt couldn't copy \(file.lastPathComponent): \(error.localizedDescription)"))
     }
 
     /// A file the editor can't open: not a PNG, unreadable, damaged, or edited by a newer Excerpt.
@@ -116,7 +141,8 @@ enum Alerts {
             (file, error) = (unreadable.file, unreadable.underlying)
         }
         let reason =
-            error is PNGError ? "It isn't a PNG Excerpt can read." : error.localizedDescription
+            error is PNGError
+            ? "It isn't a PNG Excerpt can read." : sentence(error.localizedDescription)
         show("Couldn't open \(file.lastPathComponent)", reason)
     }
 }

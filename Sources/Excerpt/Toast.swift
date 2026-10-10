@@ -44,6 +44,11 @@ enum Toast {
         panel?.orderOut(nil)
     }
 
+    /// True when no note is up, or only the one `token` showed.
+    static func showsNothing(but token: Token?) -> Bool {
+        current == nil || current == token
+    }
+
     /// A click closes whatever note is up.
     fileprivate static func clicked() {
         if let current { dismiss(current) }
