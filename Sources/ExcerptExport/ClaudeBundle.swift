@@ -3,8 +3,10 @@ import ExcerptCore
 import Foundation
 
 public enum ClaudeBundleError: Error, LocalizedError {
-    /// The cache folder couldn't be made, pruned or written: unwritable, or the disk is full.
+    /// The cache folder couldn't be made or written: unwritable, or the disk is full.
     case cacheUnwritable(URL, any Error)
+    /// The cache folder couldn't be listed, so its expired bundles couldn't be pruned.
+    case cacheUnreadable(URL, any Error)
     /// The recogniser failed on the render.
     case recognitionFailed(any Error)
     /// A tile couldn't be encoded as a PNG; the cache is not at fault.
@@ -14,6 +16,8 @@ public enum ClaudeBundleError: Error, LocalizedError {
         switch self {
         case .cacheUnwritable(let folder, let error):
             "Couldn't write to \(folder.path): \(error.localizedDescription)"
+        case .cacheUnreadable(let folder, let error):
+            "Couldn't read \(folder.path): \(error.localizedDescription)"
         case .recognitionFailed(let error):
             "Couldn't read the text: \(error.localizedDescription)"
         case .tileEncodingFailed(let error):
@@ -54,7 +58,7 @@ public struct ClaudeBundle: Sendable {
         do {
             pruned = try cache.prune(now: now)
         } catch {
-            throw ClaudeBundleError.cacheUnwritable(cache.root, error)
+            throw ClaudeBundleError.cacheUnreadable(cache.root, error)
         }
         let render = Renderer.render(original, edits: edits)
         let text: String

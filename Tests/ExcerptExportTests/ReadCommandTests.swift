@@ -105,6 +105,10 @@ import Testing
         #expect(
             ReadCommand.status(
                 for: ClaudeBundleError.cacheUnwritable(URL(fileURLWithPath: "/"), Reason())) == 73)
+        #expect(
+            ReadCommand.status(
+                for: ClaudeBundleError.cacheUnreadable(URL(fileURLWithPath: "/c"), Reason())) == 74
+        )
         #expect(ReadCommand.status(for: ClaudeBundleError.recognitionFailed(Reason())) == 70)
         #expect(ReadCommand.status(for: CaptureTextError.tooManyRegions(5_000)) == 65)
         #expect(ReadCommand.status(for: ClaudeBundleError.tileEncodingFailed(Reason())) == 70)

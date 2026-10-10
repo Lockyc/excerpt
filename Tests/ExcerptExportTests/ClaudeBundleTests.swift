@@ -140,6 +140,28 @@ import Testing
         #expect(bundle.pruneFailures.map(\.url.lastPathComponent) == ["stuck"])
     }
 
+    /// A cache folder that can't be listed is named as unreadable, not as unwritable.
+    @Test func anUnlistableCacheSaysItCouldNotBeRead() throws {
+        let cache = Self.cache()
+        let manager = FileManager.default
+        try cache.ensureRoot()
+        try manager.setAttributes([.posixPermissions: 0o300], ofItemAtPath: cache.root.path)
+        defer {
+            try? manager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: cache.root.path)
+        }
+        #expect {
+            try ClaudeBundle.write(
+                original: Fixtures.sheet(width: 50, height: 50), edits: EditDocument(scale: 1),
+                name: "x", cache: cache, recognizer: ColourWords())
+        } throws: { error in
+            guard case ClaudeBundleError.cacheUnreadable(let folder, _) = error else {
+                return false
+            }
+            return folder == cache.root
+                && error.localizedDescription.hasPrefix("Couldn't read \(cache.root.path): ")
+        }
+    }
+
     /// A failure after staging exists removes the staging folder. The cache root loses write
     /// permission once the first bundle is in, so creating the staging folder is what fails.
     @Test func aFailedWriteLeavesNoStagingFolder() throws {

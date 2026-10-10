@@ -103,10 +103,12 @@ public enum ReadCommand {
         }
     }
 
-    /// A tile that won't encode is a fault in excerpt, not in the cache.
+    /// A tile that won't encode is a fault in excerpt, not in the cache; a cache that can't be
+    /// listed is an I/O error.
     static func status(for error: ClaudeBundleError) -> Int32 {
         switch error {
         case .cacheUnwritable: Status.cantCreate
+        case .cacheUnreadable: Status.ioError
         case .recognitionFailed, .tileEncodingFailed: Status.software
         }
     }
