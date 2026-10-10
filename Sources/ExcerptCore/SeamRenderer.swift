@@ -6,7 +6,8 @@ public enum SeamRenderer {
     /// content and stroked with a soft shadow. Labels are drawn by `Renderer`, not here, because
     /// they need the final image geometry.
     public static func removeBands(
-        _ image: CGImage, axis: Axis, bands: [Range<Int>], style: SeamStyle, scale: Double
+        _ image: CGImage, axis: Axis, bands: [Range<Int>], origin: Int = 0, style: SeamStyle,
+        scale: Double
     ) -> (image: CGImage, map: AxisMap) {
         let width = image.width
         let height = image.height
@@ -39,7 +40,9 @@ public enum SeamRenderer {
 
         let crossLength = Double(axis == .horizontal ? outWidth : outHeight)
         for (gap, band) in zip(map.gaps, bands) {
-            var random = SplitMix64(state: seed(axis: axis, band: band))
+            var random = SplitMix64(
+                state: seed(
+                    axis: axis, band: (band.lowerBound + origin)..<(band.upperBound + origin)))
             let before = tornEdge(
                 at: Double(gap.destination.lowerBound), inward: -1, crossLength: crossLength,
                 axis: axis, style: style, scale: scale, random: &random)

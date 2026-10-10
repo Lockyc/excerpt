@@ -24,9 +24,11 @@ public enum Renderer {
         let rowBands = CutSet.normalized(cuts, axis: .horizontal, extent: crop.height)
         let columnBands = CutSet.normalized(cuts, axis: .vertical, extent: crop.width)
         let (afterRows, rows) = SeamRenderer.removeBands(
-            cropped, axis: .horizontal, bands: rowBands, style: style, scale: edits.scale)
+            cropped, axis: .horizontal, bands: rowBands, origin: crop.y, style: style,
+            scale: edits.scale)
         let (afterColumns, columns) = SeamRenderer.removeBands(
-            afterRows, axis: .vertical, bands: columnBands, style: style, scale: edits.scale)
+            afterRows, axis: .vertical, bands: columnBands, origin: crop.x, style: style,
+            scale: edits.scale)
         let map = RenderMap(crop: crop, rows: rows, columns: columns)
         guard !rowBands.isEmpty || !columnBands.isEmpty else {
             return RenderResult(image: cropped, map: map)

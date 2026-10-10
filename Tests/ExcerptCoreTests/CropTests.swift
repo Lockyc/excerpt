@@ -57,6 +57,34 @@ import Testing
         let result = Renderer.render(image, edits: edits)
         #expect(result.image.height == 250 + SeamStyle.standard.gapPixels(scale: 1))
         #expect(result.map.rows.gaps.map(\.removed) == [50])
+        #expect(result.map.seams(.horizontal).map(\.band) == [250..<300])
+    }
+
+    @Test func aCropWhollyInsideACutEqualsThePlainCrop() {
+        let image = Fixtures.rowStripes(width: 40, height: 400)
+        let crop = PixelRect(x: 0, y: 160, width: 40, height: 50)
+        let plain = Renderer.render(image, edits: EditDocument(scale: 1, crop: crop))
+        let cut = Renderer.render(
+            image,
+            edits: EditDocument(
+                scale: 1, cuts: [Cut(axis: .horizontal, lower: 150, upper: 250)], crop: crop))
+        #expect(PixelBuffer(cut.image) == PixelBuffer(plain.image))
+        #expect(cut.map.rows.gaps.isEmpty)
+    }
+
+    @Test func theSameCutTearsTheSameUnderDifferentCrops() {
+        let image = Fixtures.rowStripes(width: 40, height: 400)
+        let cut = Cut(axis: .horizontal, lower: 150, upper: 250)
+        func strip(cropY: Int) -> PixelBuffer {
+            let result = Renderer.render(
+                image,
+                edits: EditDocument(
+                    scale: 1, cuts: [cut], crop: PixelRect(x: 0, y: cropY, width: 40, height: 200)))
+            let gap = result.map.rows.gaps[0].destination
+            let rect = CGRect(x: 0, y: gap.lowerBound - 10, width: 40, height: gap.count + 20)
+            return PixelBuffer(result.image.cropping(to: rect)!)
+        }
+        #expect(strip(cropY: 100) == strip(cropY: 120))
     }
 
     @Test func cropAndCutGolden() throws {
