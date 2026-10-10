@@ -2,7 +2,18 @@ import AppKit
 
 public enum SelectionMode {
     case area
+    /// An area that stays on screen after the drag until Return, Enter or the start button
+    /// confirms it, or a new drag replaces it: the region a scrolling capture follows.
+    case scrollingArea
     case window(windows: [CapturableWindow])
+
+    /// Modes that drag a rectangle.
+    var isArea: Bool {
+        switch self {
+        case .area, .scrollingArea: true
+        case .window: false
+        }
+    }
 }
 
 public enum SelectionResult {
@@ -12,8 +23,8 @@ public enum SelectionResult {
 }
 
 /// One borderless window per display showing that display's frozen still. Area mode drags a
-/// rectangle (Space held moves it); window mode highlights the window under the cursor. Esc
-/// cancels.
+/// rectangle (Space held moves it); scrolling-area mode keeps the rectangle until Return or its
+/// start button; window mode highlights the window under the cursor. Esc cancels.
 @MainActor
 public final class SelectionOverlay {
     private var windows: [OverlayWindow] = []
@@ -27,9 +38,10 @@ public final class SelectionOverlay {
         return await withCheckedContinuation { continuation in
             self.continuation = continuation
             for still in stills {
-                let window = OverlayWindow(still: still, mode: mode) { [weak self] result in
-                    self?.finish(result)
-                }
+                let window = OverlayWindow(
+                    still: still, mode: mode,
+                    finish: { [weak self] result in self?.finish(result) },
+                    beginDrag: { [weak self] origin in self?.clearSelections(except: origin) })
                 windows.append(window)
                 window.orderFrontRegardless()
             }
@@ -53,6 +65,13 @@ public final class SelectionOverlay {
         }
     }
 
+    /// One live selection: a drag starting on one display clears the others' settled rectangles.
+    private func clearSelections(except origin: OverlayView) {
+        for window in windows where window.overlayView !== origin {
+            window.overlayView.clearSelection()
+        }
+    }
+
     private func finish(_ result: SelectionResult) {
         guard let continuation else { return }
         self.continuation = nil
@@ -66,7 +85,13 @@ public final class SelectionOverlay {
 }
 
 final class OverlayWindow: NSWindow {
-    init(still: DisplayStill, mode: SelectionMode, finish: @escaping (SelectionResult) -> Void) {
+    let overlayView: OverlayView
+
+    init(
+        still: DisplayStill, mode: SelectionMode, finish: @escaping (SelectionResult) -> Void,
+        beginDrag: @escaping (OverlayView) -> Void
+    ) {
+        overlayView = OverlayView(still: still, mode: mode, finish: finish, beginDrag: beginDrag)
         super.init(
             contentRect: still.frame, styleMask: .borderless, backing: .buffered, defer: false)
         level = .screenSaver
@@ -76,10 +101,9 @@ final class OverlayWindow: NSWindow {
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         setFrame(still.frame, display: false)
         isReleasedWhenClosed = false
-        let view = OverlayView(still: still, mode: mode, finish: finish)
-        contentView = view
-        initialFirstResponder = view
-        makeFirstResponder(view)
+        contentView = overlayView
+        initialFirstResponder = overlayView
+        makeFirstResponder(overlayView)
     }
 
     override var canBecomeKey: Bool { true }
@@ -89,17 +113,29 @@ final class OverlayView: NSView {
     private let still: DisplayStill
     private let mode: SelectionMode
     private let finish: (SelectionResult) -> Void
+    private let beginDrag: (OverlayView) -> Void
     private let image: NSImage
     private var anchor: CGPoint?
     private var current: CGPoint?
     private var cursor: CGPoint?
     private var moving = false
     private var hovered: CapturableWindow?
+    /// Scrolling-area mode: the drag is over and the selection waits to be started.
+    private var settled = false
+    /// The press that began the current drag cleared a settled selection, so a click ending it
+    /// clears rather than cancels.
+    private var pressClearedSelection = false
+    static let startTitle = "Start Scrolling Capture  ↩"
+    static let startButtonSize = CGSize(width: 220, height: 28)
 
-    init(still: DisplayStill, mode: SelectionMode, finish: @escaping (SelectionResult) -> Void) {
+    init(
+        still: DisplayStill, mode: SelectionMode, finish: @escaping (SelectionResult) -> Void,
+        beginDrag: @escaping (OverlayView) -> Void
+    ) {
         self.still = still
         self.mode = mode
         self.finish = finish
+        self.beginDrag = beginDrag
         self.image = NSImage(cgImage: still.image, size: still.frame.size)
         super.init(frame: CGRect(origin: .zero, size: still.frame.size))
         addTrackingArea(
@@ -149,8 +185,23 @@ final class OverlayView: NSView {
             finish(hovered.map { .window($0) } ?? .cancelled)  // a click on nothing cancels
             return
         }
+        if settled, let button = startButton, button.contains(point) {
+            confirm()
+            return
+        }
+        pressClearedSelection = settled
+        settled = false
+        beginDrag(self)
         anchor = point
         current = point
+        needsDisplay = true
+    }
+
+    /// Drops the selection and any settled state; the overlay stays up.
+    func clearSelection() {
+        settled = false
+        anchor = nil
+        current = nil
         needsDisplay = true
     }
 
@@ -167,21 +218,44 @@ final class OverlayView: NSView {
     }
 
     override func mouseUp(with event: NSEvent) {
-        guard case .area = mode else { return }
+        guard mode.isArea, !settled else { return }
         guard let selection, SelectionMath.isCapturable(selection) else {
-            finish(.cancelled)  // a click or a sliver
+            if case .scrollingArea = mode, pressClearedSelection {
+                clearSelection()  // a click on a settled selection clears it
+            } else {
+                finish(.cancelled)  // a click or a sliver with nothing settled
+            }
             return
         }
+        if case .scrollingArea = mode {
+            settled = true
+            needsDisplay = true
+        } else {
+            confirm()
+        }
+    }
+
+    /// Finishes with the selection cropped from the still.
+    private func confirm() {
+        guard let selection, SelectionMath.isCapturable(selection) else { return }
         let pixels = DisplayGeometry.pixelRect(
             forLocalPoints: selection, scale: still.scale,
             imageSize: CGSize(width: still.image.width, height: still.image.height))
         finish(.area(still, pixelRect: pixels))
     }
 
+    /// The start button's frame while a scrolling-area selection waits; nil otherwise.
+    private var startButton: CGRect? {
+        guard case .scrollingArea = mode, settled, let selection else { return nil }
+        return SelectionMath.startButtonFrame(
+            for: selection, size: Self.startButtonSize, in: bounds)
+    }
+
     override func keyDown(with event: NSEvent) {
         switch Int(event.keyCode) {
         case 53: finish(.cancelled)  // Esc
         case 49: moving = true  // Space
+        case 36, 76: if settled { confirm() }  // Return, Enter
         default: super.keyDown(with: event)
         }
     }
@@ -198,7 +272,7 @@ final class OverlayView: NSView {
         )
         let highlight: CGRect? = {
             switch mode {
-            case .area: return selection
+            case .area, .scrollingArea: return selection
             case .window:
                 guard let hovered, let window = self.window else { return nil }
                 let local = window.convertFromScreen(hovered.frame)
@@ -221,12 +295,28 @@ final class OverlayView: NSView {
             let border = NSBezierPath(rect: highlight.insetBy(dx: -0.5, dy: -0.5))
             border.lineWidth = 1
             border.stroke()
-            if case .area = mode { drawSizeLabel(for: highlight) }
+            if mode.isArea { drawSizeLabel(for: highlight) }
         }
-        if case .area = mode, let cursor {
+        if let startButton { drawStartButton(in: startButton) }
+        if mode.isArea, !settled, let cursor {
             if selection == nil { drawCrosshair(at: cursor) }
             drawLoupe(at: cursor)
         }
+    }
+
+    private func drawStartButton(in frame: CGRect) {
+        NSColor.controlAccentColor.setFill()
+        NSBezierPath(roundedRect: frame, xRadius: frame.height / 2, yRadius: frame.height / 2)
+            .fill()
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 13, weight: .semibold),
+            .foregroundColor: NSColor.white,
+        ]
+        let text = Self.startTitle as NSString
+        let size = text.size(withAttributes: attributes)
+        text.draw(
+            at: CGPoint(x: frame.midX - size.width / 2, y: frame.midY - size.height / 2),
+            withAttributes: attributes)
     }
 
     private func drawCrosshair(at point: CGPoint) {
