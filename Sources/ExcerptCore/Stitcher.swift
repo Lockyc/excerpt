@@ -25,6 +25,9 @@ public struct Stitcher: Sendable {
     /// The last frame joined to the stitch: every frame is matched against it.
     private var reference: PixelBuffer
     private var full = false
+    /// Rows at the stitch's end that are the newest frame's sticky footer; nil until the first
+    /// move shows how many of the first frame's bottom rows are sticky.
+    private var tailFooter: Int?
 
     /// `maximumHeight` below the first frame's height is raised to it: the first frame is kept
     /// whole.
@@ -44,31 +47,48 @@ public struct Stitcher: Sendable {
         case .still: return .noMovement
         case .uncertain: return .uncertain
         case .moved(let offset, _, let footer):
-            let rows = min(offset, maximumHeight - height)
-            guard rows > 0 else {
-                full = true
-                return .reachedLimit
-            }
             let rowBytes = width * 4
-            let firstNew = frameHeight - footer - offset
-            bytes.removeLast(footer * rowBytes)
-            bytes.append(
-                contentsOf: frame.bytes[(firstNew * rowBytes)..<((firstNew + rows) * rowBytes)])
-            bytes.append(contentsOf: frame.bytes[((frameHeight - footer) * rowBytes)...])
-            height += rows
-            reference = frame
-            if rows < offset {
+            // The sticky rows on the stitch's tail: the last move's footer, or for the first
+            // move the footer it just revealed on the first frame.
+            let tail = tailFooter ?? footer
+            // The tail covered content that scrolled into view if it shrank or vanished, and
+            // the new frame's rows run from where the stitch's content ends to its footer.
+            let firstNew = frameHeight - tail - offset
+            let count = tail + offset - footer
+            guard firstNew >= 0, count > 0 else { return .noMovement }
+            let base = height - tail
+            if base + count + footer > maximumHeight {
+                // Out of room: keep the stitch contiguous, with no footer after cut-off content.
+                bytes.removeLast(tail * rowBytes)
+                let rows = max(0, maximumHeight - base)
+                bytes.append(
+                    contentsOf: frame.bytes[(firstNew * rowBytes)..<((firstNew + rows) * rowBytes)])
+                height = base + rows
+                tailFooter = 0
                 full = true
                 return .reachedLimit
             }
-            return .appended(rows: rows)
+            bytes.removeLast(tail * rowBytes)
+            bytes.append(
+                contentsOf: frame.bytes[(firstNew * rowBytes)..<((firstNew + count) * rowBytes)])
+            bytes.append(contentsOf: frame.bytes[((frameHeight - footer) * rowBytes)...])
+            height = base + count + footer
+            tailFooter = footer
+            reference = frame
+            if height == maximumHeight {
+                full = true
+                return .reachedLimit
+            }
+            return .appended(rows: count)
         }
     }
 
-    /// The whole stitch.
+    /// The whole stitch. Copies the buffer: a live view calls `bottom(rows:)` instead, never
+    /// `image` after every `add`.
     public var image: PixelBuffer { PixelBuffer(width: width, height: height, bytes: bytes) }
 
-    /// The bottom `rows` of the stitch (all of it when shorter): the live preview's view.
+    /// The bottom `rows` of the stitch (all of it when shorter, at least one row): the live
+    /// preview's view.
     public func bottom(rows: Int) -> PixelBuffer {
         let count = min(max(1, rows), height)
         let rowBytes = width * 4

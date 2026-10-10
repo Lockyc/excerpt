@@ -122,4 +122,77 @@ import Testing
         #expect(stitcher.bottom(rows: 100) == ScrollFixtures.rows(page, 900..<1000))
         #expect(stitcher.bottom(rows: 5000) == page)
     }
+
+    /// A solid band: its identical rows say nothing to the matcher, so a footer that changes
+    /// height doesn't count against the offset.
+    func solid(_ height: Int) -> PixelBuffer {
+        ScrollFixtures.paint(width: 90, height: height) { _, _ in
+            RGBA(r: 20, g: 90, b: 160, a: 255)
+        }
+    }
+
+    /// The viewport at `offset` over `page` with a solid footer of `footer` rows (none for 0).
+    func footerFrame(_ page: PixelBuffer, offset: Int, footer: Int) -> PixelBuffer {
+        ScrollFixtures.frame(
+            page, offset: offset, viewport: 200, header: nil,
+            footer: footer == 0 ? nil : solid(footer))
+    }
+
+    @Test func aFooterThatShrinksLeavesNoStaleBar() {
+        let page = ScrollFixtures.page(width: 90, height: 1000)
+        var stitcher = Stitcher(first: footerFrame(page, offset: 0, footer: 30), scale: 1)
+        _ = stitcher.add(footerFrame(page, offset: 120, footer: 30))
+        _ = stitcher.add(footerFrame(page, offset: 240, footer: 10))
+        let expected = ScrollFixtures.stack([
+            ScrollFixtures.rows(page, 0..<(240 + 200 - 10)),
+            solid(10),
+        ])
+        #expect(stitcher.image == expected)
+    }
+
+    @Test func aFooterThatVanishesRevealsTheRowsItCovered() {
+        let page = ScrollFixtures.page(width: 90, height: 1000)
+        var stitcher = Stitcher(first: footerFrame(page, offset: 0, footer: 30), scale: 1)
+        _ = stitcher.add(footerFrame(page, offset: 120, footer: 30))
+        _ = stitcher.add(footerFrame(page, offset: 240, footer: 0))
+        #expect(stitcher.image == ScrollFixtures.rows(page, 0..<440))
+    }
+
+    @Test func aFooterThatGrowsReplacesTheOldOne() {
+        let page = ScrollFixtures.page(width: 90, height: 1000)
+        var stitcher = Stitcher(first: footerFrame(page, offset: 0, footer: 10), scale: 1)
+        _ = stitcher.add(footerFrame(page, offset: 120, footer: 10))
+        _ = stitcher.add(footerFrame(page, offset: 240, footer: 30))
+        let expected = ScrollFixtures.stack([
+            ScrollFixtures.rows(page, 0..<(240 + 200 - 30)),
+            solid(30),
+        ])
+        #expect(stitcher.image == expected)
+    }
+
+    @Test func truncatingAtTheCapOmitsTheFooterAndStaysContiguous() {
+        let page = ScrollFixtures.page(width: 90, height: 1000)
+        let footer = ScrollFixtures.bar(width: 90, height: 16, tone: 140)
+        let (stitcher, steps) = scroll(
+            page, viewport: 200, step: 120, footer: footer, maximumHeight: 500)
+        #expect(steps.last == .reachedLimit)
+        #expect(stitcher.height == 500)
+        #expect(stitcher.image == ScrollFixtures.rows(page, 0..<500))
+    }
+
+    @Test func reachingTheCapExactlyReportsTheLimitAtThatAppend() {
+        let page = ScrollFixtures.page(width: 90, height: 1000)
+        let (stitcher, steps) = scroll(page, viewport: 200, step: 120, maximumHeight: 440)
+        #expect(steps.prefix(2) == [.appended(rows: 120), .reachedLimit])
+        #expect(steps.dropFirst(2).allSatisfy { $0 == .reachedLimit })
+        #expect(stitcher.image == ScrollFixtures.rows(page, 0..<440))
+    }
+
+    @Test func theBottomIsAtLeastOneRow() {
+        let page = ScrollFixtures.page(width: 90, height: 400)
+        let stitcher = Stitcher(
+            first: ScrollFixtures.frame(page, offset: 0, viewport: 200), scale: 1)
+        #expect(stitcher.bottom(rows: 0) == ScrollFixtures.rows(page, 199..<200))
+        #expect(stitcher.bottom(rows: -3) == ScrollFixtures.rows(page, 199..<200))
+    }
 }
