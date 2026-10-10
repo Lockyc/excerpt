@@ -1,17 +1,25 @@
 import CoreGraphics
 import Foundation
 
-public enum EditDocumentError: Error, Equatable {
+public enum EditDocumentError: Error, Equatable, LocalizedError {
     /// Written by a newer excerpt; opening it here would silently drop what this build can't read.
     case unsupportedVersion(Int)
     /// A scale outside `EditDocument.scaleRange`: sizing labels, strokes and blur blocks from it
     /// would trap or exhaust memory.
     case invalidScale(Double)
-    /// A crop, annotation coordinate or annotation id outside `EditDocument.coordinateLimit` or
-    /// `EditDocument.idLimit`, or an id used twice.
+    /// A cut bound, crop, annotation coordinate or annotation id outside
+    /// `EditDocument.coordinateLimit` or `EditDocument.idLimit`, or an id used twice.
     case invalidGeometry
     /// The edits JSON isn't a readable edit document at all.
     case damaged
+
+    /// The one wording for why saved edits can't be used, shown by the app and `excerpt read`.
+    public var errorDescription: String? {
+        switch self {
+        case .unsupportedVersion: "It was edited by a newer version of Excerpt."
+        case .invalidScale, .invalidGeometry, .damaged: "Its saved edits are damaged."
+        }
+    }
 }
 
 /// A rectangle of whole original pixels, top-left origin.
@@ -115,7 +123,8 @@ public struct EditDocument: Codable, Equatable, Sendable {
     /// and blur blocks are sized from it, so a damaged scale is refused rather than rendered.
     public static let scaleRange = 1.0...3.0
 
-    /// The largest magnitude, in original pixels, any stored coordinate or size may have.
+    /// The largest magnitude, in original pixels, any stored cut bound, coordinate or size may
+    /// have.
     public static let coordinateLimit = 1_000_000.0
     /// Annotation ids are in `0..<idLimit`, which keeps `nextAnnotationID` clear of overflow.
     public static let idLimit = Int.max / 2
@@ -123,6 +132,9 @@ public struct EditDocument: Codable, Equatable, Sendable {
     /// Throws `invalidGeometry` unless every stored coordinate, size and id is in range.
     private func validateGeometry() throws {
         let limit = Self.coordinateLimit
+        for cut in cuts where abs(Double(cut.lower)) > limit || abs(Double(cut.upper)) > limit {
+            throw EditDocumentError.invalidGeometry
+        }
         func inRange(_ values: CGFloat...) -> Bool {
             values.allSatisfy { $0.isFinite && abs(Double($0)) <= limit }
         }

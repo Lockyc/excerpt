@@ -14,20 +14,18 @@ public enum Renderer {
     public static func renderBase(
         _ original: CGImage, edits: EditDocument, style: SeamStyle = .standard
     ) -> RenderResult {
+        let plan = Self.map(
+            width: original.width, height: original.height, edits: edits, style: style)
+        let crop = plan.crop
         let full = PixelRect(x: 0, y: 0, width: original.width, height: original.height)
-        let crop = edits.crop?.clamped(width: original.width, height: original.height) ?? full
         let blurs = edits.annotations.compactMap { annotation -> CGRect? in
             if case .blur(let rect) = annotation.shape { return rect }
             return nil
         }
         let blurred = BlurRenderer.apply(blurs, to: original, scale: edits.scale, salt: edits.salt)
         let cropped = crop == full ? blurred : blurred.cropping(to: crop.cgRect)!
-        let cuts = edits.cuts.map { cut -> Cut in
-            let offset = cut.axis == .horizontal ? crop.y : crop.x
-            return Cut(axis: cut.axis, lower: cut.lower - offset, upper: cut.upper - offset)
-        }
-        let rowBands = CutSet.normalized(cuts, axis: .horizontal, extent: crop.height)
-        let columnBands = CutSet.normalized(cuts, axis: .vertical, extent: crop.width)
+        let rowBands = plan.rows.bands
+        let columnBands = plan.columns.bands
         let (afterRows, rows) = SeamRenderer.removeBands(
             cropped, axis: .horizontal, bands: rowBands, origin: crop.y, style: style,
             scale: edits.scale)
@@ -72,6 +70,29 @@ public enum Renderer {
                 canvasHeight: height, scale: edits.scale)
         }
         return RenderResult(image: context.makeImage()!, map: map)
+    }
+
+    /// Where a render of a `width`×`height` original would place everything, and so its size,
+    /// worked out without drawing: a caller can refuse a render too large to draw before paying
+    /// for it. `renderBase` draws exactly this map.
+    public static func map(
+        width: Int, height: Int, edits: EditDocument, style: SeamStyle = .standard
+    ) -> RenderMap {
+        let full = PixelRect(x: 0, y: 0, width: width, height: height)
+        let crop = edits.crop?.clamped(width: width, height: height) ?? full
+        let cuts = edits.cuts.map { cut -> Cut in
+            let offset = cut.axis == .horizontal ? crop.y : crop.x
+            return Cut(axis: cut.axis, lower: cut.lower - offset, upper: cut.upper - offset)
+        }
+        let gap = style.gapPixels(scale: edits.scale)
+        return RenderMap(
+            crop: crop,
+            rows: AxisMap(
+                extent: crop.height,
+                bands: CutSet.normalized(cuts, axis: .horizontal, extent: crop.height), gap: gap),
+            columns: AxisMap(
+                extent: crop.width,
+                bands: CutSet.normalized(cuts, axis: .vertical, extent: crop.width), gap: gap))
     }
 
     /// The full render that export writes: the base, then the annotations through its map.

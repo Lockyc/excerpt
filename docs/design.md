@@ -165,6 +165,7 @@ change re-renders the cache. Undo is a stack of document values.
 - **`excerpt read <image>`** — the same bundle for any image file, not only a capture, so a
   Claude session handed a large screenshot can read it. The app binary runs it headless when
   given arguments, before any `NSApplication` starts. It prints `text.md` to stdout and the tile
-  paths to stderr, and needs no Screen Recording permission. A file with an excerpt edit
-  document gets its cut markers. Any other file is treated as uncut, with Retina scale read
-  from its DPI metadata.
+  paths to stderr, and needs no Screen Recording permission. A master gets its cut markers, and
+  so does a primary while it is exactly its master's render; a primary changed elsewhere reads
+  as its own pixels, so a redaction drawn over it holds. Any other file is treated as uncut,
+  upright, with Retina scale read from its DPI metadata.

@@ -32,6 +32,19 @@ import Testing
         #expect(result.map.columns.gaps.count == 1)
     }
 
+    /// A caller sizes a render from `map` before drawing it, so the two must agree.
+    @Test func mapPredictsTheRenderWithoutDrawing() {
+        let image = Fixtures.sheet(width: 600, height: 800)
+        let edits = EditDocument(
+            scale: 3, cuts: [Cut(axis: .horizontal, lower: 121, upper: 601)],
+            crop: PixelRect(x: 50, y: 100, width: 500, height: 650))
+        let result = Renderer.render(image, edits: edits)
+        let map = Renderer.map(width: 600, height: 800, edits: edits)
+        #expect(map == result.map)
+        #expect(map.renderedWidth == result.image.width)
+        #expect(map.renderedHeight == result.image.height)
+    }
+
     @Test func wholeExtentCutIsIgnored() {
         let image = Fixtures.sheet(width: 100, height: 100)
         let edits = EditDocument(scale: 1, cuts: [Cut(axis: .horizontal, lower: 0, upper: 100)])

@@ -91,18 +91,8 @@ enum Alerts {
         if let unreadable = error as? MasterUnreadable {
             (file, error) = (unreadable.file, unreadable.underlying)
         }
-        let reason: String
-        switch error {
-        case EditDocumentError.unsupportedVersion:
-            reason = "It was edited by a newer version of Excerpt."
-        case EditDocumentError.invalidScale, EditDocumentError.invalidGeometry,
-            EditDocumentError.damaged:
-            reason = "Its saved edits are damaged."
-        case is PNGError:
-            reason = "It isn't a PNG Excerpt can read."
-        default:
-            reason = error.localizedDescription
-        }
+        let reason =
+            error is PNGError ? "It isn't a PNG Excerpt can read." : error.localizedDescription
         show("Couldn't open \(file.lastPathComponent)", reason)
     }
 }

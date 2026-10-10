@@ -141,6 +141,15 @@ import Testing
         rejects(#""crop":{"x":9223372036854775807,"y":0,"width":10,"height":10}"#)
     }
 
+    /// A cut bound near `Int.min` would overflow when the renderer offsets it by the crop.
+    @Test func rejectsAHugeCutBound() {
+        for (lower, upper) in [(Int.min, 5), (0, Int.max), (0, 1_000_001)] {
+            let cut = #"{"axis":"horizontal","lower":\#(lower),"upper":\#(upper)}"#
+            let json = Data(#"{"version":2,"scale":2,"cuts":[\#(cut)]}"#.utf8)
+            #expect(throws: EditDocumentError.invalidGeometry) { try EditDocument.decode(json) }
+        }
+    }
+
     @Test func rejectsAnEmptyOrNegativeCrop() {
         rejects(#""crop":{"x":0,"y":0,"width":0,"height":10}"#)
         rejects(#""crop":{"x":0,"y":0,"width":10,"height":-5}"#)
