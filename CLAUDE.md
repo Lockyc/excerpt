@@ -6,12 +6,8 @@ description: Agent orientation for excerpt — state, layout, conventions, branc
 # excerpt — agent notes
 
 A macOS menu-bar screenshot tool in Swift (SwiftPM, macOS 15+). The architecture of record is
-[docs/design.md](docs/design.md); what's next is [docs/roadmap.md](docs/roadmap.md) — start
-there before planning work.
-
-**State:** Phase 0 (Core) shipped; Phases 1–4 (capture shell, editor, scrolling capture,
-text + Claude) built, real-app hand checks pending; Phase 5 (v1 release: notarized build,
-`install.sh`, `/excerpt:install`) built, v1.0.0 held until those hand checks pass.
+[docs/design.md](docs/design.md); what's next, and each phase's status in its Lane column, is
+[docs/roadmap.md](docs/roadmap.md) — start there before planning work.
 
 `just gate` per change; `just run` launches a signed build; `swift run Excerpt read <image>`
 runs the command without the app.
