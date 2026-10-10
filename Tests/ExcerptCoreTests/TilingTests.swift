@@ -47,7 +47,7 @@ import Testing
     }
 
     @Test func ownedBandsPartitionTheLengthAndHoldWholeLines() {
-        for length in [900, 1569, 2900, 10_000] {
+        for length in [900, 1569, 2900, 2901, 4300, 4301, 10_000] {
             let spans = Tiling.spans(length: length)
             let bands = Tiling.ownedBands(spans)
             #expect(bands.first?.lowerBound == 0)
@@ -97,5 +97,34 @@ import Testing
             #expect(out.colorSpace?.name == CGColorSpace.sRGB)
             #expect(PixelBuffer(out)[x: 0, y: 0] == RGBA(r: 255, g: 0, b: 0, a: 255))
         }
+    }
+
+    /// Each tile's first and last rows are the point rows its span names, including the
+    /// pulled-back last tile.
+    @Test(arguments: [(1, 4_000), (2, 4_000), (3, 4_000)])
+    func tilesHoldTheRowsTheirSpansName(scale: Int, points: Int) {
+        let image = Fixtures.paint(width: 12, height: points * scale) { _, y in
+            Fixtures.rowColor(y / scale)
+        }
+        let tiles = Tiling.tiles(of: image, scale: Double(scale))
+        let spans = Tiling.spans(length: points)
+        #expect(tiles.count == spans.count && spans.count > 2)
+        for (tile, span) in zip(tiles, spans) {
+            let buffer = PixelBuffer(tile)
+            #expect(buffer.height == span.count && buffer.width == 12 / scale)
+            #expect(buffer[x: 1, y: 0] == Fixtures.rowColor(span.lowerBound))
+            #expect(buffer[x: 1, y: span.count - 1] == Fixtures.rowColor(span.upperBound - 1))
+        }
+    }
+
+    @Test func anOddPixelHeightRoundsToTheNearestPoint() {
+        let image = Fixtures.sheet(width: 40, height: 1_001)
+        #expect(Tiling.atPoints(image, scale: 2).height == 501)
+    }
+
+    @Test func aNonFiniteScaleIsOneTimes() {
+        let image = Fixtures.sheet(width: 40, height: 100)
+        #expect(Tiling.atPoints(image, scale: .nan).height == 100)
+        #expect(Tiling.atPoints(image, scale: .infinity).height == 100)
     }
 }

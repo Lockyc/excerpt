@@ -12,6 +12,8 @@ public enum Tiling {
     /// whole in at least one tile.
     public static let overlap = 100
 
+    /// Only the height is ever split; width is never tiled.
+    ///
     /// The spans of `0..<length` the tiles cover. A length up to `fits` is one span. A longer
     /// one is cut into spans exactly `tile` long, each starting `tile - overlap` after the one
     /// before, with the last pulled back to end at `length`, so it shares more than `overlap`
@@ -45,7 +47,7 @@ public enum Tiling {
     }
 
     /// `image` at 1× (one pixel per point), cut into the tiles `spans` gives for its height.
-    /// The full width stays in every tile.
+    /// Only the height is split; the full width stays in every tile.
     public static func tiles(of image: CGImage, scale: Double) -> [CGImage] {
         let points = atPoints(image, scale: scale)
         return spans(length: points.height).map { span in
@@ -58,7 +60,7 @@ public enum Tiling {
     /// so a CMYK, 16-bit or indexed source cannot make a later PNG encode fail. Pixel size is
     /// unchanged at 1× or below.
     public static func atPoints(_ image: CGImage, scale: Double) -> CGImage {
-        let factor = max(scale, 1)
+        let factor = scale.isFinite ? max(scale, 1) : 1
         let width = max(1, Int((Double(image.width) / factor).rounded()))
         let height = max(1, Int((Double(image.height) / factor).rounded()))
         let context = PixelBuffer.makeContext(width: width, height: height)
