@@ -10,6 +10,8 @@ import ExcerptExport
 final class CaptureCoordinator {
     private let preferences: Preferences
     private let capturer = ScreenCapturer()
+    /// Held for the coordinator's life: a menu item's target is weak.
+    private let selector = CaptureSelector()
     private let onDelivered: (URL, CGImage) -> Void
     private var running = false
     /// Whether this launch has shown the system's Accessibility prompt.
@@ -26,10 +28,17 @@ final class CaptureCoordinator {
         self.onDelivered = onDelivered
     }
 
-    func run(_ action: HotKeyAction) async {
+    func run(_ requested: HotKeyAction) async {
         guard !running else { return }  // a second hotkey press mid-capture is ignored
         running = true
         defer { running = false }
+        var action = requested
+        if action == .selector {
+            let preferences = preferences
+            guard let mode = selector.choose(binding: { preferences.binding(for: $0) })
+            else { return }
+            action = mode
+        }
         guard ensurePermission() else { return }
         if action == .scrolling && !scrollingMayStart() { return }
         do {
@@ -74,6 +83,8 @@ final class CaptureCoordinator {
                 {
                     await copyText(of: image, scale: still.scale)
                 }
+            case .selector:
+                return  // resolved to the mode picked above
             }
         } catch {
             Alerts.show("Capture failed", error.localizedDescription)

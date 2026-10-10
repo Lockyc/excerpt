@@ -8,6 +8,7 @@ enum HotKeyAction: UInt32, CaseIterable {
     case fullscreen = 3
     case scrolling = 4
     case text = 5
+    case selector = 6
 
     var id: UInt32 { rawValue }
 
@@ -18,6 +19,7 @@ enum HotKeyAction: UInt32, CaseIterable {
         case .fullscreen: "Capture Fullscreen"
         case .scrolling: "Capture Scrolling Area"
         case .text: "Capture Text"
+        case .selector: "Choose Capture Mode…"
         }
     }
 
@@ -29,9 +31,18 @@ enum HotKeyAction: UInt32, CaseIterable {
             HotKeyBinding(keyCode: UInt32(kVK_ANSI_3), modifiers: HotKeyBinding.commandShift)
         case .text:
             HotKeyBinding(keyCode: UInt32(kVK_ANSI_5), modifiers: HotKeyBinding.commandShift)
+        case .selector:
+            HotKeyBinding(keyCode: UInt32(kVK_ANSI_6), modifiers: HotKeyBinding.commandShift)
         case .fullscreen, .scrolling: nil
         }
     }
+
+    /// The modes the all-in-one selector offers: every action but the selector itself.
+    static var modes: [HotKeyAction] { allCases.filter { $0 != .selector } }
+
+    /// The mode's name in the selector: its title without `Capture `, so each starts with its own
+    /// letter for the menu's type-select.
+    var modeName: String { title.hasPrefix("Capture ") ? String(title.dropFirst(8)) : title }
 }
 
 extension HotKeyAction {
