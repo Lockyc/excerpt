@@ -120,7 +120,7 @@ for PNG, not the default). Fits to width; tall captures scroll. Floats above oth
 Dock icon.
 
 Tools: `V` select · `A` arrow · `R` rectangle · `T` text · `H` highlight · `B` blur · `K` crop ·
-`C` cut. Six colours, three stroke widths; text starts at 30pt, stroke at 10. The arrow drag
+`C` cut. Six colours, three sizes (one control sets stroke and text). The arrow drag
 **starts at the head**. Crop snaps using the same gap detection as cuts.
 
 **Blur is destructive**: pixelation in ≥12pt blocks over noise, so the covered content cannot be
@@ -128,8 +128,8 @@ read from the primary; pixelation defeats reading, not candidate-matching of sho
 strings. The noise is seeded from a per-document salt stored in the master. The editor shows the
 true result.
 
-**The edit document** holds the cuts, an optional crop and the annotations (arrow, rectangle,
-text, highlight, blur), all in original pixels, so every edit stays adjustable from the master.
+**The edit document** holds the cuts, an optional crop, the annotations (arrow, rectangle,
+text, highlight, blur) and the blur salt, all in original pixels, so every edit stays adjustable from the master.
 Render order: blur (from original pixels) → crop → cuts and their labels → annotations, placed
 through the coordinate map. The canvas caches the render up to the cuts and draws annotations
 over it through the same Core code, so a drag repaints only annotations; a cut, crop or blur
