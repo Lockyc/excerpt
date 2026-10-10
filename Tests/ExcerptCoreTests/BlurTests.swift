@@ -171,16 +171,27 @@ import Testing
         #expect(blurred[x: 25, y: 35] == blurred[x: 27, y: 37])
     }
 
-    @Test func blursThatOverlapOrTouchAreOneGroup() {
+    @Test func blursCloserThanAMinimumBlockAreOneGroup() {
         let a = PixelRect(x: 0, y: 0, width: 10, height: 10)
         let touching = PixelRect(x: 10, y: 0, width: 10, height: 10)
         let corner = PixelRect(x: 20, y: 10, width: 5, height: 5)
         let apart = PixelRect(x: 40, y: 40, width: 5, height: 5)
         let nested = PixelRect(x: 41, y: 41, width: 2, height: 2)
         #expect(
-            BlurRenderer.groups([a, apart, touching, nested, corner])
+            BlurRenderer.groups([a, apart, touching, nested, corner], reach: 1)
                 == [[a, touching, corner], [apart, nested]])
-        #expect(BlurRenderer.groups([a, PixelRect(x: 11, y: 0, width: 5, height: 5)]).count == 2)
+        #expect(
+            BlurRenderer.groups([a, PixelRect(x: 11, y: 0, width: 5, height: 5)], reach: 1).count
+                == 2)
+        // Under `reach` apart on both axes joins; `reach` or more apart on either does not.
+        let near = PixelRect(x: 21, y: 21, width: 5, height: 5)
+        #expect(BlurRenderer.groups([a, near], reach: 12).count == 1)
+        #expect(BlurRenderer.groups([a, near], reach: 11).count == 2)
+        let stacked = (0..<6).map { PixelRect(x: 0, y: $0 * 22, width: 300, height: 20) }
+        #expect(BlurRenderer.groups(stacked, reach: 3) == [stacked])
+        #expect(BlurRenderer.groups(stacked, reach: 2).count == 6)
+        #expect(BlurRenderer.minimumBlock(scale: 2) == 24)
+        #expect(BlurRenderer.minimumBlock(scale: 0.5) == 12)
         #expect(
             BlurRenderer.boundingBox([a, corner]) == PixelRect(x: 0, y: 0, width: 25, height: 15))
     }

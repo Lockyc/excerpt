@@ -138,7 +138,7 @@ Tools: `V` select · `A` arrow · `R` rectangle · `T` text · `H` highlight · 
 `C` cut. Six colours, three sizes (one control sets stroke and text). The arrow drag
 **starts at the head**. Crop snaps using the same gap detection as cuts.
 
-**Blur is destructive**: pixelation over noise. Blur rects that overlap or touch are one group,
+**Blur is destructive**: pixelation over noise. Blur rects under 12pt apart are one group,
 pixelated on one grid over the group's bounding box in blocks at least 12pt and at least half
 that box's shorter side, filling only the rects. So text of any size spans at most about two
 blocks across its height, however many strips or nested rects cover it, and the covered content

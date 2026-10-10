@@ -1,6 +1,7 @@
 import CoreGraphics
 
-/// The destructive blur. Rects that overlap or touch form one group, pixelated together on one
+/// The destructive blur. Rects that overlap, touch or lie closer than a minimum block
+/// (`minimumBlock`) on both axes form one group, pixelated together on one
 /// grid aligned to the group's bounding box, in blocks sized by `blockPixels` from that box: at
 /// least `blockPoints` on a side and at least half its shorter side. So any text a group covers
 /// spans at most about two blocks across its height, however large it is drawn and however many
@@ -39,7 +40,7 @@ public enum BlurRenderer {
         // Copy, not source-over: a translucent block would otherwise show the detail beneath it.
         context.setBlendMode(.copy)
         let flip = CanvasFlip(height: image.height)
-        for group in groups(regions) {
+        for group in groups(regions, reach: minimumBlock(scale: scale)) {
             let box = boundingBox(group)
             guard let piece = image.cropping(to: box.cgRect) else {
                 preconditionFailure("clamped blur group lies inside the image")
@@ -55,10 +56,11 @@ public enum BlurRenderer {
         return context.makeImage()!
     }
 
-    /// The connected sets of `regions` that overlap or touch (corners included), each in input
-    /// order, ordered by their first member. A sweep down the rows compares each region only with
-    /// those still reaching its top.
-    static func groups(_ regions: [PixelRect]) -> [[PixelRect]] {
+    /// The connected sets of `regions` whose gap is under `reach` pixels on both axes (so
+    /// overlapping and touching ones, corners included, at any `reach` of 1 or more), each in
+    /// input order, ordered by their first member. A sweep down the rows compares each region
+    /// only with those still within `reach` of its top.
+    static func groups(_ regions: [PixelRect], reach: Int) -> [[PixelRect]] {
         var parent = Array(regions.indices)
         func root(_ i: Int) -> Int {
             var i = i
@@ -71,9 +73,11 @@ public enum BlurRenderer {
         var active: [Int] = []
         for i in regions.indices.sorted(by: { regions[$0].y < regions[$1].y }) {
             let r = regions[i]
-            active.removeAll { regions[$0].y + regions[$0].height < r.y }
+            active.removeAll { regions[$0].y + regions[$0].height + reach <= r.y }
             for j in active
-            where regions[j].x <= r.x + r.width && r.x <= regions[j].x + regions[j].width {
+            where regions[j].x < r.x + r.width + reach
+                && r.x < regions[j].x + regions[j].width + reach
+            {
                 parent[root(j)] = root(i)
             }
             active.append(i)
@@ -99,9 +103,13 @@ public enum BlurRenderer {
     /// The side of a group's blocks, in pixels, from its bounding box `region`: `blockPoints` at
     /// `scale` (never under `minimumBlockPixels`), or half the box's shorter side when larger.
     static func blockPixels(for region: PixelRect, scale: Double) -> Int {
-        let floor = max(minimumBlockPixels, Int((blockPoints * scale).rounded(.up)))
-        let half = (min(region.width, region.height) + 1) / 2
-        return max(floor, half)
+        max(minimumBlock(scale: scale), (min(region.width, region.height) + 1) / 2)
+    }
+
+    /// The smallest block, in pixels: `blockPoints` at `scale`, never under `minimumBlockPixels`.
+    /// Blurs closer than this pixelate as one group.
+    static func minimumBlock(scale: Double) -> Int {
+        max(minimumBlockPixels, Int((blockPoints * scale).rounded(.up)))
     }
 
     /// Splits `length` into blocks no shorter than `block` (one block when `length` is shorter):

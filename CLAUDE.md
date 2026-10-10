@@ -27,7 +27,7 @@ runs the command without the app.
 - **Claude sees only the render.** For Claude's tiles and `text.md` are read from the render
   through its `RenderMap`'s kept segments, never from the original, so cut content can't reach
   them and blurred content reaches them only as `BlurRenderer`'s blocks, sized from each group
-  of touching blurs so no text can be read from them.
+  of nearby blurs so no text can be read from them.
 - **Golden images** pin the renderer; a deliberate visual change regenerates them in the same
   commit. `EXCERPT_RECORD_GOLDENS=1 swift test` re-records goldens; inspect every recorded PNG
   before committing it.

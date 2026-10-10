@@ -98,25 +98,28 @@ import Testing
         for digit in "4729" { #expect(!text.contains(digit), "\(label): \(text)") }
     }
 
-    /// The same tight cover drawn as several blurs: abutting strips, or a small blur nested in a
-    /// large one. Blurs that touch are pixelated as one, so none reads finer than the whole.
+    /// The same tight cover drawn as several blurs: abutting strips, strips with hairline gaps
+    /// between them, or a small blur nested in a large one. Blurs closer than a minimum block are
+    /// pixelated as one, so none reads finer than the whole.
     static func layouts(_ cover: CGRect) -> [(String, [CGRect])] {
-        let strips = [2, 3, 4, 6].map { count in
-            (
-                "\(count) strips",
-                (0..<count).map { i in
-                    let top = cover.minY + cover.height * Double(i) / Double(count)
-                    let bottom = cover.minY + cover.height * Double(i + 1) / Double(count)
-                    return CGRect(
-                        x: cover.minX, y: top.rounded(), width: cover.width,
-                        height: bottom.rounded() - top.rounded())
-                }
-            )
+        func strips(_ count: Int, gap: Double) -> [CGRect] {
+            let height = (cover.height - gap * Double(count - 1)) / Double(count)
+            return (0..<count).map { i in
+                let top = (cover.minY + Double(i) * (height + gap)).rounded()
+                let bottom = (cover.minY + Double(i) * (height + gap) + height).rounded()
+                return CGRect(x: cover.minX, y: top, width: cover.width, height: bottom - top)
+            }
+        }
+        let abutting = [2, 3, 4, 6].map { ("\($0) strips", strips($0, gap: 0)) }
+        let gapped = [4, 6].flatMap { count in
+            [1.0, 2.0].map { gap in
+                ("\(count) strips \(Int(gap)) px apart", strips(count, gap: gap))
+            }
         }
         let small = CGRect(
             x: cover.minX + cover.width * 0.3, y: cover.minY + cover.height * 0.35,
             width: cover.width * 0.3, height: cover.height * 0.3)
-        return strips + [("nested", [cover, small])]
+        return abutting + gapped + [("nested", [cover, small])]
     }
 
     @Test(.timeLimit(.minutes(3)), arguments: [1.0, 2.0])
