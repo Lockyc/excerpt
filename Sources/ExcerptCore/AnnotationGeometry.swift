@@ -72,7 +72,14 @@ public enum AnnotationGeometry {
         switch annotation.shape {
         case .rectangle(let rect), .highlight(let rect), .blur(let rect):
             return map.rect(rect.standardized) != nil
-        case .arrow, .text:
+        case .arrow(let tail, let head):
+            // Decided on the unstroked extent: a stroke poking past a band edge doesn't
+            // rescue an arrow whose tail and head both lie inside the band.
+            return !map.isHidden(
+                CGRect(
+                    x: min(tail.x, head.x), y: min(tail.y, head.y),
+                    width: abs(head.x - tail.x), height: abs(head.y - tail.y)))
+        case .text:
             return true
         }
     }

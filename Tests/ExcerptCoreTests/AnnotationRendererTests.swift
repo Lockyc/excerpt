@@ -167,7 +167,7 @@ extension AnnotationRendererTests {
             id: 1, shape: .rectangle(rect: CGRect(x: 10, y: 102, width: 100, height: 96)),
             color: .red, width: .thick)
         let placed = map(bands: [100..<200])
-        #expect(!placed.isHidden(AnnotationGeometry.bounds(of: poking, scale: 1)) == true)
+        #expect(!placed.isHidden(AnnotationGeometry.bounds(of: poking, scale: 1)))
         #expect(placed.rect(CGRect(x: 10, y: 102, width: 100, height: 96)) == nil)
         #expect(AnnotationGeometry.hiddenCount([poking], map: placed, scale: 1) == 1)
         let base = Fixtures.sheet(width: 400, height: 400)
@@ -192,5 +192,20 @@ extension AnnotationRendererTests {
         #expect(placed.rect(CGRect(x: 10, y: 300, width: 100, height: 100)) == nil)
         #expect(!AnnotationGeometry.isDrawn(collapsed, map: placed, scale: 1))
         #expect(AnnotationGeometry.hiddenCount([collapsed], map: placed, scale: 1) == 1)
+    }
+
+    @Test func anArrowInsideOneBandWithAPokingStrokeIsCountedNotDrawn() {
+        let arrow = Annotation(
+            id: 1, shape: .arrow(tail: CGPoint(x: 50, y: 105), head: CGPoint(x: 300, y: 195)))
+        let placed = map(bands: [100..<200])
+        #expect(!placed.isHidden(AnnotationGeometry.bounds(of: arrow, scale: 1)))
+        #expect(!AnnotationGeometry.isDrawn(arrow, map: placed, scale: 1))
+        #expect(AnnotationGeometry.hiddenCount([arrow], map: placed, scale: 1) == 1)
+        let base = Fixtures.sheet(width: 400, height: 400)
+        let cut = Cut(axis: .horizontal, lower: 100, upper: 200)
+        let with = Renderer.render(
+            base, edits: EditDocument(scale: 1, cuts: [cut], annotations: [arrow]))
+        let without = Renderer.render(base, edits: EditDocument(scale: 1, cuts: [cut]))
+        #expect(PixelBuffer(with.image) == PixelBuffer(without.image))
     }
 }
