@@ -107,6 +107,15 @@ import Testing
         #expect(m.color == .blue && m.width == .thick)  // new annotations still get the style
     }
 
+    @Test func aSeamSelectionIsNotABlurSelection() {
+        let m = model()
+        m.apply { $0.cuts = [Cut(axis: .horizontal, lower: 100, upper: 200)] }
+        m.selection = .seam(.horizontal, 100..<200)
+        #expect(!m.selectedAnnotationIsBlur && !m.selectionTakesStyle)
+        m.setColor(.blue)
+        #expect(m.color == .blue)
+    }
+
     @Test func newAnnotationsStartWithTheInitialStyle() {
         let m = model()
         #expect(m.color == Palette.initial && m.width == StrokeWidth.initial)

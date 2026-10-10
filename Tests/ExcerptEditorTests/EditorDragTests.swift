@@ -329,6 +329,20 @@ import Testing
         #expect(m.selection == .seam(.horizontal, 40..<110))
     }
 
+    @Test func draggingACropClippedEdgeWithinItsOverhangChangesNothing() {
+        let m = model(
+            EditDocument(
+                scale: 1, cuts: [Cut(axis: .horizontal, lower: 20, upper: 120)],
+                crop: PixelRect(x: 60, y: 40, width: 240, height: 300), salt: 7))
+        m.tool = .select
+        let seam = map(m).seams(.horizontal)[0]
+        m.selection = .seam(.horizontal, seam.band)
+        // The before edge is clipped at the crop (40); 20 rows of the cut lie above it.
+        let y = Double(seam.gap.lowerBound)
+        drag(m, CGPoint(x: 30, y: y), CGPoint(x: 30, y: y - 10))
+        #expect(!m.canUndo && !m.isDirty)
+    }
+
     @Test func movingAnAnnotationAcrossASeamMovesItByOriginalPixels() {
         let m = model(
             EditDocument(scale: 1, cuts: [Cut(axis: .horizontal, lower: 100, upper: 200)], salt: 7))

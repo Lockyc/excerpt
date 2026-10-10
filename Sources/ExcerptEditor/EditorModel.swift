@@ -154,6 +154,14 @@ final class EditorModel {
         return !annotation.shape.isBlur
     }
 
+    /// Whether the selection is a blur annotation (not a seam, not nothing).
+    var selectedAnnotationIsBlur: Bool {
+        guard case .annotation(let id) = selection,
+            let annotation = document.annotations.first(where: { $0.id == id })
+        else { return false }
+        return annotation.shape.isBlur
+    }
+
     private func restyleSelection(_ change: (inout Annotation) -> Void) {
         guard case .annotation(let id) = selection, selectionTakesStyle else { return }
         apply { doc in

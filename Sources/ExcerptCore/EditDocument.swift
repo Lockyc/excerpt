@@ -79,7 +79,8 @@ public struct EditDocument: Codable, Equatable, Sendable {
         case salt
     }
 
-    /// Version 1 documents have no `crop`, `annotations` or `salt` keys; the first two read as none and the salt is drawn at random.
+    /// Version 1 documents have no `crop`, `annotations` or `salt` keys; the first two read as
+    /// none and the salt is drawn at random.
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         scale = try container.decode(Double.self, forKey: .scale)

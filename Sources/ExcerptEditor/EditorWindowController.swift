@@ -271,7 +271,7 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         hiddenNote.stringValue = model.hiddenNote(map: canvas.base.map)
         snapHint.stringValue = model.tool == .cut || model.tool == .crop ? Self.snapHint : ""
 
-        let blurSelected = model.selection != nil && !model.selectionTakesStyle
+        let blurSelected = model.selectedAnnotationIsBlur
         colors.isEnabled = !blurSelected
         widths.isEnabled = !blurSelected
         if blurSelected {
@@ -340,6 +340,7 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
 
     /// ⌘S: with nothing unsaved there is nothing to write, so an unedited capture stays one file.
     @objc func saveDocument() {
+        canvas.endText()
         guard model.isDirty else { return }
         _ = writeDocument()
     }
