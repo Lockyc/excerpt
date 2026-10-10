@@ -24,14 +24,16 @@ curl -fsSL https://raw.githubusercontent.com/lockyc/excerpt/main/install.sh | ba
 The installer downloads the latest release, checks that it is signed by Excerpt's developer and
 notarized by Apple, then installs `/Applications/Excerpt.app`, links the `excerpt` command into
 `/usr/local/bin` and starts the app in the menu bar. It asks for your password only when one of
-those folders isn't writable. In Claude Code, `/excerpt:install` runs the same install and
-checks the command works from a new shell.
+those folders isn't writable. From a clone of this repo, Claude Code's `/excerpt:install` runs
+the same install and checks the command works from a new shell.
 
 **Update** by running the installer again; it quits a running Excerpt, replaces it and starts
 the new one.
 
-**Uninstall** by quitting Excerpt and deleting `/Applications/Excerpt.app` and
-`/usr/local/bin/excerpt`.
+**Uninstall** by quitting Excerpt, deleting `/Applications/Excerpt.app`,
+`/usr/local/bin/excerpt` and the cache `~/Library/Caches/excerpt`, running
+`defaults delete com.lockyc.excerpt`, and removing Excerpt from Screen Recording and
+Accessibility in System Settings → Privacy & Security. Your captures stay where they were saved.
 
 ## Use
 
