@@ -23,8 +23,8 @@ public enum SelectionResult {
 }
 
 /// One borderless window per display showing that display's frozen still. Area mode drags a
-/// rectangle (Space held moves it); scrolling-area mode keeps the rectangle until Return or its
-/// start button; window mode highlights the window under the cursor. Esc cancels.
+/// rectangle (Space held moves it); scrolling-area mode keeps the rectangle until Return, Enter
+/// or its start button; window mode highlights the window under the cursor. Esc cancels.
 @MainActor
 public final class SelectionOverlay {
     private var windows: [OverlayWindow] = []
@@ -41,7 +41,9 @@ public final class SelectionOverlay {
                 let window = OverlayWindow(
                     still: still, mode: mode,
                     finish: { [weak self] result in self?.finish(result) },
-                    beginDrag: { [weak self] origin in self?.clearSelections(except: origin) })
+                    beginDrag: { [weak self] origin in
+                        self?.clearSelections(except: origin) ?? false
+                    })
                 windows.append(window)
                 window.orderFrontRegardless()
             }
@@ -66,10 +68,13 @@ public final class SelectionOverlay {
     }
 
     /// One live selection: a drag starting on one display clears the others' settled rectangles.
-    private func clearSelections(except origin: OverlayView) {
+    /// True when one of them was settled, so the press counts as clearing it.
+    private func clearSelections(except origin: OverlayView) -> Bool {
+        var cleared = false
         for window in windows where window.overlayView !== origin {
-            window.overlayView.clearSelection()
+            cleared = window.overlayView.clearSettledSelection() || cleared
         }
+        return cleared
     }
 
     private func finish(_ result: SelectionResult) {
@@ -89,7 +94,7 @@ final class OverlayWindow: NSWindow {
 
     init(
         still: DisplayStill, mode: SelectionMode, finish: @escaping (SelectionResult) -> Void,
-        beginDrag: @escaping (OverlayView) -> Void
+        beginDrag: @escaping (OverlayView) -> Bool
     ) {
         overlayView = OverlayView(still: still, mode: mode, finish: finish, beginDrag: beginDrag)
         super.init(
@@ -113,7 +118,7 @@ final class OverlayView: NSView {
     private let still: DisplayStill
     private let mode: SelectionMode
     private let finish: (SelectionResult) -> Void
-    private let beginDrag: (OverlayView) -> Void
+    private let beginDrag: (OverlayView) -> Bool
     private let image: NSImage
     private var anchor: CGPoint?
     private var current: CGPoint?
@@ -130,7 +135,7 @@ final class OverlayView: NSView {
 
     init(
         still: DisplayStill, mode: SelectionMode, finish: @escaping (SelectionResult) -> Void,
-        beginDrag: @escaping (OverlayView) -> Void
+        beginDrag: @escaping (OverlayView) -> Bool
     ) {
         self.still = still
         self.mode = mode
@@ -189,12 +194,19 @@ final class OverlayView: NSView {
             confirm()
             return
         }
-        pressClearedSelection = settled
+        let clearedOther = beginDrag(self)
+        pressClearedSelection = settled || clearedOther
         settled = false
-        beginDrag(self)
         anchor = point
         current = point
         needsDisplay = true
+    }
+
+    /// Clears a settled selection; reports whether there was one.
+    func clearSettledSelection() -> Bool {
+        guard settled else { return false }
+        clearSelection()
+        return true
     }
 
     /// Drops the selection and any settled state; the overlay stays up.
@@ -244,11 +256,23 @@ final class OverlayView: NSView {
         finish(.area(still, pixelRect: pixels))
     }
 
+    /// The screen's visible frame (clear of menu bar and Dock) in this view's top-left points:
+    /// the space the HUD is laid out in, so the button sits where the HUD will.
+    private var visibleBounds: CGRect {
+        guard let visible = window?.screen?.visibleFrame else { return bounds }
+        let origin = still.frame.origin
+        let local = CGRect(
+            x: visible.minX - origin.x, y: bounds.height - (visible.maxY - origin.y),
+            width: visible.width, height: visible.height)
+        let clipped = local.intersection(bounds)
+        return clipped.isNull || clipped.isEmpty ? bounds : clipped
+    }
+
     /// The start button's frame while a scrolling-area selection waits; nil otherwise.
     private var startButton: CGRect? {
         guard case .scrollingArea = mode, settled, let selection else { return nil }
         return SelectionMath.startButtonFrame(
-            for: selection, size: Self.startButtonSize, in: bounds)
+            for: selection, size: Self.startButtonSize, in: visibleBounds)
     }
 
     override func keyDown(with event: NSEvent) {
@@ -295,7 +319,7 @@ final class OverlayView: NSView {
             let border = NSBezierPath(rect: highlight.insetBy(dx: -0.5, dy: -0.5))
             border.lineWidth = 1
             border.stroke()
-            if mode.isArea { drawSizeLabel(for: highlight) }
+            if mode.isArea { drawSizeLabel(for: highlight, avoiding: startButton) }
         }
         if let startButton { drawStartButton(in: startButton) }
         if mode.isArea, !settled, let cursor {
@@ -330,16 +354,22 @@ final class OverlayView: NSView {
         path.stroke()
     }
 
-    private func drawSizeLabel(for rect: CGRect) {
+    private func drawSizeLabel(for rect: CGRect, avoiding button: CGRect?) {
         let text = "\(Int(rect.width)) × \(Int(rect.height))" as NSString
         let attributes: [NSAttributedString.Key: Any] = [
             .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium),
             .foregroundColor: NSColor.white,
         ]
         let size = text.size(withAttributes: attributes)
-        let origin = CGPoint(
+        var origin = CGPoint(
             x: rect.maxX - size.width - 8, y: min(rect.maxY + 6, bounds.height - size.height - 6))
-        let pill = CGRect(origin: origin, size: size).insetBy(dx: -6, dy: -3)
+        var pill = CGRect(origin: origin, size: size).insetBy(dx: -6, dy: -3)
+        if let button, pill.intersects(button) {
+            // Above the selection instead, else inside its top edge.
+            origin.y = rect.minY - 6 - size.height
+            if origin.y < 3 { origin.y = rect.minY + 6 }
+            pill = CGRect(origin: origin, size: size).insetBy(dx: -6, dy: -3)
+        }
         NSColor.black.withAlphaComponent(0.7).setFill()
         NSBezierPath(roundedRect: pill, xRadius: 4, yRadius: 4).fill()
         text.draw(at: origin, withAttributes: attributes)
