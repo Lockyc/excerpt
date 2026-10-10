@@ -91,7 +91,8 @@ never failed silently.
 - **Window:** hover-highlight, click; placed on a plain backdrop with padding (both settings).
 - **Fullscreen:** the display under the cursor.
 - **Text:** select an area on the frozen screen; its text is copied in reading order and no file
-  is saved. A note gives the line count, or says no text was found and leaves the clipboard alone.
+  is saved. A note gives the line count, or says no text was found and leaves the clipboard
+  alone.
 - **All-in-one selector:** a menu of the five modes at the pointer, each showing its hotkey,
   shown once the stills are taken; the mode picked runs on them.
 - Stills exclude desktop icons and excerpt's own windows through the `SCContentFilter`.
