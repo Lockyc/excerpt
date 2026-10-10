@@ -27,11 +27,13 @@ final class EditorModel {
     private(set) var width: StrokeWidth = .initial
     var selection: Selection?
     /// View points per rendered pixel, so hit slop and minimum drags stay the same size on screen.
-    var viewScale: Double = 1
+    var viewScale: Double = 1 {
+        didSet { precondition(viewScale > 0, "viewScale must be positive") }
+    }
     /// The overlay for a drag in progress.
-    var pending: Pending?
+    private(set) var pending: Pending?
     /// The drag in progress; undo and redo wait for it to end.
-    var drag: Drag?
+    private(set) var drag: Drag?
     /// The original's pixels, for snapping; read on first use.
     private(set) lazy var pixels = PixelBuffer(original)
 
@@ -64,14 +66,19 @@ final class EditorModel {
         return base
     }
 
-    /// One undoable step. A change that leaves the document as it was records nothing.
+    /// One undoable step. A change that leaves the document as it was records nothing. A drag in
+    /// flight is cancelled first, so its release can't undo or double-record this change.
     func apply(_ change: (inout EditDocument) -> Void) {
+        if drag != nil { cancelDrag() }
         var next = document
         change(&next)
         guard next != document else { return }
         history.record(document)
         document = next
     }
+
+    func setDrag(_ drag: Drag?) { self.drag = drag }
+    func setPending(_ pending: Pending?) { self.pending = pending }
 
     /// Replaces the document without recording a step; a drag's live preview goes through here
     /// and is recorded once, on release, by `commit(from:)`.

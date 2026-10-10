@@ -14,6 +14,10 @@ import Testing
         Renderer.renderBase(m.original, edits: m.baseDocument).map
     }
 
+    func pointer(_ m: EditorModel, _ x: Double, _ y: Double) -> Pointer {
+        Pointer(rendered: CGPoint(x: x, y: y), map: map(m))
+    }
+
     /// Drags in rendered pixels through the model's current map.
     func drag(
         _ m: EditorModel, _ from: CGPoint, _ to: CGPoint, snap: Bool = false
@@ -145,23 +149,23 @@ import Testing
     @Test func typingAddsEditsAndRemovesText() {
         let m = model()
         m.tool = .text
-        let target = m.textTarget(at: CGPoint(x: 40, y: 60), map: map(m))
+        let target = m.textTarget(at: pointer(m, 40, 60), map: map(m))
         #expect(target.id == nil)
         m.commitText(target, string: "Total")
         #expect(
             m.document.annotations.map(\.shape) == [
                 .text(origin: CGPoint(x: 40, y: 60), string: "Total")
             ])
-        let again = m.textTarget(at: CGPoint(x: 45, y: 70), map: map(m))
+        let again = m.textTarget(at: pointer(m, 45, 70), map: map(m))
         #expect(again.id == 1 && again.string == "Total")
         m.commitText(again, string: "Grand total")
         #expect(
             m.document.annotations.map(\.shape) == [
                 .text(origin: CGPoint(x: 40, y: 60), string: "Grand total")
             ])
-        m.commitText(m.textTarget(at: CGPoint(x: 45, y: 70), map: map(m)), string: "  ")
+        m.commitText(m.textTarget(at: pointer(m, 45, 70), map: map(m)), string: "  ")
         #expect(m.document.annotations.isEmpty)
-        m.commitText(m.textTarget(at: CGPoint(x: 200, y: 200), map: map(m)), string: "")
+        m.commitText(m.textTarget(at: pointer(m, 200, 200), map: map(m)), string: "")
         #expect(m.document.annotations.isEmpty)
     }
 
@@ -255,5 +259,89 @@ import Testing
         // The gap is rendered 100..<118; the after handle dragged up 40 reveals 40 rows.
         drag(m, CGPoint(x: 30, y: 118), CGPoint(x: 30, y: 78))
         #expect(m.selection == .seam(.horizontal, 100..<160))
+    }
+
+    @Test func deletingMidSeamDragCancelsTheDrag() {
+        let cut = Cut(axis: .horizontal, lower: 100, upper: 200)
+        let m = model(EditDocument(scale: 1, cuts: [cut], salt: 7))
+        m.tool = .select
+        m.selection = .seam(.horizontal, 100..<200)
+        let map = map(m)
+        m.mouseDown(Pointer(rendered: CGPoint(x: 30, y: 118), map: map), map: map)
+        m.mouseDragged(Pointer(rendered: CGPoint(x: 30, y: 98), map: map), map: map, snap: false)
+        m.deleteSelection()
+        m.mouseUp(Pointer(rendered: CGPoint(x: 30, y: 78), map: map), map: map, snap: false)
+        #expect(m.document.cuts.isEmpty && m.drag == nil && m.pending == nil)
+        m.undo()
+        #expect(m.document.cuts == [cut] && !m.canUndo)
+    }
+
+    @Test func deletingMidMoveDragLeavesNoPhantomStep() {
+        let m = model()
+        m.apply { $0.annotations = [note(1, CGRect(x: 20, y: 20, width: 60, height: 40))] }
+        m.tool = .select
+        let map = map(m)
+        m.mouseDown(Pointer(rendered: CGPoint(x: 50, y: 40), map: map), map: map)
+        m.mouseDragged(Pointer(rendered: CGPoint(x: 80, y: 60), map: map), map: map, snap: false)
+        m.deleteSelection()
+        m.mouseUp(Pointer(rendered: CGPoint(x: 90, y: 70), map: map), map: map, snap: false)
+        #expect(m.document.annotations.isEmpty)
+        m.undo()
+        #expect(m.document.annotations.count == 1)
+        #expect(
+            m.document.annotations[0].shape
+                == .rectangle(rect: CGRect(x: 20, y: 20, width: 60, height: 40)))
+        m.undo()  // only the setup step remains below the delete
+        #expect(m.document.annotations.isEmpty && !m.canUndo)
+    }
+
+    @Test func toolsWorkOnAnAlreadyCroppedDocument() {
+        let m = model(
+            EditDocument(scale: 1, crop: PixelRect(x: 60, y: 40, width: 240, height: 300), salt: 7))
+        m.tool = .cut
+        // Rendered (30, 47..154) is original (90, 87..194).
+        drag(m, CGPoint(x: 30, y: 47), CGPoint(x: 30, y: 154))
+        #expect(m.document.cuts == [Cut(axis: .horizontal, lower: 87, upper: 194)])
+        m.tool = .select
+        m.apply { $0.annotations = [note(1, CGRect(x: 100, y: 50, width: 40, height: 20))] }
+        // Rendered (60, 20) is original (120, 60), inside the rectangle.
+        drag(m, CGPoint(x: 60, y: 20), CGPoint(x: 70, y: 25))
+        #expect(m.selection == .annotation(1))
+        #expect(
+            m.document.annotations[0].shape
+                == .rectangle(rect: CGRect(x: 110, y: 55, width: 40, height: 20)))
+    }
+
+    @Test func movingAnAnnotationAcrossASeamMovesItByOriginalPixels() {
+        let m = model(
+            EditDocument(scale: 1, cuts: [Cut(axis: .horizontal, lower: 100, upper: 200)], salt: 7))
+        m.apply { $0.annotations = [note(1, CGRect(x: 20, y: 20, width: 60, height: 40))] }
+        m.tool = .select
+        let map = map(m)
+        let delta = map.original(CGPoint(x: 50, y: 160)).y - map.original(CGPoint(x: 50, y: 40)).y
+        #expect(delta > 120)  // the seam's 100 removed rows are crossed, not just 120 rendered ones
+        drag(m, CGPoint(x: 50, y: 40), CGPoint(x: 50, y: 160))
+        #expect(
+            m.document.annotations[0].shape
+                == .rectangle(rect: CGRect(x: 20, y: 20 + Double(delta), width: 60, height: 40)))
+        m.undo()
+        #expect(
+            m.document.annotations[0].shape
+                == .rectangle(rect: CGRect(x: 20, y: 20, width: 60, height: 40)))
+    }
+
+    @Test func aCropDragWhileCroppedStartsFromTheWholeCapture() {
+        let m = model(
+            EditDocument(scale: 1, crop: PixelRect(x: 60, y: 40, width: 120, height: 100), salt: 7))
+        m.tool = .crop
+        // Under the crop tool the canvas shows the whole capture, so rendered == original.
+        let whole = Renderer.renderBase(m.original, edits: m.displayDocument).map
+        m.mouseDown(Pointer(rendered: CGPoint(x: 0, y: 0), map: whole), map: whole)
+        m.mouseDragged(
+            Pointer(rendered: CGPoint(x: 180, y: 200), map: whole), map: whole, snap: false)
+        m.mouseUp(Pointer(rendered: CGPoint(x: 180, y: 200), map: whole), map: whole, snap: false)
+        #expect(m.document.crop == PixelRect(x: 0, y: 0, width: 180, height: 200))
+        m.undo()
+        #expect(m.document.crop == PixelRect(x: 60, y: 40, width: 120, height: 100))
     }
 }

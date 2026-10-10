@@ -56,8 +56,8 @@ extension EditorModel {
                 let seam = map.seams(axis).first(where: { $0.band == band }),
                 let edge = edge(of: seam, near: p.rendered)
             {
-                drag = .edge(seam, edge, start: p.rendered)
-                pending = .edge(seam, edge, edge == .before ? band.lowerBound : band.upperBound)
+                setDrag(.edge(seam, edge, start: p.rendered))
+                setPending(.edge(seam, edge, edge == .before ? band.lowerBound : band.upperBound))
                 return
             }
             if let seam = HitTest.seam(at: p.rendered, map: map, slop: slop) {
@@ -70,11 +70,11 @@ extension EditorModel {
                     map: map)
             {
                 selection = .annotation(id)
-                drag = .move(id: id, last: p.original, before: document)
+                setDrag(.move(id: id, last: p.original, before: document))
                 return
             }
             selection = nil
-            if tool == .cut { drag = .region(start: p.original) }
+            if tool == .cut { setDrag(.region(start: p.original)) }
         case .arrow, .rectangle, .highlight:
             let before = document
             let id = document.nextAnnotationID
@@ -85,10 +85,10 @@ extension EditorModel {
                     width: width))
             preview(next)
             selection = nil
-            drag = .shape(id: id, start: p.original, before: before)
+            setDrag(.shape(id: id, start: p.original, before: before))
         case .blur, .crop:
             selection = nil
-            drag = .region(start: p.original)
+            setDrag(.region(start: p.original))
         case .text:
             break
         }
@@ -103,7 +103,7 @@ extension EditorModel {
                 preview(next)
             }
         case .region(let start):
-            pending = regionPending(from: start, to: p.original, snap: snap)
+            setPending(regionPending(from: start, to: p.original, snap: snap))
         case .move(let id, let last, let before):
             var next = document
             if let i = next.annotations.firstIndex(where: { $0.id == id }) {
@@ -111,11 +111,11 @@ extension EditorModel {
                     dx: Double(p.original.x - last.x), dy: Double(p.original.y - last.y))
                 preview(next)
             }
-            drag = .move(id: id, last: p.original, before: before)
+            setDrag(.move(id: id, last: p.original, before: before))
         case .edge(let seam, let edge, let start):
             let delta = seam.axis == .horizontal ? p.rendered.y - start.y : p.rendered.x - start.x
             let from = edge == .before ? seam.band.lowerBound : seam.band.upperBound
-            pending = .edge(seam, edge, from + Int(Double(delta).rounded()))
+            setPending(.edge(seam, edge, from + Int(Double(delta).rounded())))
         case nil:
             break
         }
@@ -125,8 +125,8 @@ extension EditorModel {
         mouseDragged(p, map: map, snap: snap)
         let finished = drag
         let shown = pending
-        drag = nil
-        pending = nil
+        setDrag(nil)
+        setPending(nil)
         switch finished {
         case .shape(let id, _, let before):
             guard let annotation = document.annotations.first(where: { $0.id == id }),
@@ -167,8 +167,10 @@ extension EditorModel {
             let cuts = Gestures.adjusting(
                 document.cuts, axis: seam.axis, band: seam.band, edge: edge, to: position,
                 extent: extent, snapping: snap ? pixels : nil, radius: snapRadius)
+            let kept = Gestures.removing(document.cuts, axis: seam.axis, band: seam.band)
             apply { $0.cuts = cuts }
-            if let moved = cuts.last,
+            // The cut `adjusting` added is whichever one the surviving cuts don't have.
+            if let moved = cuts.first(where: { !kept.contains($0) }),
                 let band = CutSet.normalized(cuts, axis: seam.axis, extent: extent)
                     .first(where: { $0.lowerBound <= moved.lower && moved.upper <= $0.upperBound })
             {
@@ -185,12 +187,13 @@ extension EditorModel {
         case .shape(_, _, let before), .move(_, _, let before): preview(before)
         default: break
         }
-        drag = nil
-        pending = nil
+        setDrag(nil)
+        setPending(nil)
     }
 
-    /// What typing at `p` (original pixels) edits: the text annotation under it, or new text.
-    func textTarget(at p: CGPoint, map: RenderMap) -> TextTarget {
+    /// What typing at `pointer` edits: the text annotation under it, or new text.
+    func textTarget(at pointer: Pointer, map: RenderMap) -> TextTarget {
+        let p = pointer.original
         if let id = HitTest.annotation(
             at: p, in: document.annotations, scale: document.scale, slop: 0, map: map),
             let annotation = document.annotations.first(where: { $0.id == id }),
