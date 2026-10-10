@@ -60,11 +60,11 @@ import Testing
 @Suite struct HotKeyNeedsModifierTests {
     @Test func aBareOrShiftOnlyLetterNeedsAModifier() {
         let a = UInt32(kVK_ANSI_A)
-        #expect(!HotKeyBinding(keyCode: a, modifiers: 0).needsModifier)
-        #expect(!HotKeyBinding(keyCode: a, modifiers: UInt32(shiftKey)).needsModifier)
+        #expect(!HotKeyBinding(keyCode: a, modifiers: 0).hasRequiredModifier)
+        #expect(!HotKeyBinding(keyCode: a, modifiers: UInt32(shiftKey)).hasRequiredModifier)
         for m in [cmdKey, controlKey, optionKey] {
-            #expect(HotKeyBinding(keyCode: a, modifiers: UInt32(m)).needsModifier)
+            #expect(HotKeyBinding(keyCode: a, modifiers: UInt32(m)).hasRequiredModifier)
         }
-        #expect(HotKeyBinding(keyCode: UInt32(kVK_F5), modifiers: 0).needsModifier)
+        #expect(HotKeyBinding(keyCode: UInt32(kVK_F5), modifiers: 0).hasRequiredModifier)
     }
 }

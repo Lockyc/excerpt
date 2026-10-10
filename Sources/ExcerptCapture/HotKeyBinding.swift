@@ -114,9 +114,9 @@ public struct HotKeyBinding: Hashable, Sendable {
         self.init(keyCode: UInt32(keyCode), modifiers: modifiers)
     }
 
-    /// Whether the binding is safe to hold system-wide: an F-key may stand alone, any other key
-    /// needs ⌘, ⌃ or ⌥ (a bare or Shift-only letter would swallow that key everywhere).
-    public var needsModifier: Bool {
+    /// True when the binding is allowed: an F-key alone, or any key with ⌘, ⌃ or ⌥. False for a
+    /// bare or Shift-only letter, which would swallow that key system-wide.
+    public var hasRequiredModifier: Bool {
         isFunctionKey || Self.modifierTable.contains { $0.guards && modifiers & $0.carbon != 0 }
     }
 
@@ -124,14 +124,14 @@ public struct HotKeyBinding: Hashable, Sendable {
     public var stored: String { "\(keyCode):\(modifiers)" }
 
     /// nil unless `stored` is `keyCode:modifiers` naming a known key, only hotkey modifiers, and
-    /// a modifier where one is needed: settings are a file anyone can edit.
+    /// a modifier where one is needed, in canonical decimal (no sign, no leading zeros): settings are a file anyone can edit.
     public init?(stored: String) {
         let parts = stored.split(separator: ":", omittingEmptySubsequences: false)
         guard parts.count == 2, let code = UInt32(parts[0]), let mask = UInt32(parts[1]),
             mask & ~Self.modifierMask == 0, Self.keys[code] != nil
         else { return nil }
         let binding = HotKeyBinding(keyCode: code, modifiers: mask)
-        guard binding.needsModifier else { return nil }
+        guard binding.hasRequiredModifier, binding.stored == stored else { return nil }
         self = binding
     }
 }
