@@ -29,11 +29,15 @@ final class StatusMenu: NSObject {
                 entry.keyEquivalent = binding.menuKey
                 entry.keyEquivalentModifierMask = binding.modifierFlags
                 if let status = hotKeyStatus[action], status != .registered {
-                    let note = NSMenuItem(
-                        title: status == .inUse
-                            ? "\(binding.display) is in use by another app"
-                            : "\(binding.display) could not be registered",
-                        action: nil, keyEquivalent: "")
+                    let title: String
+                    switch status {
+                    case .inUse: title = "\(binding.display) is in use by another app"
+                    case .system:
+                        title =
+                            "\(binding.display) is a macOS shortcut: turn it off in System Settings → Keyboard → Keyboard Shortcuts → Screenshots"
+                    default: title = "\(binding.display) could not be registered"
+                    }
+                    let note = NSMenuItem(title: title, action: nil, keyEquivalent: "")
                     note.isEnabled = false
                     note.indentationLevel = 1
                     menu.addItem(note)
