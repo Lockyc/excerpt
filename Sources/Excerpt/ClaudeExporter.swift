@@ -9,7 +9,7 @@ import ExcerptExport
 ///
 /// The cache is pruned at launch, daily, and by every export. Expired entries that stay stuck,
 /// or a cache folder that can't be read, are named in an alert, once per launch for the same
-/// set, so a bundle that outlives its seven days is never kept quietly.
+/// set, so a bundle older than `ClaudeCache.maximumAge` is never kept quietly.
 @MainActor
 final class ClaudeExporter {
     private struct Job {

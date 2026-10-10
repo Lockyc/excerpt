@@ -47,8 +47,8 @@ Captures land in the **library** — `~/Documents/Screenshots/` by default (a se
 - Sidecar files and a separate edits database are both wrong here: library files get moved and
   sorted by other tools, which would orphan either one. The edits travel inside the master.
 - "For Claude" output is scratch, not library content: `~/Library/Caches/excerpt/claude/<capture
-  name>/` (spaces become `-`, so `@` references hold), replaced on each export and pruned after
-  7 days: on every export, at launch and daily.
+  name>/` (spaces become `-`, so `@` references hold), replaced on each export and pruned once
+  `ClaudeCache.maximumAge` (7 days) old: on every export, at launch and daily.
 
 ## The cut tool
 
