@@ -84,9 +84,10 @@ swift run Excerpt read shot.png   # the excerpt command, without building the ap
 ```
 
 Signing uses a `Developer ID Application` identity from your keychain; set
-`EXCERPT_SIGN_IDENTITY` when more than one is present. `just deploy` doesn't link the `excerpt`
-command; link `/Applications/Excerpt.app/Contents/MacOS/Excerpt` as `excerpt` on your `PATH`
-to get it.
+`EXCERPT_SIGN_IDENTITY` when more than one is present. Without one,
+`EXCERPT_SIGN_IDENTITY=- just run` signs ad hoc, and macOS then asks for Screen Recording again
+after each rebuild. `just deploy` doesn't link the `excerpt` command; link
+`/Applications/Excerpt.app/Contents/MacOS/Excerpt` as `excerpt` on your `PATH` to get it.
 
 What's planned is in [docs/roadmap.md](docs/roadmap.md).
 
