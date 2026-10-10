@@ -31,6 +31,19 @@ public enum HotKeyVerdict: Equatable, Sendable {
 }
 
 public enum HotKeyRules {
+    /// The shortcuts every app answers, by title (`Quit in every app`), which no action may
+    /// take: a global hotkey would get the press before any app saw it.
+    public static let appShortcuts: [String: HotKeyBinding] = [
+        "Quit in every app": HotKeyBinding(keyCode: UInt32(kVK_ANSI_Q), modifiers: UInt32(cmdKey)),
+        "Hide in every app": HotKeyBinding(keyCode: UInt32(kVK_ANSI_H), modifiers: UInt32(cmdKey)),
+        "Hide Others in every app": HotKeyBinding(
+            keyCode: UInt32(kVK_ANSI_H), modifiers: UInt32(cmdKey | optionKey)),
+        "Minimize in every app": HotKeyBinding(
+            keyCode: UInt32(kVK_ANSI_M), modifiers: UInt32(cmdKey)),
+        "Settings in every app": HotKeyBinding(
+            keyCode: UInt32(kVK_ANSI_Comma), modifiers: UInt32(cmdKey)),
+    ]
+
     /// Judges `candidate` for an action. `others` are the other actions' current bindings by
     /// title; `system` is macOS's symbolic hotkey table.
     public static func judge(

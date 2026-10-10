@@ -146,7 +146,7 @@ final class HotKeyModel: ObservableObject {
         )
         let verdict = HotKeyRules.judge(
             candidate, for: action.title, bindings: bindings,
-            reserved: HotKeyAction.editorShortcuts, system: HotKeyCenter.symbolicHotKeys())
+            reserved: HotKeyAction.reservedShortcuts, system: HotKeyCenter.symbolicHotKeys())
         guard verdict.keeps else {
             refusals[action] = candidate.flatMap { verdict.message(for: $0) }
             return false

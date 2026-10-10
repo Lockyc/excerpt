@@ -79,4 +79,24 @@ import Testing
         #expect(verdict == .taken(by: "Capture Window"))
         #expect(!verdict.keeps)
     }
+
+    /// The app-wide shortcuts every app answers are reserved, named as the editor's are.
+    @Test func everyAppsOwnShortcutsAreReserved() {
+        func binding(_ key: Int, _ modifiers: Int) -> HotKeyBinding {
+            HotKeyBinding(keyCode: UInt32(key), modifiers: UInt32(modifiers))
+        }
+        #expect(
+            HotKeyRules.appShortcuts == [
+                "Quit in every app": binding(kVK_ANSI_Q, cmdKey),
+                "Hide in every app": binding(kVK_ANSI_H, cmdKey),
+                "Hide Others in every app": binding(kVK_ANSI_H, cmdKey | optionKey),
+                "Minimize in every app": binding(kVK_ANSI_M, cmdKey),
+                "Settings in every app": binding(kVK_ANSI_Comma, cmdKey),
+            ])
+        let quit = binding(kVK_ANSI_Q, cmdKey)
+        let verdict = HotKeyRules.judge(
+            quit, for: "Capture Fullscreen", bindings: [:], reserved: HotKeyRules.appShortcuts,
+            system: [])
+        #expect(verdict.message(for: quit) == "⌘Q is already Quit in every app")
+    }
 }

@@ -46,13 +46,15 @@ enum HotKeyAction: UInt32, CaseIterable {
 }
 
 extension HotKeyAction {
-    /// The editor's own shortcuts by title (`For Claude in the editor`), which no action may
-    /// take: a global hotkey gets the press before the editor sees it. Rebinding judges a
-    /// candidate against these alongside the other actions' bindings.
-    static let editorShortcuts: [String: HotKeyBinding] = Dictionary(
+    /// The shortcuts no action may take, by title: the editor's own (`For Claude in the
+    /// editor`), since a global hotkey gets the press before the editor sees it, and those every
+    /// app answers. Rebinding judges a candidate against these alongside the other actions'
+    /// bindings.
+    static let reservedShortcuts: [String: HotKeyBinding] = Dictionary(
         EditorShortcut.allCases.compactMap { shortcut in
             HotKeyBinding(character: shortcut.key, flags: shortcut.modifiers).map {
                 ("\(shortcut.name) in the editor", $0)
             }
-        }, uniquingKeysWith: { first, _ in first })
+        }, uniquingKeysWith: { first, _ in first }
+    ).merging(HotKeyRules.appShortcuts) { editor, _ in editor }
 }
