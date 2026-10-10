@@ -21,4 +21,12 @@ import Testing
             scale: 2, imageSize: CGSize(width: 100, height: 100))
         #expect(clamped == CGRect(x: 80, y: 80, width: 20, height: 20))
     }
+
+    @Test func appKitAndLocalPointsAreInverses() {
+        let display = CGRect(x: 1440, y: -200, width: 1000, height: 800)
+        let local = CGRect(x: 30, y: 40, width: 100, height: 50)
+        let appKit = DisplayGeometry.appKitRect(forLocalPoints: local, displayFrame: display)
+        #expect(appKit == CGRect(x: 1470, y: 510, width: 100, height: 50))
+        #expect(DisplayGeometry.localPoints(forAppKitRect: appKit, displayFrame: display) == local)
+    }
 }

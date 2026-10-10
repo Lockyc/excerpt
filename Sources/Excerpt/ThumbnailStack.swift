@@ -1,4 +1,5 @@
 import AppKit
+import ExcerptCapture
 
 /// Large floating previews in the bottom-left corner, newest at the bottom. Actions are always
 /// visible. Each closes after the configured delay (paused while the pointer is over it) or as
@@ -178,10 +179,4 @@ final class DragImageView: NSImageView, NSDraggingSource {
     ) {
         if operation != [] { onDragged() }
     }
-}
-
-/// A button that acts on the first click even while another app is frontmost.
-@MainActor
-final class FirstMouseButton: NSButton {
-    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }

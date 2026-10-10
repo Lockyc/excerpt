@@ -38,6 +38,13 @@ public enum DisplayGeometry {
             height: rect.height)
     }
 
+    /// AppKit global points → display-local points, the inverse of `appKitRect(forLocalPoints:)`.
+    public static func localPoints(forAppKitRect rect: CGRect, displayFrame: CGRect) -> CGRect {
+        CGRect(
+            x: rect.minX - displayFrame.minX, y: displayFrame.maxY - rect.maxY, width: rect.width,
+            height: rect.height)
+    }
+
     /// A display-local point → Quartz global points, where CGEvents are posted.
     public static func quartzPoint(
         forLocalPoint point: CGPoint, displayFrame: CGRect, primaryHeight: CGFloat

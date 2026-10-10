@@ -260,10 +260,7 @@ final class OverlayView: NSView {
     /// the space the HUD is laid out in, so the button sits where the HUD will.
     private var visibleBounds: CGRect {
         guard let visible = window?.screen?.visibleFrame else { return bounds }
-        let origin = still.frame.origin
-        let local = CGRect(
-            x: visible.minX - origin.x, y: bounds.height - (visible.maxY - origin.y),
-            width: visible.width, height: visible.height)
+        let local = DisplayGeometry.localPoints(forAppKitRect: visible, displayFrame: still.frame)
         let clipped = local.intersection(bounds)
         return clipped.isNull || clipped.isEmpty ? bounds : clipped
     }
