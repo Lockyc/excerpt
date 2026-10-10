@@ -69,10 +69,8 @@ public enum ReadCommand {
             ? URL(fileURLWithPath: path) : directory.appendingPathComponent(path))
             .standardizedFileURL
         do {
-            let input = try ImageInput.load(url)
             let bundle = try ClaudeBundle.write(
-                original: input.original, edits: input.edits, name: input.name, cache: cache,
-                recognizer: recognizer, now: now)
+                contentsOf: url, cache: cache, recognizer: recognizer, now: now)
             var output = Output(stdout: bundle.text)
             output.stderr = pruneNotes(bundle.pruneFailures)
             output.stderr += bundle.tiles.map { $0.path + "\n" }.joined()

@@ -1,6 +1,7 @@
 import AppKit
 import ExcerptCore
 import ExcerptEditor
+import ExcerptExport
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -105,7 +106,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// For Claude from a thumbnail: the capture as saved, its master's edits included.
     func forClaude(_ url: URL) {
-        claude.export(primary: url, store: preferences.store)
+        claude.export(primary: url)
     }
 
     /// Brings every For Claude button of the capture called `name` in line with its export.
@@ -138,4 +139,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         preferences: preferences, hotKeyStatus: { [weak self] in self?.hotKeyStatus() ?? [:] })
 
     func openSettings() { settings.show() }
+}
+
+extension LibraryStore {
+    /// A capture to edit: `load`, so a primary opens its master, then refused when its edits
+    /// render it past the size limits, before anything is drawn.
+    func loadForRendering(_ url: URL) throws -> LoadedCapture {
+        let capture = try load(url)
+        try ImageInput.checkRender(
+            url.path, width: capture.original.width, height: capture.original.height,
+            edits: capture.edits)
+        return capture
+    }
 }

@@ -160,3 +160,52 @@ import Testing
         #expect(try manager.contentsOfDirectory(atPath: cache.root.path) == ["x"])
     }
 }
+
+/// The thumbnail's For Claude and `excerpt read` take a file the same way.
+@Suite struct ClaudeBundleFileTests {
+    /// A saved capture: `alpha` kept, `secret` cut out. Returns the primary.
+    static func savedCapture() throws -> URL {
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("excerpt-file-\(UUID().uuidString)")
+        let original = ColourWords.page(
+            width: 200, height: 300, words: ["alpha": (20, 20), "secret": (20, 200)])
+        let store = LibraryStore(folder: folder)
+        let primary = try store.saveCapture(original, scale: 1, at: Date())
+        try store.saveEdits(
+            primary: primary, original: original,
+            edits: EditDocument(
+                scale: 1, cuts: [Cut(axis: .horizontal, lower: 180, upper: 240)], salt: 7))
+        return primary
+    }
+
+    @Test func aSavedPrimaryExportsWithItsCutMarked() throws {
+        let primary = try Self.savedCapture()
+        let bundle = try ClaudeBundle.write(
+            contentsOf: primary, cache: ClaudeBundleTests.cache(), recognizer: ColourWords())
+        #expect(bundle.text == "alpha\n[⋯ 60 px hidden]\n")
+        #expect(
+            bundle.folder.lastPathComponent
+                == ClaudeCache.folderName(
+                    for: primary.deletingPathExtension().lastPathComponent))
+    }
+
+    /// Review focus (privacy): a primary redacted after saving exports as itself; the master's
+    /// original, which still holds what the redaction covers, never reaches Claude.
+    @Test func aPrimaryAlteredAfterSavingExportsFlat() throws {
+        let primary = try Self.savedCapture()
+        var pixels = PixelBuffer(try PNGCodec.decode(Data(contentsOf: primary)).image)
+        for y in 15..<35 {
+            for x in 15..<85 {
+                let i = (y * pixels.width + x) * 4
+                pixels.bytes[i..<(i + 4)] = [0, 0, 0, 255]
+            }
+        }
+        try PNGCodec.encode(pixels.makeImage(), scale: 1).write(to: primary)
+        let bundle = try ClaudeBundle.write(
+            contentsOf: primary, cache: ClaudeBundleTests.cache(), recognizer: ColourWords())
+        #expect(!bundle.text.contains("alpha"))
+        #expect(!bundle.text.contains("secret"))
+        let tile = try PNGCodec.decode(Data(contentsOf: bundle.tiles[0])).image
+        #expect(PixelBuffer(tile) == pixels)
+    }
+}

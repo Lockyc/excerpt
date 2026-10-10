@@ -165,7 +165,9 @@ change re-renders the cache. Undo is a stack of document values.
   - `text.md` holds Vision OCR in reading order, each cut written in as `[⋯ 1,240 px hidden]`;
   - the clipboard receives `@<path>` references to every tile and `text.md`;
   - both come from the render, never the original, so nothing a cut or blur removed reaches Claude;
-  - the editor exports its current render, unsaved edits included; the thumbnail exports the saved capture.
+  - the editor exports its current render, unsaved edits included; the thumbnail exports the
+    primary file as `excerpt read` takes it, so a primary changed since it was saved exports as
+    its own pixels.
 - **`excerpt read <image>`** — the same bundle for any image file, not only a capture, so a
   Claude session handed a large screenshot can read it. The app binary runs it headless when
   given arguments, before any `NSApplication` starts. It prints `text.md` to stdout and the tile

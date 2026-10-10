@@ -99,6 +99,20 @@ public struct ClaudeBundle: Sendable {
             pruneFailures: pruned.failed)
     }
 
+    /// The bundle for the image file at `url`, taken as `ImageInput.load` takes it: a primary
+    /// brings its master's edits only while it is exactly the master's render, so one changed
+    /// since it was saved exports as its own pixels. The one way a file reaches Claude, for
+    /// `excerpt read` and a thumbnail's For Claude alike.
+    public static func write(
+        contentsOf url: URL, cache: ClaudeCache, recognizer: any TextRecognizer,
+        now: Date = Date()
+    ) throws -> ClaudeBundle {
+        let input = try ImageInput.load(url)
+        return try write(
+            original: input.original, edits: input.edits, name: input.name, cache: cache,
+            recognizer: recognizer, now: now)
+    }
+
     private static func padded(_ number: Int, _ digits: Int) -> String {
         let text = String(number)
         return String(repeating: "0", count: max(0, digits - text.count)) + text

@@ -48,24 +48,28 @@ final class ClaudeExporter {
 
     /// The editor's export: what it shows, unsaved edits included.
     func export(original: CGImage, edits: EditDocument, name: String) {
-        run(name: name) { (original, edits) }
+        run(name: name) { cache, recognizer in
+            try ClaudeBundle.write(
+                original: original, edits: edits, name: name, cache: cache,
+                recognizer: recognizer)
+        }
     }
 
-    /// A thumbnail's export: the primary at `url` as saved, loaded (with its master's edits)
-    /// off the main thread while the note is already up.
-    func export(primary url: URL, store: LibraryStore) {
-        run(name: Self.name(of: url)) {
+    /// A thumbnail's export: the primary at `url` as `excerpt read` takes it, loaded off the
+    /// main thread while the note is already up.
+    func export(primary url: URL) {
+        run(name: Self.name(of: url)) { cache, recognizer in
             do {
-                let capture = try store.loadForRendering(url)
-                return (capture.original, capture.edits)
-            } catch {
+                return try ClaudeBundle.write(contentsOf: url, cache: cache, recognizer: recognizer)
+            } catch let error as ImageInputError {
                 throw OpenFailed(url: url, error: error)
             }
         }
     }
 
     private func run(
-        name: String, source: @escaping @Sendable () throws -> (CGImage, EditDocument)
+        name: String,
+        write: @escaping @Sendable (ClaudeCache, any TextRecognizer) throws -> ClaudeBundle
     ) {
         let folder = cache.folder(for: name)
         guard running[folder] == nil else {
@@ -77,12 +81,7 @@ final class ClaudeExporter {
         let cache = cache
         Task {
             let result = await Task.detached(priority: .userInitiated) {
-                Result {
-                    let (original, edits) = try source()
-                    return try ClaudeBundle.write(
-                        original: original, edits: edits, name: name, cache: cache,
-                        recognizer: VisionTextRecognizer())
-                }
+                Result { try write(cache, VisionTextRecognizer()) }
             }.value
             let note = running.removeValue(forKey: folder)?.note
             onBusyChange?(name)
@@ -171,17 +170,5 @@ final class ClaudeExporter {
         guard !stuck.isEmpty, reportedStuck.insert(stuck.map(\.url.path).sorted()).inserted
         else { return }
         Alerts.claudeCacheNotPruned(stuck.map(\.error))
-    }
-}
-
-extension LibraryStore {
-    /// A capture to render, as the editor and For Claude take it: `load`, then refused when its
-    /// edits render it past the size limits, before anything is drawn.
-    func loadForRendering(_ url: URL) throws -> LoadedCapture {
-        let capture = try load(url)
-        try ImageInput.checkRender(
-            url.path, width: capture.original.width, height: capture.original.height,
-            edits: capture.edits)
-        return capture
     }
 }
