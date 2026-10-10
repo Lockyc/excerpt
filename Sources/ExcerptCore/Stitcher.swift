@@ -53,7 +53,7 @@ public struct Stitcher: Sendable {
         switch StitchMatcher.match(reference, frame, ignoringRightColumns: ignoredRightColumns) {
         case .still: return .noMovement
         case .uncertain: return .uncertain
-        case .moved(let offset, _, let footer):
+        case .moved(let offset, let header, let footer):
             if let travel, !travel.contains(offset) { return .unexpectedTravel(offset: offset) }
             let rowBytes = width * 4
             // The sticky rows on the stitch's tail: the last move's footer, or for the first
@@ -63,8 +63,11 @@ public struct Stitcher: Sendable {
             // the new frame's rows run from where the stitch's content ends to its footer.
             let firstNew = frameHeight - tail - offset
             let count = tail + offset - footer
-            // Rows the tail footer hid that the frame doesn't reach: a gap, never a silent hole.
-            guard firstNew >= 0 else { return .uncertain }
+            // The match must rest on content the stitch holds: an overlap inside the old tail
+            // footer and the header (a footer that unsticks into the page's flow) would paste
+            // the frame's header rows mid-stitch, and a frame that starts past the stitch's end
+            // leaves a gap.
+            guard firstNew - header >= StitchMatcher.minimumEvidenceRows else { return .uncertain }
             // The page moved but a grown footer covers every new row: movement with nothing to
             // add, so a session counting `.noMovement` as the end of the page doesn't stop.
             guard count > 0 else { return .appended(rows: 0) }

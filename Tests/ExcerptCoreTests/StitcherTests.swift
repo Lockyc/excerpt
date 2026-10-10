@@ -229,4 +229,27 @@ import Testing
         #expect(stitcher.add(footerFrame(page, offset: 130, footer: 30)) == .appended(rows: 0))
         #expect(stitcher.image == before)
     }
+
+    @Test func aFooterThatUnsticksUnderTheHeaderIsUncertain() {
+        // A 30-row footer that sits in the page's flow at row 240 sticks to the viewport's
+        // bottom until the page scrolls it into place; at 230 it shows unstuck, partly under a
+        // 20-row header. The only overlap left is inside the old tail footer and the header.
+        let header = ScrollFixtures.bar(width: 90, height: 20, tone: 60)
+        let footer = ScrollFixtures.bar(width: 90, height: 30, tone: 140)
+        let page = ScrollFixtures.overlay(
+            ScrollFixtures.page(width: 90, height: 1000), footer, atRow: 240)
+        func stuck(_ offset: Int) -> PixelBuffer {
+            ScrollFixtures.frame(
+                page, offset: offset, viewport: 200, header: header, footer: footer)
+        }
+        var stitcher = Stitcher(first: stuck(0), scale: 1)
+        #expect(stitcher.add(stuck(60)) == .appended(rows: 60))
+        let before = stitcher.image
+        let unstuck = ScrollFixtures.frame(page, offset: 230, viewport: 200, header: header)
+        #expect(
+            StitchMatcher.match(stuck(60), unstuck, ignoringRightColumns: 0)
+                == .moved(offset: 160, header: 20, footer: 0))
+        #expect(stitcher.add(unstuck) == .uncertain)
+        #expect(stitcher.image == before)
+    }
 }
