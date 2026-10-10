@@ -1,4 +1,5 @@
 import AppKit
+import ExcerptCapture
 import ExcerptCore
 
 @MainActor
@@ -34,13 +35,38 @@ enum Alerts {
         )
     }
 
-    /// A scrolling capture's stream stopped part-way; says whether what was stitched is saved.
+    /// A scrolling capture ended part-way, because its stream stopped or the displays changed;
+    /// says whether what was stitched is saved.
     static func scrollingStopped(_ error: Error, savedPartial: Bool) {
+        let cause =
+            error as? ScrollCaptureError == .displayChanged
+            ? "The displays changed, so the capture ended."
+            : "Excerpt lost the picture of the region: \(error.localizedDescription)"
         show(
             "Scrolling capture stopped",
-            "Excerpt lost the picture of the region: \(error.localizedDescription) "
+            cause + " "
                 + (savedPartial
                     ? "What was stitched before that is saved." : "Nothing was saved."))
+    }
+
+    enum AccessibilityChoice { case openSettings, scrollYourself, cancel }
+
+    /// Accessibility isn't granted, so Excerpt can't scroll the page: open the setting, scroll
+    /// the page by hand while Excerpt stitches, or cancel.
+    static func accessibilityNeeded() -> AccessibilityChoice {
+        let alert = NSAlert()
+        alert.messageText = "Excerpt needs Accessibility to scroll the page for you."
+        alert.informativeText =
+            "Turn on Excerpt under Privacy & Security → Accessibility, or scroll the page yourself while Excerpt stitches it."
+        alert.addButton(withTitle: "Open Accessibility Settings")
+        alert.addButton(withTitle: "Scroll It Myself")
+        alert.addButton(withTitle: "Cancel")
+        NSApp.activate(ignoringOtherApps: true)
+        switch alert.runModal() {
+        case .alertFirstButtonReturn: return .openSettings
+        case .alertSecondButtonReturn: return .scrollYourself
+        default: return .cancel
+        }
     }
 
     /// The region's screen recording could not be stopped after a scrolling capture ended.

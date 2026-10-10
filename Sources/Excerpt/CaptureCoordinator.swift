@@ -30,7 +30,7 @@ final class CaptureCoordinator {
         running = true
         defer { running = false }
         guard ensurePermission() else { return }
-        if action == .scrolling && promptForAccessibilityFirst() { return }
+        if action == .scrolling && !scrollingMayStart() { return }
         do {
             let stills = try await capturer.stills()
             switch action {
@@ -151,14 +151,23 @@ final class CaptureCoordinator {
         if scrollEnd == nil { scrollEnd = end }
     }
 
-    /// The first scrolling capture of a launch without Accessibility shows the system's prompt
-    /// and starts nothing: started, the prompt would sit in the frozen still, under the overlay,
-    /// and in the first frame. True when the capture should wait for the next press, which then
-    /// scrolls by itself if access was granted and hands scrolling to the user if not.
-    private func promptForAccessibilityFirst() -> Bool {
-        guard !EventScroller.isTrusted, !askedForAccessibility else { return false }
-        askedForAccessibility = true
-        return !EventScroller.requestAccess()
+    /// Without Accessibility, asks how to go on before any still is taken, so neither the alert
+    /// nor the system prompt lands in a frame. The system prompt is requested once per launch;
+    /// after an earlier denial macOS may not show it again, so the alert always does. True when
+    /// the capture should start: with access, or with the user scrolling.
+    private func scrollingMayStart() -> Bool {
+        guard !EventScroller.isTrusted else { return true }
+        if !askedForAccessibility {
+            askedForAccessibility = true
+            if EventScroller.requestAccess() { return true }
+        }
+        switch Alerts.accessibilityNeeded() {
+        case .openSettings:
+            Self.open(.accessibility)
+            return false
+        case .scrollYourself: return true
+        case .cancel: return false
+        }
     }
 
     /// Saves to the library, copies, plays the shutter and shows the thumbnail. False when the
