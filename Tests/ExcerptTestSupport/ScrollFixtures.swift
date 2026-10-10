@@ -28,7 +28,8 @@ public enum ScrollFixtures {
     /// Box rows match at any whole number of fields, so an offset one field away from the truth
     /// matches most rows of a small overlap.
     public static func form(width: Int, height: Int, period: Int = 40) -> PixelBuffer {
-        paint(width: width, height: height) { x, y in
+        precondition(period >= 36, "a field needs its label, box and bottom rule: 36 rows")
+        return paint(width: width, height: height) { x, y in
             let field = y / period
             let row = y % period
             switch row {
@@ -56,14 +57,20 @@ public enum ScrollFixtures {
         _ page: PixelBuffer, offset: Int, viewport: Int, header: PixelBuffer? = nil,
         footer: PixelBuffer? = nil
     ) -> PixelBuffer {
+        precondition(
+            offset >= 0 && viewport > 0 && offset + viewport <= page.height,
+            "the viewport must lie inside the page")
+        precondition(
+            (header?.height ?? 0) + (footer?.height ?? 0) <= viewport,
+            "header and footer must fit in the viewport")
         var view = rows(page, offset..<(offset + viewport))
         if let header { view = overlay(view, header, atRow: 0) }
         if let footer { view = overlay(view, footer, atRow: viewport - footer.height) }
         return view
     }
 
-    /// `buffer` with a `size`-pixel square at (`x`, `y`) painted in a pattern that changes with
-    /// `phase`: a spinner, a blinking caret, a video.
+    /// `buffer` with a `width` by `height` block at (`x`, `y`) painted in a pattern that changes
+    /// with `phase`: a spinner, a blinking caret, a video.
     public static func animated(
         _ buffer: PixelBuffer, x: Int, y: Int, width: Int, height: Int, phase: Int
     ) -> PixelBuffer {
@@ -80,7 +87,9 @@ public enum ScrollFixtures {
     /// `buffer` with the rows of `top` painted over it from `atRow`.
     public static func overlay(_ buffer: PixelBuffer, _ top: PixelBuffer, atRow: Int) -> PixelBuffer
     {
-        precondition(top.width == buffer.width)
+        precondition(top.width == buffer.width, "overlay width must match")
+        precondition(
+            atRow >= 0 && atRow + top.height <= buffer.height, "overlay must lie inside the buffer")
         var out = buffer
         let rowBytes = buffer.width * 4
         out.bytes.replaceSubrange(
@@ -94,6 +103,20 @@ public enum ScrollFixtures {
         return paint(width: left.width + right.width, height: left.height) { x, y in
             x < left.width ? left[x: x, y: y] : right[x: x - left.width, y: y]
         }
+    }
+
+    /// `buffer` with an overlay scroll bar's thumb: a dark band `width` columns wide against the
+    /// right edge, from row `y` for `height` rows.
+    public static func thumb(
+        _ buffer: PixelBuffer, y: Int, height: Int, width: Int = 6
+    ) -> PixelBuffer {
+        var out = buffer
+        for row in y..<(y + height) {
+            for column in (buffer.width - width)..<buffer.width {
+                set(&out, column, row, RGBA(r: 90, g: 90, b: 90, a: 255))
+            }
+        }
+        return out
     }
 
     public static func rows(_ buffer: PixelBuffer, _ range: Range<Int>) -> PixelBuffer {
@@ -111,7 +134,9 @@ public enum ScrollFixtures {
     }
 
     public static func stack(_ parts: [PixelBuffer]) -> PixelBuffer {
-        PixelBuffer(
+        precondition(!parts.isEmpty, "nothing to stack")
+        precondition(parts.allSatisfy { $0.width == parts[0].width }, "stacked widths must match")
+        return PixelBuffer(
             width: parts[0].width, height: parts.reduce(0) { $0 + $1.height },
             bytes: parts.flatMap(\.bytes))
     }
