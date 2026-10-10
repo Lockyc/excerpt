@@ -79,6 +79,29 @@ import Testing
         #expect(cacheBlocked.stderr.contains("ok.png/claude"))
     }
 
+    /// A master cut into more regions than are read names itself, with the counts grouped.
+    @Test(.timeLimit(.minutes(1))) func aCaptureCutTooFinelyNamesItsPath() throws {
+        let (folder, cache) = try Self.scratch()
+        let cuts = (0..<70).flatMap { i in
+            [Axis.horizontal, .vertical].map {
+                Cut(axis: $0, lower: 18 + i * 28, upper: 28 + i * 28)
+            }
+        }
+        let master = folder.appendingPathComponent("Excerpt fine original.png")
+        try MasterFile.encode(
+            original: Fixtures.sheet(width: 2_000, height: 2_000),
+            edits: EditDocument(scale: 1, cuts: cuts, salt: 7)
+        ).write(to: master)
+        let output = ReadCommand.run(
+            path: master.lastPathComponent, directory: folder, cache: cache,
+            recognizer: ColourWords())
+        #expect(output.status == ReadCommand.Status.dataError)
+        #expect(
+            output.stderr
+                == "excerpt: \(master.standardizedFileURL.path): Its cuts split it into 5,041 parts to read; text is read from at most 4,000.\n"
+        )
+    }
+
     @Test func anAbsolutePathIgnoresTheDirectory() throws {
         let (folder, cache) = try Self.scratch()
         let file = folder.appendingPathComponent("abs.png")

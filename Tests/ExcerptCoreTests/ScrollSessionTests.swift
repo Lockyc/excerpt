@@ -121,6 +121,8 @@ import Testing
     @Test func lengthsReadInPointsWithSeparators() {
         #expect(LengthText.points(2480, scale: 2) == "1,240 px")
         #expect(LengthText.points(7, scale: 1) == "7 px")
+        #expect(LengthText.count(1_000_000) == "1,000,000")
+        #expect(LengthText.count(999) == "999")
     }
 
     @Test func theOpeningHUDIsTheScrollingText() {

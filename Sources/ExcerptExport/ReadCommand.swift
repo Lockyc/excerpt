@@ -81,7 +81,9 @@ public enum ReadCommand {
         } catch let error as ClaudeBundleError {
             return failure(error, status(for: error))
         } catch let error as CaptureTextError {
-            return failure(error, status(for: error))
+            return Output(
+                stderr: "excerpt: \(url.path): \(error.localizedDescription)\n",
+                status: status(for: error))
         } catch {
             return failure(error, Status.software)
         }

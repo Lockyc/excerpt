@@ -9,6 +9,8 @@ public protocol TextRecognizer: Sendable {
     func recognize(_ image: CGImage) throws -> [RecognizedText]
 }
 
+/// Why a render can't be read. The description is a sentence about the capture that doesn't name
+/// it: `excerpt read` puts the path before it, the app's export alert names the capture.
 public enum CaptureTextError: Error, Equatable, LocalizedError {
     /// The render's cuts split it into more regions than `CaptureText.maximumRegions`.
     case tooManyRegions(Int)
@@ -16,7 +18,7 @@ public enum CaptureTextError: Error, Equatable, LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .tooManyRegions(let count):
-            "Its cuts split it into \(count) parts to read; text is read from at most \(CaptureText.maximumRegions)."
+            "Its cuts split it into \(LengthText.count(count)) parts to read; text is read from at most \(LengthText.count(CaptureText.maximumRegions))."
         }
     }
 }
