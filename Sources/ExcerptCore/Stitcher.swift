@@ -1,6 +1,7 @@
 /// What adding one frame did to the stitch.
 public enum StitchStep: Equatable, Sendable {
-    /// `rows` new rows of content joined the stitch.
+    /// `rows` new rows of content joined the stitch. 0 means the page moved but a grown footer
+    /// covers every new row: a session treats any `.appended` as movement.
     case appended(rows: Int)
     case noMovement
     /// The frame didn't match; the stitch is unchanged.
