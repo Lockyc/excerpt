@@ -26,6 +26,15 @@ public enum PNGCodec {
         return data as Data
     }
 
+    /// Pixels per point from an image's DPI: 72 DPI is 1×, 144 is 2×. A DPI that rounds to a scale
+    /// outside `EditDocument.scaleRange` (a 300 DPI scan, a damaged value) or no DPI at all reads
+    /// as 1×, so the image is never shrunk past legibility or sized from garbage.
+    public static func scale(dpi: Double?) -> Double {
+        guard let dpi, dpi.isFinite else { return 1 }
+        let scale = (dpi / 72).rounded()
+        return EditDocument.scaleRange.contains(scale) ? scale : 1
+    }
+
     public static func decode(_ data: Data) throws -> DecodedPNG {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil) else {
             throw PNGError.decodeFailed
@@ -37,7 +46,7 @@ public enum PNGCodec {
         guard let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
         else { throw PNGError.decodeFailed }
         let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any]
-        let dpi = (properties?[kCGImagePropertyDPIWidth] as? Double) ?? 72
-        return DecodedPNG(image: image, scale: max(1, (dpi / 72).rounded()))
+        return DecodedPNG(
+            image: image, scale: scale(dpi: properties?[kCGImagePropertyDPIWidth] as? Double))
     }
 }

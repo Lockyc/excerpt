@@ -4,7 +4,8 @@ import Foundation
 public enum EditDocumentError: Error, Equatable {
     /// Written by a newer excerpt; opening it here would silently drop what this build can't read.
     case unsupportedVersion(Int)
-    /// A scale that is not a finite, positive pixels-per-point value would trap label formatting.
+    /// A scale outside `EditDocument.scaleRange`: sizing labels, strokes and blur blocks from it
+    /// would trap or exhaust memory.
     case invalidScale(Double)
     /// A crop, annotation coordinate or annotation id outside `EditDocument.coordinateLimit` or
     /// `EditDocument.idLimit`, or an id used twice.
@@ -110,6 +111,10 @@ public struct EditDocument: Codable, Equatable, Sendable {
         return highest == Int.max ? highest : highest + 1
     }
 
+    /// The pixels-per-point a document may have: the Retina scales and between. Labels, strokes
+    /// and blur blocks are sized from it, so a damaged scale is refused rather than rendered.
+    public static let scaleRange = 1.0...3.0
+
     /// The largest magnitude, in original pixels, any stored coordinate or size may have.
     public static let coordinateLimit = 1_000_000.0
     /// Annotation ids are in `0..<idLimit`, which keeps `nextAnnotationID` clear of overflow.
@@ -167,7 +172,7 @@ public struct EditDocument: Codable, Equatable, Sendable {
         do {
             document = try JSONDecoder().decode(EditDocument.self, from: data)
         } catch { throw EditDocumentError.damaged }
-        guard document.scale.isFinite, document.scale > 0 else {
+        guard scaleRange.contains(document.scale) else {
             throw EditDocumentError.invalidScale(document.scale)
         }
         try document.validateGeometry()

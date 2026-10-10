@@ -102,6 +102,17 @@ import Testing
         let json = Data(#"{"version":1,"scale":1e999,"cuts":[]}"#.utf8)
         #expect(throws: (any Error).self) { try EditDocument.decode(json) }
     }
+
+    /// A master is a file anyone can hand excerpt: a scale past Retina would size a seam or a
+    /// blur block past memory.
+    @Test func rejectsAScaleOutsideTheRetinaRange() {
+        for scale in ["0.5", "4", "1e10"] {
+            let json = Data(#"{"version":2,"scale":\#(scale),"cuts":[]}"#.utf8)
+            #expect(throws: EditDocumentError.invalidScale(Double(scale)!)) {
+                try EditDocument.decode(json)
+            }
+        }
+    }
 }
 
 @Suite struct PixelRectTests {

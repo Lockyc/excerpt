@@ -18,6 +18,17 @@ import UniformTypeIdentifiers
         #expect(PixelBuffer(decoded.image) == PixelBuffer(image))
     }
 
+    @Test func scaleComesFromDPIOnlyInTheRetinaRange() {
+        #expect(PNGCodec.scale(dpi: nil) == 1)
+        #expect(PNGCodec.scale(dpi: 72) == 1)
+        #expect(PNGCodec.scale(dpi: 144) == 2)
+        #expect(PNGCodec.scale(dpi: 216) == 3)
+        #expect(PNGCodec.scale(dpi: 300) == 1)
+        #expect(PNGCodec.scale(dpi: 1e300) == 1)
+        #expect(PNGCodec.scale(dpi: .nan) == 1)
+        #expect(PNGCodec.scale(dpi: 0) == 1)
+    }
+
     @Test func textChunkRoundTripsAndReplaces() throws {
         let png = try PNGCodec.encode(Fixtures.sheet(width: 20, height: 20), scale: 1)
         let once = try PNGChunks.settingText("first", keyword: "k", in: png)
