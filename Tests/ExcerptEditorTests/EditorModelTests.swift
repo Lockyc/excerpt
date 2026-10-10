@@ -93,6 +93,21 @@ import Testing
         #expect(m.color == Palette.initial && m.width == StrokeWidth.initial)
     }
 
+    @Test func canDeleteFollowsTheSelectionAndTheCrop() {
+        let m = model()
+        #expect(!m.canDelete)
+        m.apply { $0.crop = PixelRect(x: 0, y: 0, width: 100, height: 100) }
+        #expect(!m.canDelete)
+        m.tool = .crop
+        #expect(m.canDelete)
+        m.deleteSelection()
+        #expect(!m.canDelete)
+        m.tool = .select
+        m.apply { $0.annotations.append(note(1, CGRect(x: 0, y: 0, width: 10, height: 10))) }
+        m.selection = .annotation(1)
+        #expect(m.canDelete)
+    }
+
     @Test func deleteRemovesTheSelectionOrTheCrop() {
         let m = model()
         m.apply {

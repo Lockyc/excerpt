@@ -147,6 +147,10 @@ final class EditorModel {
         }
     }
 
+    /// Whether `deleteSelection` would remove something: the selection, or under the crop tool
+    /// with nothing selected, the crop.
+    var canDelete: Bool { selection != nil || (tool == .crop && document.crop != nil) }
+
     /// Removes the selected annotation or seam; with nothing selected under the crop tool,
     /// removes the crop.
     func deleteSelection() {

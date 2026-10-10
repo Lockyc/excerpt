@@ -139,7 +139,7 @@ change re-renders the cache. Undo is a stack of document values.
 
 ## Export
 
-- **Copy** (`⌘C`) — the primary PNG. **Drag** from the thumbnail or the editor's title bar.
+- **Copy** (`⌘C`) — the primary PNG, or in the editor the current render. **Drag** from the thumbnail or the editor's title bar.
 - **For Claude** (`⌘⇧C`), shaped for Claude's ~1568px long-edge downscale:
   - tiles render at **1× (points)** — Retina doubles pixels without adding legible text;
   - a capture that fits is one image; taller ones split into ~1500px tiles overlapping ~100px,

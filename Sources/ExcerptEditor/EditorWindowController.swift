@@ -37,7 +37,7 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
 
     private let capture: LoadedCapture
     private let save: (EditDocument) throws -> Void
-    private let copy: () -> Void
+    private let copy: (Data) -> Void
     private let onClose: () -> Void
     private let model: EditorModel
     private let canvas: CanvasView
@@ -53,11 +53,11 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
     private let copyButton = NSButton(title: "Copy", target: nil, action: nil)
     private let saveButton = NSButton(title: "Save", target: nil, action: nil)
 
-    /// `save` writes the document (the app's `LibraryStore.saveEdits`); `copy` puts the primary
-    /// on the pasteboard and reports its own failure; `onClose` runs once the window has closed.
+    /// `save` writes the document (the app's `LibraryStore.saveEdits`); `copy` puts the current
+    /// render's PNG on the pasteboard and reports its own failure; `onClose` runs once the window has closed.
     public init(
         capture: LoadedCapture, save: @escaping (EditDocument) throws -> Void,
-        copy: @escaping () -> Void, onClose: @escaping () -> Void
+        copy: @escaping (Data) -> Void, onClose: @escaping () -> Void
     ) {
         self.capture = capture
         self.save = save
@@ -145,9 +145,15 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         configure(deleteButton, symbol: "trash", label: "Delete", action: #selector(deletePressed))
         copyButton.target = self
         copyButton.action = #selector(copyPressed)
-        copyButton.toolTip = "Copy the saved PNG (⌘C)"
+        copyButton.toolTip = "Copy the current image (⌘C)"
         saveButton.target = self
         saveButton.action = #selector(saveDocument)
+
+        for control in [
+            tools, colors, widths, undoButton, redoButton, deleteButton, copyButton, saveButton,
+        ] as [NSControl] {
+            control.refusesFirstResponder = true
+        }
 
         let spacer = NSView()
         spacer.setContentHuggingPriority(.fittingSizeCompression, for: .horizontal)
@@ -224,7 +230,9 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
     /// Opens at the capture's size in points, shrunk to fit 90% of the screen; tall captures
     /// scroll.
     private func sizeToFit(_ window: NSWindow) {
-        let visible = (NSScreen.main ?? NSScreen.screens[0]).visibleFrame
+        let visible =
+            (NSScreen.main ?? NSScreen.screens.first)?.visibleFrame
+            ?? CGRect(x: 0, y: 0, width: 1440, height: 900)
         let scale = CGFloat(model.document.scale)
         let rendered = max(canvas.renderedSize.width, 1)
         let width = min(max(rendered / scale, Self.minimumWidth), visible.width * 0.9)
@@ -243,7 +251,9 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         let available = scrollView.contentSize.width
         guard available > 0 else { return }
         let scale = CGFloat(model.document.scale)
-        canvas.zoom = min(available / max(canvas.renderedSize.width, 1), 1 / scale)
+        let zoom = min(available / max(canvas.renderedSize.width, 1), 1 / scale)
+        guard zoom != canvas.zoom else { return }
+        canvas.zoom = zoom
         let clip = scrollView.contentView
         clip.scroll(to: clip.constrainBoundsRect(clip.bounds).origin)
         scrollView.reflectScrolledClipView(clip)
@@ -263,13 +273,11 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         undoButton.toolTip = model.canUndo ? "Undo (⌘Z)" : "Nothing to undo"
         redoButton.isEnabled = model.canRedo
         redoButton.toolTip = model.canRedo ? "Redo (⇧⌘Z)" : "Nothing to redo"
-        let deletable =
-            model.selection != nil || (model.tool == .crop && model.document.crop != nil)
-        deleteButton.isEnabled = deletable
+        deleteButton.isEnabled = model.canDelete
         deleteButton.toolTip =
-            deletable
-            ? "Delete the selection (⌫)"
-            : "Select an annotation or seam to delete it"
+            model.canDelete
+            ? "Delete the \(model.selection == nil ? "crop" : "selection") (⌫)"
+            : "Select an annotation, seam or crop to delete"
         saveButton.isEnabled = model.isDirty
         saveButton.toolTip = model.isDirty ? "Save (⌘S)" : "No unsaved changes"
         window?.isDocumentEdited = model.isDirty
@@ -281,17 +289,14 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
     @objc private func toolChosen() {
         canvas.endText()
         model.tool = Tool.allCases[tools.selectedSegment]
-        window?.makeFirstResponder(canvas)
     }
 
     @objc private func colorChosen() {
         model.setColor(Palette.allCases[colors.selectedSegment])
-        window?.makeFirstResponder(canvas)
     }
 
     @objc private func widthChosen() {
         model.setWidth(StrokeWidth.allCases[widths.selectedSegment])
-        window?.makeFirstResponder(canvas)
     }
 
     @objc private func undoPressed() { undo() }
@@ -300,12 +305,19 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
     @objc private func deletePressed() {
         canvas.endText()
         model.deleteSelection()
-        window?.makeFirstResponder(canvas)
     }
 
     @objc func copyPressed() {
         canvas.endText()
-        copy()
+        do {
+            let image = Renderer.render(model.original, edits: model.document).image
+            copy(try PNGCodec.encode(image, scale: model.document.scale))
+        } catch {
+            let alert = NSAlert()
+            alert.messageText = "Couldn't copy \(capture.primary.lastPathComponent)"
+            alert.informativeText = error.localizedDescription
+            alert.runModal()
+        }
     }
 
     @objc func saveDocument() { _ = writeDocument() }
@@ -362,20 +374,42 @@ final class EditorWindow: NSWindow {
     weak var editor: EditorWindowController?
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        // A text field being edited keeps its own undo and copy.
-        if firstResponder is NSTextView { return super.performKeyEquivalent(with: event) }
         let flags = event.modifierFlags.intersection([.command, .shift, .option, .control])
-        switch (flags, event.charactersIgnoringModifiers?.lowercased()) {
+        let key = event.charactersIgnoringModifiers?.lowercased()
+        // Save and close work everywhere, including while a text field is being edited.
+        switch (flags, key) {
         case ([.command], "s"):
             editor?.saveDocument()
+            return true
+        case ([.command], "w"):
+            performClose(nil)
+            return true
+        default:
+            break
+        }
+        // Without a main menu nothing translates the edit shortcuts, so a field being edited
+        // gets them here.
+        if firstResponder is NSTextView {
+            let action: Selector?
+            switch (flags, key) {
+            case ([.command], "x"): action = #selector(NSText.cut(_:))
+            case ([.command], "c"): action = #selector(NSText.copy(_:))
+            case ([.command], "v"): action = #selector(NSText.paste(_:))
+            case ([.command], "a"): action = #selector(NSText.selectAll(_:))
+            case ([.command], "z"): action = Selector(("undo:"))
+            case ([.command, .shift], "z"): action = Selector(("redo:"))
+            default: action = nil
+            }
+            if let action { return NSApp.sendAction(action, to: nil, from: self) }
+            return super.performKeyEquivalent(with: event)
+        }
+        switch (flags, key) {
         case ([.command], "z"):
             editor?.undo()
         case ([.command, .shift], "z"):
             editor?.redo()
         case ([.command], "c"):
             editor?.copyPressed()
-        case ([.command], "w"):
-            performClose(nil)
         default:
             return super.performKeyEquivalent(with: event)
         }
