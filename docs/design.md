@@ -24,7 +24,8 @@ AppKit / ScreenCaptureKit targets build in Swift 5 mode (see `Package.swift`).
 | `ExcerptCore` | The capture document (original image, cuts, annotations) as values; the pure algorithms — render, cut geometry, the original→rendered coordinate map, stitching, gap detection, tiling | CoreGraphics, ImageIO |
 | `ExcerptCapture` | ScreenCaptureKit capture, the multi-display selection overlay, the auto-scroll driver that feeds frames to Core's stitcher | Core |
 | `ExcerptEditor` | Canvas, tools, undo; edits Core's document | Core |
-| `Excerpt` (app) | Menu bar, global hotkeys, preview thumbnail, settings, export, Vision OCR, file I/O | all |
+| `ExcerptExport` | Vision OCR and the For Claude bundle (tiles + `text.md`), with no UI | Core, Vision |
+| `Excerpt` (app) | Menu bar, global hotkeys, preview thumbnail, settings, export UI, file I/O; the `excerpt read` subcommand | all |
 
 The hard logic lives in Core as pure functions over values, so it is tested without UI or
 permissions. **One renderer:** the editor canvas draws through Core's renderer, so what the
@@ -135,3 +136,9 @@ recovered from the primary. The editor shows the true result.
     so every line appears whole in some tile;
   - `text.md` holds Vision OCR in reading order, each cut written in as `[⋯ 1,240 px hidden]`;
   - the clipboard receives `@<path>` references to every tile and `text.md`.
+- **`excerpt read <image>`** — the same bundle for any image file, not only a capture, so a
+  Claude session handed a large screenshot can read it. The app binary runs it headless when
+  given arguments, before any `NSApplication` starts. It prints `text.md` to stdout and the tile
+  paths to stderr, and needs no Screen Recording permission. A file with an excerpt edit
+  document gets its cut markers. Any other file is treated as uncut, with Retina scale read
+  from its DPI metadata.
