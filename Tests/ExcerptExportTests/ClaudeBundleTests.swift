@@ -16,15 +16,15 @@ import Testing
     /// The roadmap gate's shape: a 10,000-point capture at 2× becomes eight 1× tiles and the
     /// text, with the cut written in.
     @Test func aTallCaptureBecomesOneTimesTilesAndText() throws {
+        let name = "Excerpt 2026-10-10 at 09.43.29"
         let original = ColourWords.page(
             width: 100, height: 20_000, words: ["alpha": (20, 100), "omega": (20, 19_800)])
         let edits = EditDocument(
             scale: 2, cuts: [Cut(axis: .horizontal, lower: 9_000, upper: 9_036)], salt: 7)
         let bundle = try ClaudeBundle.write(
-            original: original, edits: edits, name: "Excerpt 2026-10-10 at 09.43.29",
+            original: original, edits: edits, name: name,
             cache: Self.cache(), recognizer: ColourWords())
         // Uppercase and spaces make the name lossy, so the folder carries a hash suffix.
-        let name = "Excerpt 2026-10-10 at 09.43.29"
         #expect(
             bundle.folder.lastPathComponent == ClaudeCache.folderName(for: name))
         #expect(bundle.folder.lastPathComponent.hasPrefix("Excerpt-2026-10-10-at-09.43.29-"))
@@ -87,6 +87,7 @@ import Testing
             return folder == cache.root
                 && (error as? ClaudeBundleError)?.errorDescription?.contains(cache.root.path)
                     == true
+                && !(error.localizedDescription.contains("couldn’t be completed"))
         }
     }
 
@@ -120,9 +121,42 @@ import Testing
     }
 
     @Test func aBundleReportsWhatPruningCouldNotRemove() throws {
+        let cache = Self.cache()
+        let manager = FileManager.default
+        let stuck = cache.root.appendingPathComponent("stuck")
+        let locked = stuck.appendingPathComponent("locked")
+        try manager.createDirectory(at: locked, withIntermediateDirectories: true)
+        try Data("x".utf8).write(to: locked.appendingPathComponent("file"))
+        try manager.setAttributes([.posixPermissions: 0o500], ofItemAtPath: locked.path)
+        defer { try? manager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: locked.path) }
+        let now = Date()
+        try manager.setAttributes(
+            [.modificationDate: now.addingTimeInterval(-ClaudeCache.maximumAge)],
+            ofItemAtPath: stuck.path)
         let bundle = try ClaudeBundle.write(
             original: Fixtures.sheet(width: 50, height: 50), edits: EditDocument(scale: 1),
-            name: "x", cache: Self.cache(), recognizer: ColourWords())
-        #expect(bundle.pruneFailures.isEmpty)
+            name: "x", cache: cache, recognizer: ColourWords(), now: now)
+        #expect(manager.fileExists(atPath: bundle.textFile.path))
+        #expect(bundle.pruneFailures.map(\.url.lastPathComponent) == ["stuck"])
+    }
+
+    /// A failure after staging exists removes the staging folder. The cache root loses write
+    /// permission once the first bundle is in, so creating the staging folder is what fails.
+    @Test func aFailedWriteLeavesNoStagingFolder() throws {
+        let cache = Self.cache()
+        let manager = FileManager.default
+        _ = try ClaudeBundle.write(
+            original: Fixtures.sheet(width: 50, height: 50), edits: EditDocument(scale: 1),
+            name: "x", cache: cache, recognizer: ColourWords())
+        try manager.setAttributes([.posixPermissions: 0o500], ofItemAtPath: cache.root.path)
+        defer {
+            try? manager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: cache.root.path)
+        }
+        #expect(throws: ClaudeBundleError.self) {
+            try ClaudeBundle.write(
+                original: Fixtures.sheet(width: 50, height: 50), edits: EditDocument(scale: 1),
+                name: "x", cache: cache, recognizer: ColourWords())
+        }
+        #expect(try manager.contentsOfDirectory(atPath: cache.root.path) == ["x"])
     }
 }

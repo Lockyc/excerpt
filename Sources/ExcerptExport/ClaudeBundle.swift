@@ -80,6 +80,7 @@ public struct ClaudeBundle: Sendable {
         let names = tiles.indices.map {
             "tile-\(padded($0 + 1, digits))-of-\(padded(tiles.count, digits)).png"
         }
+        let swapped: URL
         do {
             try cache.ensureRoot()
             try manager.createDirectory(at: staging, withIntermediateDirectories: true)
@@ -87,14 +88,14 @@ public struct ClaudeBundle: Sendable {
                 try data.write(to: staging.appendingPathComponent(tileName))
             }
             try Data(text.utf8).write(to: staging.appendingPathComponent("text.md"))
-            _ = try manager.replaceItemAt(folder, withItemAt: staging)
+            swapped = try manager.replaceItemAt(folder, withItemAt: staging) ?? folder
         } catch {
             try? manager.removeItem(at: staging)
             throw ClaudeBundleError.cacheUnwritable(cache.root, error)
         }
         return ClaudeBundle(
-            folder: folder, tiles: names.map { folder.appendingPathComponent($0) },
-            textFile: folder.appendingPathComponent("text.md"), text: text,
+            folder: swapped, tiles: names.map { swapped.appendingPathComponent($0) },
+            textFile: swapped.appendingPathComponent("text.md"), text: text,
             pruneFailures: pruned.failed)
     }
 

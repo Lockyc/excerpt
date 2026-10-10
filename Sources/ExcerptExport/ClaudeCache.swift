@@ -1,11 +1,14 @@
 import Foundation
 
 /// A cache failure, carrying the path it happened at.
-public struct ClaudeCacheError: Error, CustomStringConvertible, Sendable {
+public struct ClaudeCacheError: Error, CustomStringConvertible, LocalizedError, Sendable {
     public let path: String
     public let reason: String
 
     public var description: String { "\(path): \(reason)" }
+
+    /// Just the reason: callers that name the path themselves (the alert) don't repeat it.
+    public var errorDescription: String? { reason }
 }
 
 /// Where For Claude bundles live: scratch under the user's caches, one folder per capture,
