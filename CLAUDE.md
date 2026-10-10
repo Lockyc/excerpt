@@ -9,9 +9,10 @@ A macOS menu-bar screenshot tool in Swift (SwiftPM, macOS 15+). The architecture
 [docs/design.md](docs/design.md); what's next is [docs/roadmap.md](docs/roadmap.md) — start
 there before planning work.
 
-**State:** Phase 0 (Core) shipped; Phases 1 (capture shell), 2 (editor) and 3 (scrolling capture) built, real-app hand checks pending. Next: Phase 4, text + Claude.
+**State:** Phase 0 (Core) shipped; Phases 1 (capture shell), 2 (editor) and 3 (scrolling capture) built, real-app hand checks pending; Phase 4's For Claude export and `excerpt read` built. Next: the rest of Phase 4 — text capture, the all-in-one selector, hotkey rebinding.
 
-`just gate` per change; `just run` launches a signed build.
+`just gate` per change; `just run` launches a signed build; `swift run Excerpt read <image>`
+runs the command without the app.
 
 ## Conventions
 
@@ -23,6 +24,9 @@ there before planning work.
 - **The primary file is clean.** Nothing the user removed — cut bands, blurred pixels, the
   original — may be embedded in the dated primary PNG. The original and the edits live only in
   `… original.png`.
+- **Claude sees only the render.** For Claude's tiles and `text.md` are read from the render
+  through its `RenderMap`'s kept segments, never from the original, so cut and blurred content
+  can't reach them.
 - **Golden images** pin the renderer; a deliberate visual change regenerates them in the same
   commit. `EXCERPT_RECORD_GOLDENS=1 swift test` re-records goldens; inspect every recorded PNG
   before committing it.

@@ -24,8 +24,8 @@ AppKit / ScreenCaptureKit targets build in Swift 5 mode (see `Package.swift`).
 | `ExcerptCore` | The capture document (original image, cuts, annotations) as values; the pure algorithms — render, cut geometry, the original→rendered coordinate map, stitching, gap detection, tiling | CoreGraphics, ImageIO |
 | `ExcerptCapture` | ScreenCaptureKit capture, the multi-display selection overlay, the auto-scroll driver that feeds frames to Core's stitcher | Core |
 | `ExcerptEditor` | Canvas, tools, undo; edits Core's document | Core |
-| `ExcerptExport` | Vision OCR and the For Claude bundle (tiles + `text.md`), with no UI | Core, Vision |
-| `Excerpt` (app) | Menu bar, global hotkeys, preview thumbnail, settings, export UI, file I/O; the `excerpt read` subcommand | all |
+| `ExcerptExport` | Vision OCR, the For Claude bundle (tiles + `text.md`) and the `excerpt read` command, with no UI | Core, Vision |
+| `Excerpt` (app) | Menu bar, global hotkeys, preview thumbnail, settings, export UI, file I/O; runs `excerpt read` before AppKit starts | all |
 
 The hard logic lives in Core as pure functions over values, so it is tested without UI or
 permissions. **One renderer:** the editor canvas draws through Core's renderer, so what the
@@ -47,7 +47,8 @@ Captures land in the **library** — `~/Documents/Screenshots/` by default (a se
 - Sidecar files and a separate edits database are both wrong here: library files get moved and
   sorted by other tools, which would orphan either one. The edits travel inside the master.
 - "For Claude" output is scratch, not library content: `~/Library/Caches/excerpt/claude/<capture
-  name>/`, pruned after 7 days.
+  name>/` (spaces become `-`, so `@` references hold), replaced on each export and pruned after
+  7 days: on every export, at launch and daily.
 
 ## The cut tool
 
@@ -161,11 +162,19 @@ change re-renders the cache. Undo is a stack of document values.
   - a capture that fits is one image; taller ones split into ~1500px tiles overlapping ~100px,
     so every line appears whole in some tile;
   - `text.md` holds Vision OCR in reading order, each cut written in as `[⋯ 1,240 px hidden]`;
-  - the clipboard receives `@<path>` references to every tile and `text.md`.
+  - the clipboard receives `@<path>` references to every tile and `text.md`;
+  - both come from the render, never the original, so nothing a cut or blur removed reaches Claude;
+  - the editor exports its current render, unsaved edits included; the thumbnail exports the saved capture.
 - **`excerpt read <image>`** — the same bundle for any image file, not only a capture, so a
   Claude session handed a large screenshot can read it. The app binary runs it headless when
   given arguments, before any `NSApplication` starts. It prints `text.md` to stdout and the tile
   paths to stderr, and needs no Screen Recording permission. A master gets its cut markers, and
   so does a primary while it is exactly its master's render; a primary changed elsewhere reads
   as its own pixels, so a redaction drawn over it holds. Any other file is treated as uncut,
-  upright, with Retina scale read from its DPI metadata.
+  upright, with Retina scale read from its DPI metadata (anything outside 1×–3× reads as 1×). A
+  file it can't use exits non-zero with the reason. Input limits derive from the largest capture
+  Excerpt makes.
+
+  Known limits: `text.md` reads two-column layouts row by row; `@path` references assume a home
+  folder without spaces; Vision can miss text on busy synthetic backgrounds. Tiles split on height
+  only, so a wide capture reaches Claude downscaled.
