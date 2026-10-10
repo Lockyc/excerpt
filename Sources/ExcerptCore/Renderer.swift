@@ -8,15 +8,20 @@ public struct RenderResult {
 
 /// The one renderer: export writes its output, and the editor draws it.
 public enum Renderer {
-    /// Everything below the annotations: crop, then rows, then columns (column bands are in
-    /// original x, which row removal leaves unchanged), then a label on every seam. The editor
-    /// caches this stage.
+    /// Everything below the annotations: blur (from original pixels), then crop, then rows, then
+    /// columns (column bands are in original x, which row removal leaves unchanged), then a label
+    /// on every seam. The editor caches this stage.
     public static func renderBase(
         _ original: CGImage, edits: EditDocument, style: SeamStyle = .standard
     ) -> RenderResult {
         let full = PixelRect(x: 0, y: 0, width: original.width, height: original.height)
         let crop = edits.crop?.clamped(width: original.width, height: original.height) ?? full
-        let cropped = crop == full ? original : original.cropping(to: crop.cgRect)!
+        let blurs = edits.annotations.compactMap { annotation -> CGRect? in
+            if case .blur(let rect) = annotation.shape { return rect }
+            return nil
+        }
+        let blurred = BlurRenderer.apply(blurs, to: original, scale: edits.scale)
+        let cropped = crop == full ? blurred : blurred.cropping(to: crop.cgRect)!
         let cuts = edits.cuts.map { cut -> Cut in
             let offset = cut.axis == .horizontal ? crop.y : crop.x
             return Cut(axis: cut.axis, lower: cut.lower - offset, upper: cut.upper - offset)
