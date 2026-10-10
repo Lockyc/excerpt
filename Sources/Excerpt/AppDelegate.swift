@@ -79,9 +79,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 try store.saveEdits(
                     primary: capture.primary, original: capture.original, edits: document)
             },
-            copy: { data in
+            copy: { makePNG in
                 do {
-                    try Pasteboard.copyPNG(data: data)
+                    try Pasteboard.copyPNG(data: makePNG())
                 } catch {
                     Alerts.copyFailed(capture.primary, error)
                 }

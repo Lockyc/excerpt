@@ -37,7 +37,7 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
 
     private let capture: LoadedCapture
     private let save: (EditDocument) throws -> Void
-    private let copy: (Data) -> Void
+    private let copy: (() throws -> Data) -> Void
     private let onClose: () -> Void
     private let model: EditorModel
     private let canvas: CanvasView
@@ -53,11 +53,12 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
     private let copyButton = NSButton(title: "Copy", target: nil, action: nil)
     private let saveButton = NSButton(title: "Save", target: nil, action: nil)
 
-    /// `save` writes the document (the app's `LibraryStore.saveEdits`); `copy` puts the current
-    /// render's PNG on the pasteboard and reports its own failure; `onClose` runs once the window has closed.
+    /// `save` writes the document (the app's `LibraryStore.saveEdits`); `copy` is handed a
+    /// closure that renders the current PNG, puts it on the pasteboard and reports any failure,
+    /// the render's included; `onClose` runs once the window has closed.
     public init(
         capture: LoadedCapture, save: @escaping (EditDocument) throws -> Void,
-        copy: @escaping (Data) -> Void, onClose: @escaping () -> Void
+        copy: @escaping (() throws -> Data) -> Void, onClose: @escaping () -> Void
     ) {
         self.capture = capture
         self.save = save
@@ -309,14 +310,11 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
 
     @objc func copyPressed() {
         canvas.endText()
-        do {
-            let image = Renderer.render(model.original, edits: model.document).image
-            copy(try PNGCodec.encode(image, scale: model.document.scale))
-        } catch {
-            let alert = NSAlert()
-            alert.messageText = "Couldn't copy \(capture.primary.lastPathComponent)"
-            alert.informativeText = error.localizedDescription
-            alert.runModal()
+        let original = model.original
+        let document = model.document
+        copy {
+            let image = Renderer.render(original, edits: document).image
+            return try PNGCodec.encode(image, scale: document.scale)
         }
     }
 
