@@ -86,3 +86,14 @@ public struct PixelBuffer: Equatable, Sendable {
             bytesPerRow: width * 4, space: colorSpace, bitmapInfo: bitmapInfo.rawValue)!
     }
 }
+
+/// Converts top-left image coordinates to CoreGraphics' bottom-left space for a canvas of `height`.
+struct CanvasFlip {
+    let height: Int
+
+    func point(_ p: CGPoint) -> CGPoint { CGPoint(x: p.x, y: CGFloat(height) - p.y) }
+
+    func rect(_ r: CGRect) -> CGRect {
+        CGRect(x: r.minX, y: CGFloat(height) - r.maxY, width: r.width, height: r.height)
+    }
+}
