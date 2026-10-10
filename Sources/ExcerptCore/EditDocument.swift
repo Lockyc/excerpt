@@ -79,14 +79,15 @@ public struct EditDocument: Codable, Equatable, Sendable {
         case salt
     }
 
-    /// Version 1 documents have no `crop` or `annotations` keys; they read as none.
+    /// Version 1 documents have no `crop`, `annotations` or `salt` keys; the first two read as none and the salt is drawn at random.
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         scale = try container.decode(Double.self, forKey: .scale)
         cuts = try container.decode([Cut].self, forKey: .cuts)
         crop = try container.decodeIfPresent(PixelRect.self, forKey: .crop)
         annotations = try container.decodeIfPresent([Annotation].self, forKey: .annotations) ?? []
-        salt = try container.decodeIfPresent(UInt64.self, forKey: .salt) ?? 0
+        salt =
+            try container.decodeIfPresent(UInt64.self, forKey: .salt) ?? .random(in: .min ... .max)
     }
 
     /// Always writes `currentVersion`: whatever was read is now in this build's shape.

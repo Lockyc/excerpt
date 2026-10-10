@@ -62,7 +62,11 @@ import Testing
         #expect(
             doc
                 == EditDocument(
-                    scale: 2, cuts: [Cut(axis: .horizontal, lower: 10, upper: 90)], salt: 0))
+                    scale: 2, cuts: [Cut(axis: .horizontal, lower: 10, upper: 90)],
+                    salt: doc.salt))
+        // A missing salt is random, not a public seed, and persists once saved.
+        #expect(try EditDocument.decode(json).salt != doc.salt)
+        #expect(try EditDocument.decode(doc.encoded()).salt == doc.salt)
         #expect(String(decoding: try doc.encoded(), as: UTF8.self).contains("\"version\":2"))
     }
 
