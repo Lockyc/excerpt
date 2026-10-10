@@ -31,7 +31,8 @@ public enum StitchMatcher {
     public static func match(
         _ previous: PixelBuffer, _ next: PixelBuffer, ignoringRightColumns ignored: Int
     ) -> FrameMatch {
-        guard previous.width == next.width, previous.height == next.height, previous.height > 0
+        guard previous.width == next.width, previous.height == next.height, previous.width > 0,
+            previous.height > 0
         else { return .uncertain }
         let height = previous.height
         let width = previous.width - min(max(0, ignored), previous.width - 1)
@@ -42,7 +43,9 @@ public enum StitchMatcher {
         let wholePrevious = RowSignatures(previous, columns: 0..<width)
         let wholeNext = RowSignatures(next, columns: 0..<width)
         let stillScore = score(
-            wholePrevious, wholeNext, previousStart: 0, nextStart: 0, count: height)
+            wholePrevious, wholeNext, previousStart: 0, nextStart: 0, count: height,
+            previousUnique: uniqueRows(wholePrevious, in: 0..<height),
+            nextUnique: uniqueRows(wholeNext, in: 0..<height))
 
         // Moved: only the columns that changed (a static sidebar beside a scrolling pane says
         // nothing about the offset), and only the rows between the sticky bars.
@@ -57,6 +60,9 @@ public enum StitchMatcher {
             footer += 1
         }
         let content = height - header - footer
+        let contentRows = header..<(header + content)
+        let uniqueA = uniqueRows(a, in: contentRows)
+        let uniqueB = uniqueRows(b, in: contentRows)
         var best: (offset: Int, score: Double)?
         var runnerUp = -1.0
         if content > 1 {
@@ -64,7 +70,7 @@ public enum StitchMatcher {
                 guard
                     let s = score(
                         a, b, previousStart: header + offset, nextStart: header,
-                        count: content - offset)
+                        count: content - offset, previousUnique: uniqueA, nextUnique: uniqueB)
                 else { continue }
                 if let current = best, s <= current.score {
                     runnerUp = max(runnerUp, s)
@@ -81,7 +87,10 @@ public enum StitchMatcher {
             return .still
         }
         guard let best, best.score >= confidenceThreshold, runnerUp < best.score - ambiguityMargin
-        else { return .uncertain }
+        else {
+            return isCaretSized(span, rows: changedRows(wholePrevious, wholeNext), of: previous)
+                ? .still : .uncertain
+        }
         return .moved(offset: best.offset, header: header, footer: footer)
     }
 
@@ -89,30 +98,60 @@ public enum StitchMatcher {
     /// row `nextStart + i`; nil when fewer than `minimumEvidenceRows` pairs are evidence.
     static func score(
         _ previous: RowSignatures, _ next: RowSignatures, previousStart: Int, nextStart: Int,
-        count: Int
+        count: Int, previousUnique: [Bool], nextUnique: [Bool]
     ) -> Double? {
         let (matches, evidence) = counts(
-            previous, next, previousStart: previousStart, nextStart: nextStart, count: count)
+            previous, next, previousStart: previousStart, nextStart: nextStart, count: count,
+            previousUnique: previousUnique, nextUnique: nextUnique)
         guard evidence >= minimumEvidenceRows else { return nil }
         return Double(matches) / Double(evidence)
     }
 
-    /// Matching pairs and evidence pairs. Two identical blank rows are not evidence.
+    /// Matching pairs and evidence pairs. A row is evidence only if its signature is unique within
+    /// its frame's span: blank rows and rows that repeat match at many offsets, so they can't pin
+    /// one.
     static func counts(
         _ previous: RowSignatures, _ next: RowSignatures, previousStart: Int, nextStart: Int,
-        count: Int
+        count: Int, previousUnique: [Bool], nextUnique: [Bool]
     ) -> (matches: Int, evidence: Int) {
         var matches = 0
         var evidence = 0
         for i in 0..<count {
             let p = previousStart + i
             let n = nextStart + i
+            guard previousUnique[p], nextUnique[n] else { continue }
             let same = previous.hashes[p] == next.hashes[n]
             if same && previous.uniform[p] && next.uniform[n] { continue }
             evidence += 1
             if same { matches += 1 }
         }
         return (matches, evidence)
+    }
+
+    /// Which rows of `rows` have a signature no other row of `rows` shares; rows outside it are
+    /// false.
+    static func uniqueRows(_ signatures: RowSignatures, in rows: Range<Int>) -> [Bool] {
+        var seen: [UInt64: Int] = [:]
+        for y in rows { seen[signatures.hashes[y], default: 0] += 1 }
+        var unique = [Bool](repeating: false, count: signatures.hashes.count)
+        for y in rows { unique[y] = seen[signatures.hashes[y]] == 1 }
+        return unique
+    }
+
+    /// The rows from the first to the last whose signatures differ; empty when none do.
+    static func changedRows(_ a: RowSignatures, _ b: RowSignatures) -> Range<Int> {
+        let changed = a.hashes.indices.filter { a.hashes[$0] != b.hashes[$0] }
+        guard let first = changed.first, let last = changed.last else { return 0..<0 }
+        return first..<(last + 1)
+    }
+
+    /// Whether the change fits a blinking caret: confined to a narrow patch under half a percent
+    /// of the frame. A frame too blank to score still shows the caret and nothing more.
+    static func isCaretSized(_ columns: Range<Int>, rows: Range<Int>, of frame: PixelBuffer)
+        -> Bool
+    {
+        columns.count * 4 <= frame.width
+            && Double(columns.count * rows.count) <= 0.005 * Double(frame.width * frame.height)
     }
 
     /// The span from the leftmost to the rightmost column (below `width`) where the frames

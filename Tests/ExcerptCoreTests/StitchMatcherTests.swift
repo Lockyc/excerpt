@@ -98,13 +98,76 @@ import Testing
         #expect(
             offset(StitchMatcher.match(a, b, ignoringRightColumns: 0)) == 120)
         // Counting matching rows instead of their share would pick the offset one field short:
-        // its overlap is 40 rows longer and its box rows all match.
+        // its overlap is 40 rows longer and its box rows all match. Box rows repeat in every
+        // field, so they are no evidence: only the unique label rows count, and both offsets
+        // are scored on those alone.
         let sa = RowSignatures(a, columns: 0..<90)
         let sb = RowSignatures(b, columns: 0..<90)
-        let truth = StitchMatcher.counts(sa, sb, previousStart: 120, nextStart: 0, count: 80)
-        let alias = StitchMatcher.counts(sa, sb, previousStart: 80, nextStart: 0, count: 120)
-        #expect(alias.matches > truth.matches)
+        let ua = StitchMatcher.uniqueRows(sa, in: 0..<200)
+        let ub = StitchMatcher.uniqueRows(sb, in: 0..<200)
+        let truth = StitchMatcher.counts(
+            sa, sb, previousStart: 120, nextStart: 0, count: 80, previousUnique: ua,
+            nextUnique: ub)
+        let alias = StitchMatcher.counts(
+            sa, sb, previousStart: 80, nextStart: 0, count: 120, previousUnique: ua,
+            nextUnique: ub)
         #expect(truth.matches == truth.evidence)
+        #expect(alias.matches < alias.evidence)
+    }
+
+    @Test func cardsMovedMoreThanAFrameAreUncertain() {
+        // Only an alias one card away overlaps, and its box rows all match: repeated rows can't
+        // pin an offset, so no seam is guessed.
+        let cards = ScrollFixtures.form(width: 90, height: 1500, period: 150)
+        let a = ScrollFixtures.frame(cards, offset: 0, viewport: 200)
+        let b = ScrollFixtures.frame(cards, offset: 315, viewport: 200)
+        #expect(StitchMatcher.match(a, b, ignoringRightColumns: 0) == .uncertain)
+    }
+
+    @Test func zeroWidthFramesAreUncertain() {
+        let empty = PixelBuffer(width: 0, height: 5, bytes: [])
+        #expect(StitchMatcher.match(empty, empty, ignoringRightColumns: 0) == .uncertain)
+    }
+
+    @Test func aCaretBlinkingOnABlankPageIsStill() {
+        let blank = ScrollFixtures.paint(width: 90, height: 200) { _, _ in ScrollFixtures.paper }
+        let caret = ScrollFixtures.paint(width: 90, height: 200) { x, y in
+            (20..<22).contains(x) && (50..<66).contains(y)
+                ? ScrollFixtures.ink : ScrollFixtures.paper
+        }
+        #expect(StitchMatcher.match(blank, caret, ignoringRightColumns: 0) == .still)
+    }
+
+    @Test func aSmallMoveOnASparsePageIsNeverStill() {
+        func lines(shift: Int) -> PixelBuffer {
+            ScrollFixtures.paint(width: 90, height: 200) { x, y in
+                [40, 80, 120].contains { (y - shift) >= $0 && (y - shift) < $0 + 2 }
+                    && x >= 4 && x < 86 ? ScrollFixtures.ink : ScrollFixtures.paper
+            }
+        }
+        #expect(
+            StitchMatcher.match(lines(shift: 0), lines(shift: -2), ignoringRightColumns: 0)
+                != .still)
+    }
+
+    @Test func aTrueOverlapWithTooFewEvidenceRowsIsUncertain() {
+        // 5 rows overlap: fewer than the 8 evidence rows a move needs.
+        #expect(StitchMatcher.match(frame(0), frame(195), ignoringRightColumns: 0) == .uncertain)
+    }
+
+    @Test func stillWinsANearTieAgainstAScoredMove() {
+        // A 12-row pane scrolls by 2 inside a static 1000-row page: the move scores 1.0, the
+        // page scores 0.988; within the margin, so no seam.
+        let base = ScrollFixtures.page(width: 90, height: 1000)
+        let pane = ScrollFixtures.page(width: 90, height: 40, seed: 5)
+        func frame(_ offset: Int) -> PixelBuffer {
+            ScrollFixtures.stack([
+                ScrollFixtures.rows(base, 0..<494),
+                ScrollFixtures.rows(pane, offset..<(offset + 12)),
+                ScrollFixtures.rows(base, 506..<1000),
+            ])
+        }
+        #expect(StitchMatcher.match(frame(0), frame(2), ignoringRightColumns: 0) == .still)
     }
 
     @Test func rowsThatRepeatWithNothingUniqueAreUncertain() {
