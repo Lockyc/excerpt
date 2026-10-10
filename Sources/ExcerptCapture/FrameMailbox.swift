@@ -8,8 +8,6 @@ public protocol FrameSource: AnyObject {
     /// frame arrived — an unchanged screen. Throws once the stream has failed or stopped, and
     /// when the waiting task is cancelled; a dead stream never reads as an unchanged screen.
     func nextFrame(timeout: Duration) async throws -> PixelBuffer?
-    /// Drops any frame waiting to be read, so the next read is newer than this call.
-    func discardWaiting()
 }
 
 /// Hands frames from a stream to one reader at a time. Keeps only the newest unread frame: a
@@ -86,8 +84,6 @@ public final class FrameMailbox: FrameSource {
             }
         }
     }
-
-    public func discardWaiting() { waiting = nil }
 
     private func resume(_ id: Int, with result: Result<PixelBuffer?, Error>) {
         guard id == readerID, let reader else { return }

@@ -68,8 +68,46 @@ final class FakePage: FrameSource, Scroller {
         onIdle?()
         return nil
     }
+}
 
-    func discardWaiting() {}
+/// A page that animates each scroll step for longer than the settle: 70% of the step shows within
+/// the settle, and the frame at the step's end arrives after it, waiting to be read.
+@MainActor
+final class AnimatedPage: FrameSource, Scroller {
+    let page: PixelBuffer
+    let viewport: Int
+    var offset = 0
+    var blocker: ManualReason?
+    var scrolls = 0
+    /// Reads in order; empty reads as a timeout.
+    private var reads: [PixelBuffer?]
+    /// The step's end frame, delivered once the settle has run out.
+    private var late: PixelBuffer?
+
+    init(page: PixelBuffer, viewport: Int) {
+        self.page = page
+        self.viewport = viewport
+        reads = [ScrollFixtures.frame(page, offset: 0, viewport: viewport)]
+    }
+
+    func scroll(points: Double) -> Bool {
+        scrolls += 1
+        if let late { reads.append(late) }
+        late = nil
+        let target = min(offset + Int(points), page.height - viewport)
+        if target != offset {
+            let mid = offset + (target - offset) * 7 / 10
+            reads += [ScrollFixtures.frame(page, offset: mid, viewport: viewport), nil]
+            late = ScrollFixtures.frame(page, offset: target, viewport: viewport)
+            offset = target
+        }
+        return true
+    }
+
+    func nextFrame(timeout: Duration) async throws -> PixelBuffer? {
+        reads.isEmpty ? nil : reads.removeFirst()
+    }
+
 }
 
 @MainActor
@@ -268,6 +306,17 @@ final class FakePage: FrameSource, Scroller {
         #expect(phases.contains(.manual(.unexpectedTravel)))
     }
 
+    @Test func aStepThatAnimatesPastTheSettleStillReachesTheEnd() async {
+        let fake = AnimatedPage(page: page, viewport: 200)
+        let capture = ScrollCapture(source: fake, scroller: fake, stepPoints: 120, scale: 1)
+        var phases: [ScrollPhase] = []
+        capture.onChange = { phases.append($0.phase) }
+        let image = saved(await capture.run())
+        #expect(image?.height == page.height)
+        #expect(image == page)
+        #expect(phases.last == .finished)
+    }
+
     @Test func returnMidScrollSavesWhatIsStitched() async {
         let fake = FakePage(page: page, viewport: 200)
         let capture = ScrollCapture(source: fake, scroller: fake, stepPoints: 120, scale: 1)
@@ -371,7 +420,6 @@ final class ScriptedSource: FrameSource {
     func nextFrame(timeout: Duration) async throws -> PixelBuffer? {
         reads.isEmpty ? nil : reads.removeFirst()
     }
-    func discardWaiting() {}
 }
 
 @MainActor
@@ -402,7 +450,6 @@ final class ScriptedSource: FrameSource {
     @Test func aFailingStreamIsNeverReadAsNothingChanged() async {
         final class Broken: FrameSource {
             func nextFrame(timeout: Duration) async throws -> PixelBuffer? { throw StreamBroke() }
-            func discardWaiting() {}
         }
         let fake = FakePage(page: a, viewport: 4)
         let capture = ScrollCapture(source: Broken(), scroller: fake, stepPoints: 1, scale: 1)

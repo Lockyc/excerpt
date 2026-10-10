@@ -81,15 +81,6 @@ final class ManualTimers {
         #expect(try await second.value == b)
     }
 
-    @Test func discardedFramesAreNotRead() async throws {
-        let mailbox = makeMailbox()
-        mailbox.deliver(a)
-        mailbox.discardWaiting()
-        let read = await startRead(mailbox, timersStarted: 1)
-        timers.fire(0)
-        #expect(try await read.value == nil)
-    }
-
     @Test func aFailureWhileWaitingEndsTheWaitAndEveryLaterRead() async throws {
         let mailbox = makeMailbox()
         let read = await startRead(mailbox, timersStarted: 1)

@@ -131,7 +131,6 @@ public final class ScrollCapture {
                     if let blocker = scroller.blocker {
                         session.fallBack(blocker)
                     } else {
-                        source.discardWaiting()
                         if scroller.scroll(points: stepPoints) {
                             latest = try await settledFrame(after: latest)
                             session.stepped(latest, travel: travel)
@@ -163,7 +162,9 @@ public final class ScrollCapture {
     }
 
     /// The frame once the page has settled after a step: two identical frames in a row, or the
-    /// newest frame when `settleTime` runs out. No frame at all means nothing on screen changed:
+    /// newest frame when `settleTime` runs out. The first read is any frame that arrived since
+    /// the last one read: where a step that moved for longer than `settleTime` came to rest, so
+    /// the stitch catches up with it. No frame at all means nothing on screen changed:
     /// `previous` again. A failing stream throws.
     func settledFrame(after previous: PixelBuffer) async throws -> PixelBuffer {
         let clock = ContinuousClock()

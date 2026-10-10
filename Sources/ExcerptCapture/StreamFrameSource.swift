@@ -75,8 +75,6 @@ public final class StreamFrameSource: FrameSource {
     public func nextFrame(timeout: Duration) async throws -> PixelBuffer? {
         try await mailbox.nextFrame(timeout: timeout)
     }
-
-    public func discardWaiting() { mailbox.discardWaiting() }
 }
 
 /// The stream's callbacks, on its own queue: converts each frame there, then hands it to the
