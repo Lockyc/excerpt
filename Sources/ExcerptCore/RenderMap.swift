@@ -34,13 +34,16 @@ public struct RenderMap: Equatable, Sendable {
     }
 
     /// The rendered rect of `r`: leading edges inside a removed band start after its gap,
-    /// trailing edges end before it. nil when `r` is hidden by a cut.
+    /// trailing edges end before it. nil when `r` is hidden by a cut, or when a span with extent
+    /// collapses to none (a shape wholly off the image beside an edge band), which a stroke
+    /// would otherwise draw as a hairline on the seam.
     public func rect(_ r: CGRect) -> CGRect? {
         guard !isHidden(r) else { return nil }
         let x0 = columns.place(Double(r.minX) - Double(crop.x), bias: .after)
         let x1 = columns.place(Double(r.maxX) - Double(crop.x), bias: .before)
         let y0 = rows.place(Double(r.minY) - Double(crop.y), bias: .after)
         let y1 = rows.place(Double(r.maxY) - Double(crop.y), bias: .before)
+        if (r.width > 0 && x1 <= x0) || (r.height > 0 && y1 <= y0) { return nil }
         return CGRect(x: x0, y: y0, width: max(0, x1 - x0), height: max(0, y1 - y0))
     }
 

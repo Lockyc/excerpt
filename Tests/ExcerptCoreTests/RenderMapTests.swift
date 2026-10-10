@@ -54,6 +54,17 @@ import Testing
                 == CGRect(x: 10, y: 10, width: 30, height: 10))
     }
 
+    @Test func aShapeWhollyOffAnEdgeBesideABandCollapsesToNothing() {
+        let m = RenderMap(
+            crop: PixelRect(x: 10, y: 20, width: 180, height: 260),
+            rows: AxisMap(extent: 260, bands: [0..<30], gap: 10),
+            columns: AxisMap(extent: 180, bands: [], gap: 10))
+        // Original y 5..<15 lies above the crop, past the band's edge.
+        #expect(m.rect(CGRect(x: 20, y: 5, width: 30, height: 10)) == nil)
+        // A zero-height input (a line) is not mistaken for a collapse.
+        #expect(m.rect(CGRect(x: 20, y: 100, width: 30, height: 0)) != nil)
+    }
+
     @Test func aCropEntirelyInsideABandHidesEverything() {
         let m = RenderMap(
             crop: PixelRect(x: 0, y: 100, width: 50, height: 40),
