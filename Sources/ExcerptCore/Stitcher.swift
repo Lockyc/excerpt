@@ -55,12 +55,16 @@ public struct Stitcher: Sendable {
             // the new frame's rows run from where the stitch's content ends to its footer.
             let firstNew = frameHeight - tail - offset
             let count = tail + offset - footer
-            guard firstNew >= 0, count > 0 else { return .noMovement }
+            // Rows the tail footer hid that the frame doesn't reach: a gap, never a silent hole.
+            guard firstNew >= 0 else { return .uncertain }
+            // The page moved but a grown footer covers every new row: movement with nothing to
+            // add, so a session counting `.noMovement` as the end of the page doesn't stop.
+            guard count > 0 else { return .appended(rows: 0) }
             let base = height - tail
             if base + count + footer > maximumHeight {
                 // Out of room: keep the stitch contiguous, with no footer after cut-off content.
                 bytes.removeLast(tail * rowBytes)
-                let rows = max(0, maximumHeight - base)
+                let rows = min(max(0, maximumHeight - base), count)
                 bytes.append(
                     contentsOf: frame.bytes[(firstNew * rowBytes)..<((firstNew + rows) * rowBytes)])
                 height = base + rows

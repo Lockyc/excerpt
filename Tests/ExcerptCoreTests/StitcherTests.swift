@@ -195,4 +195,28 @@ import Testing
         #expect(stitcher.bottom(rows: 0) == ScrollFixtures.rows(page, 199..<200))
         #expect(stitcher.bottom(rows: -3) == ScrollFixtures.rows(page, 199..<200))
     }
+
+    @Test func aMoveThatSkipsRowsTheFooterHidIsUncertain() {
+        let page = ScrollFixtures.page(width: 90, height: 1000)
+        var stitcher = Stitcher(first: footerFrame(page, offset: 0, footer: 30), scale: 1)
+        _ = stitcher.add(footerFrame(page, offset: 120, footer: 30))
+        let before = stitcher.image
+        // 175 rows on with the footer gone: the 30 rows it hid start 5 rows past this frame.
+        #expect(stitcher.add(footerFrame(page, offset: 295, footer: 0)) == .uncertain)
+        #expect(stitcher.image == before)
+    }
+
+    @Test func aGrownFooterCoveringTheNewRowsStillCountsAsMovement() {
+        // The page is blank in the footer's colour just above where the footer grows, so the
+        // matcher sees a 30-row footer after the 10-row one.
+        let plain = ScrollFixtures.page(width: 90, height: 1000)
+        let page = ScrollFixtures.stack([
+            ScrollFixtures.rows(plain, 0..<290), solid(20), ScrollFixtures.rows(plain, 310..<1000),
+        ])
+        var stitcher = Stitcher(first: footerFrame(page, offset: 0, footer: 10), scale: 1)
+        _ = stitcher.add(footerFrame(page, offset: 120, footer: 10))
+        let before = stitcher.image
+        #expect(stitcher.add(footerFrame(page, offset: 130, footer: 30)) == .appended(rows: 0))
+        #expect(stitcher.image == before)
+    }
 }
