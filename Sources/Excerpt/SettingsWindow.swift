@@ -31,6 +31,7 @@ final class SettingsWindowController {
     }
 
     func show() {
+        hotKeys.clearRefusals()
         hotKeys.refresh()
         if hosting == nil {
             let hosting = NSHostingController(
@@ -97,22 +98,30 @@ final class HotKeyModel: ObservableObject {
     }
 
     func stopRecording() {
+        if endRecording() != nil { controls.resume() }
+        refresh()
+    }
+
+    /// Stops listening for the press; the action that was being recorded, if any. Leaves the
+    /// hotkeys unregistered for the caller to bring back.
+    private func endRecording() -> HotKeyAction? {
         if let monitor { NSEvent.removeMonitor(monitor) }
         monitor = nil
         if let resignObserver { NotificationCenter.default.removeObserver(resignObserver) }
         resignObserver = nil
-        if recording != nil {
-            recording = nil
-            controls.resume()
-        }
-        refresh()
+        defer { recording = nil }
+        return recording
     }
 
+    /// A kept press registers every hotkey as it is saved; Esc or a refusal brings the old ones
+    /// back.
     private func recorded(_ event: NSEvent) {
-        guard let action = recording else { return }
-        stopRecording()
-        guard Int(event.keyCode) != kVK_Escape else { return }
-        apply(HotKeyBinding(keyCode: event.keyCode, flags: event.modifierFlags), to: action)
+        guard let action = endRecording() else { return }
+        let kept =
+            Int(event.keyCode) != kVK_Escape
+            && apply(HotKeyBinding(keyCode: event.keyCode, flags: event.modifierFlags), to: action)
+        if !kept { controls.resume() }
+        refresh()
     }
 
     func clear(_ action: HotKeyAction) {
@@ -125,9 +134,13 @@ final class HotKeyModel: ObservableObject {
         apply(action.defaultBinding, to: action)
     }
 
+    /// Drops every refusal, which describes bindings as they stood when it was made.
+    func clearRefusals() { refusals = [:] }
+
     /// Makes `candidate` `action`'s hotkey if the rules keep it, else leaves the binding and
-    /// says why under the row. The default is stored as no override.
-    private func apply(_ candidate: HotKeyBinding?, to action: HotKeyAction) {
+    /// says why under the row. The default is stored as no override. True when kept.
+    @discardableResult
+    private func apply(_ candidate: HotKeyBinding?, to action: HotKeyAction) -> Bool {
         let bindings = Dictionary(
             states.map { ($0.key.title, $0.value.binding) }, uniquingKeysWith: { first, _ in first }
         )
@@ -136,15 +149,16 @@ final class HotKeyModel: ObservableObject {
             reserved: HotKeyAction.editorShortcuts, system: HotKeyCenter.symbolicHotKeys())
         guard verdict.keeps else {
             refusals[action] = candidate.flatMap { verdict.message(for: $0) }
-            return
+            return false
         }
-        refusals[action] = nil
+        clearRefusals()
         if candidate == action.defaultBinding {
             controls.reset(action)
         } else {
             controls.set(action, candidate)
         }
         refresh()
+        return true
     }
 
     /// Whether `action` has its default hotkey (or, with no default, none).
@@ -267,7 +281,7 @@ struct SettingsView: View {
                             : "Use \(action.defaultBinding?.display ?? "no hotkey")")
             }
         }
-        if let message = hotKeys.refusals[action] ?? state?.note {
+        ForEach([hotKeys.refusals[action], state?.note].compactMap { $0 }, id: \.self) { message in
             Text(message).font(.caption).foregroundStyle(.orange)
         }
     }
