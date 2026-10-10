@@ -6,6 +6,9 @@ public enum EditDocumentError: Error, Equatable {
     case unsupportedVersion(Int)
     /// A scale that is not a finite, positive pixels-per-point value would trap label formatting.
     case invalidScale(Double)
+    /// A crop, annotation coordinate or annotation id outside `EditDocument.coordinateLimit` or
+    /// `EditDocument.idLimit`, or an id used twice.
+    case invalidGeometry
 }
 
 /// A rectangle of whole original pixels, top-left origin.
@@ -28,8 +31,11 @@ public struct PixelRect: Codable, Hashable, Sendable {
     public func clamped(width imageWidth: Int, height imageHeight: Int) -> PixelRect? {
         let left = max(0, x)
         let top = max(0, y)
-        let right = min(imageWidth, x + width)
-        let bottom = min(imageHeight, y + height)
+        let (farX, overflowX) = x.addingReportingOverflow(width)
+        let (farY, overflowY) = y.addingReportingOverflow(height)
+        guard !overflowX, !overflowY else { return nil }
+        let right = min(imageWidth, farX)
+        let bottom = min(imageHeight, farY)
         guard right > left, bottom > top else { return nil }
         return PixelRect(x: left, y: top, width: right - left, height: bottom - top)
     }
@@ -87,7 +93,48 @@ public struct EditDocument: Codable, Equatable, Sendable {
     public var isEmpty: Bool { cuts.isEmpty && crop == nil && annotations.isEmpty }
 
     /// An id no annotation in this document has.
-    public var nextAnnotationID: Int { (annotations.map(\.id).max() ?? 0) + 1 }
+    public var nextAnnotationID: Int {
+        let highest = annotations.map(\.id).max() ?? 0
+        return highest == Int.max ? highest : highest + 1
+    }
+
+    /// The largest magnitude, in original pixels, any stored coordinate or size may have.
+    public static let coordinateLimit = 1_000_000.0
+    /// Annotation ids are in `0..<idLimit`, which keeps `nextAnnotationID` clear of overflow.
+    public static let idLimit = Int.max / 2
+
+    /// Throws `invalidGeometry` unless every stored coordinate, size and id is in range.
+    private func validateGeometry() throws {
+        let limit = Self.coordinateLimit
+        func inRange(_ values: CGFloat...) -> Bool {
+            values.allSatisfy { $0.isFinite && abs(Double($0)) <= limit }
+        }
+        func rectOK(_ r: CGRect) -> Bool {
+            inRange(r.origin.x, r.origin.y, r.size.width, r.size.height)
+                && r.size.width >= 0 && r.size.height >= 0
+        }
+        if let crop {
+            let ok = [crop.x, crop.y, crop.width, crop.height].allSatisfy {
+                abs(Double($0)) <= limit
+            }
+            guard ok, crop.width > 0, crop.height > 0 else {
+                throw EditDocumentError.invalidGeometry
+            }
+        }
+        var seen = Set<Int>()
+        for note in annotations {
+            guard (0..<Self.idLimit).contains(note.id), seen.insert(note.id).inserted else {
+                throw EditDocumentError.invalidGeometry
+            }
+            let ok: Bool
+            switch note.shape {
+            case .arrow(let tail, let head): ok = inRange(tail.x, tail.y, head.x, head.y)
+            case .text(let origin, _): ok = inRange(origin.x, origin.y)
+            case .rectangle(let r), .highlight(let r), .blur(let r): ok = rectOK(r)
+            }
+            guard ok else { throw EditDocumentError.invalidGeometry }
+        }
+    }
 
     public func encoded() throws -> Data {
         let encoder = JSONEncoder()
@@ -105,6 +152,7 @@ public struct EditDocument: Codable, Equatable, Sendable {
         guard document.scale.isFinite, document.scale > 0 else {
             throw EditDocumentError.invalidScale(document.scale)
         }
+        try document.validateGeometry()
         return document
     }
 }

@@ -96,3 +96,55 @@ import Testing
         #expect(PixelRect(x: 0, y: 0, width: 0, height: 10).clamped(width: 30, height: 30) == nil)
     }
 }
+
+@Suite struct EditDocumentGeometryTests {
+    private func rejects(_ body: String) {
+        let json = Data(#"{"version":2,"scale":2,"cuts":[],\#(body)}"#.utf8)
+        #expect(throws: EditDocumentError.invalidGeometry) { try EditDocument.decode(json) }
+    }
+
+    private func note(_ id: Int, _ shape: String) -> String {
+        #"{"id":\#(id),"shape":\#(shape),"color":"red","width":"thin"}"#
+    }
+
+    @Test func rejectsAnOverflowingCrop() {
+        rejects(#""crop":{"x":9223372036854775807,"y":0,"width":10,"height":10}"#)
+    }
+
+    @Test func rejectsAnEmptyOrNegativeCrop() {
+        rejects(#""crop":{"x":0,"y":0,"width":0,"height":10}"#)
+        rejects(#""crop":{"x":0,"y":0,"width":10,"height":-5}"#)
+    }
+
+    @Test func rejectsHugeOrNonFiniteAnnotationGeometry() {
+        let huge = #"{"blur":{"rect":[[0,0],[1e12,5]]}}"#
+        rejects(#""annotations":[\#(note(1, huge))]"#)
+        let negative = #"{"blur":{"rect":[[0,0],[-5,5]]}}"#
+        rejects(#""annotations":[\#(note(1, negative))]"#)
+        let arrow = #"{"arrow":{"tail":[0,0],"head":[1e999,0]}}"#
+        let json = Data(
+            #"{"version":2,"scale":2,"cuts":[],"annotations":[\#(note(1, arrow))]}"#.utf8)
+        #expect(throws: (any Error).self) { try EditDocument.decode(json) }
+    }
+
+    @Test func rejectsDuplicateAndHugeIDs() {
+        let shape = #"{"text":{"origin":[0,0],"string":"a"}}"#
+        rejects(#""annotations":[\#(note(1, shape)),\#(note(1, shape))]"#)
+        rejects(#""annotations":[\#(note(9_223_372_036_854_775_807, shape))]"#)
+        rejects(#""annotations":[\#(note(-1, shape))]"#)
+    }
+
+    @Test func clampedSurvivesExtremeValues() {
+        let r = PixelRect(x: Int.max, y: 0, width: 10, height: 10)
+        #expect(r.clamped(width: 30, height: 30) == nil)
+        #expect(
+            PixelRect(x: Int.min, y: 0, width: Int.max, height: 5).clamped(width: 30, height: 30)
+                == nil)
+    }
+
+    @Test func nextAnnotationIDDoesNotTrap() {
+        let doc = EditDocument(
+            scale: 1, annotations: [Annotation(id: Int.max, shape: .blur(rect: .zero))])
+        #expect(doc.nextAnnotationID == Int.max)
+    }
+}
