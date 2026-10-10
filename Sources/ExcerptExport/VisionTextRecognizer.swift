@@ -8,6 +8,7 @@ public struct VisionTextRecognizer: TextRecognizer {
     public init() {}
 
     public func recognize(_ image: CGImage) throws -> [RecognizedText] {
+        // The request revision is the OS default on purpose: current accuracy.
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = .accurate
         request.usesLanguageCorrection = false

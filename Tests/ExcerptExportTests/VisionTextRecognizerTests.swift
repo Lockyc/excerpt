@@ -21,6 +21,13 @@ import Testing
                 "Quarterly revenue report", "Northwind Traders 4821", "Password hunter2 swordfish",
                 "Totals carried forward",
             ], width: 420)
+        // Positive control: unblurred, the secret line is read, so its absence below is the blur's
+        // doing and not a font or model miss.
+        let plain = Renderer.render(image, edits: EditDocument(scale: 2, annotations: [], salt: 7))
+        let plainText = try CaptureText.read(
+            plain.image, map: plain.map, scale: 2, recognizer: VisionTextRecognizer())
+        #expect(plainText.contains("hunter2"))
+        #expect(plainText.contains("swordfish"))
         let edits = EditDocument(
             scale: 2,
             annotations: [
