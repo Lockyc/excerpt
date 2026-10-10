@@ -89,8 +89,8 @@ menu and Settings, never failed silently.
 - **Fullscreen:** the display under the cursor.
 - Desktop icons and excerpt's own windows are excluded through the `SCContentFilter`.
 - **After every capture** the file is saved, copied to the clipboard, and shown as a large
-  thumbnail (Copy · Edit · For Claude · Close, draggable) that closes 15s after the pointer
-  leaves it, or on drag-out. Shutter sound on.
+  thumbnail (Copy · Edit · For Claude · Close, draggable) that closes after 15s (paused while
+  the pointer is over it), or on drag-out. Shutter sound on.
 
 ### Scrolling capture (vertical)
 

@@ -9,7 +9,7 @@ A macOS menu-bar screenshot tool in Swift (SwiftPM, macOS 15+). The architecture
 [docs/design.md](docs/design.md); what's next is [docs/roadmap.md](docs/roadmap.md) — start
 there before planning work.
 
-**State:** Phases 0–1 shipped (Core, capture shell). Next: Phase 2, the editor.
+**State:** Phase 0 (Core) shipped; Phase 1 (capture shell) built, real-app hand checks pending. Next: Phase 2, the editor.
 
 `just gate` per change; `just run` launches a signed build.
 

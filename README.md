@@ -17,7 +17,7 @@ read.
 
 | | |
 |---|---|
-| Capture | Area (frozen screen), window, fullscreen → library + clipboard + thumbnail |
+| Capture | Area (frozen screen), window, fullscreen → library + clipboard + thumbnail; hand checks pending |
 | Core | Cuts render as torn seams; edits round-trip through the master PNG |
 | Next | The editor and cut tool — see [docs/roadmap.md](docs/roadmap.md) |
 
