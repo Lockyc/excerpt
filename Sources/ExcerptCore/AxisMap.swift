@@ -14,6 +14,18 @@ public struct AxisMap: Equatable, Sendable {
         public let removed: Int
     }
 
+    /// Which edge of a gap a position inside a removed band lands on: `after` for the leading
+    /// edge of a shape (it starts where content resumes), `before` for its trailing edge,
+    /// `middle` for a lone point.
+    public enum Bias: Sendable {
+        case before
+        case after
+        case middle
+    }
+
+    public let extent: Int
+    /// The removed bands, normalised, in the order of `gaps`.
+    public let bands: [Range<Int>]
     public let segments: [Segment]
     public let gaps: [Gap]
     public let renderedLength: Int
@@ -37,6 +49,8 @@ public struct AxisMap: Equatable, Sendable {
             segments.append(Segment(source: source..<extent, destination: destination))
             destination += extent - source
         }
+        self.extent = extent
+        self.bands = bands
         self.segments = segments
         self.gaps = gaps
         self.renderedLength = destination
@@ -51,5 +65,47 @@ public struct AxisMap: Equatable, Sendable {
             return Double(segment.destination) + v - Double(segment.source.lowerBound)
         }
         return nil
+    }
+
+    /// The rendered position of any original position: a kept position maps as `map` does; one
+    /// inside a removed band lands on that band's gap at the edge `bias` names; one off the image
+    /// continues past the nearer edge, so a shape running off a crop is clipped, not dropped.
+    public func place(_ v: Double, bias: Bias) -> Double {
+        for (band, gap) in zip(bands, gaps) {
+            let lower = Double(band.lowerBound)
+            let upper = Double(band.upperBound)
+            switch bias {
+            case .after where v >= lower && v < upper: return Double(gap.destination.upperBound)
+            case .before where v > lower && v <= upper: return Double(gap.destination.lowerBound)
+            case .middle where v > lower && v < upper:
+                return Double(gap.destination.lowerBound + gap.destination.upperBound) / 2
+            default: continue
+            }
+        }
+        if let mapped = map(v) { return mapped }
+        return v <= 0 ? v : Double(renderedLength) + v - Double(extent)
+    }
+
+    /// The original position shown at rendered position `r`: through its segment when kept; the
+    /// nearer side of the removed band when `r` is on a gap; continued past the edge when off the
+    /// image.
+    public func unmap(_ r: Double) -> Double {
+        for segment in segments {
+            let start = Double(segment.destination)
+            if r >= start && r <= start + Double(segment.source.count) {
+                return Double(segment.source.lowerBound) + r - start
+            }
+        }
+        for (band, gap) in zip(bands, gaps)
+        where r >= Double(gap.destination.lowerBound) && r <= Double(gap.destination.upperBound) {
+            let middle = Double(gap.destination.lowerBound + gap.destination.upperBound) / 2
+            return Double(r < middle ? band.lowerBound : band.upperBound)
+        }
+        return r <= 0 ? r : Double(extent) + r - Double(renderedLength)
+    }
+
+    /// Whether `lower...upper` lies wholly inside one removed band.
+    public func isRemoved(_ lower: Double, _ upper: Double) -> Bool {
+        bands.contains { Double($0.lowerBound) <= lower && upper <= Double($0.upperBound) }
     }
 }
