@@ -20,6 +20,9 @@ public enum ManualReason: Equatable, Sendable {
     case pointerMoved
     /// A scroll event couldn't be made.
     case eventFailed
+    /// Before the page had moved by the distance posted, a step moved it much further or less
+    /// far: the app scales wheel events, so steps can't be checked against their travel.
+    case unexpectedTravel
 }
 
 public enum HaltReason: Equatable, Sendable {
@@ -48,7 +51,9 @@ public struct ScrollSession: Sendable {
     public static let stillStepsToStop = 2
     /// How far an auto step may move the page, as a share of the travel posted. Further is a
     /// false match: repeated content aliases a jump of more than a frame. Shorter is believed only
-    /// once the next step shows the page has ended there; otherwise it halts as uncertain.
+    /// once the next step shows the page has ended there. Either way, before any step has moved
+    /// the page within the band, the app is taken to scale wheel events and the user scrolls;
+    /// after one has, the capture halts as uncertain.
     public static let travelShare: ClosedRange<Double> = 0.25...1.5
 
     public private(set) var stitcher: Stitcher
@@ -86,7 +91,7 @@ public struct ScrollSession: Sendable {
             let after = StitchMatcher.match(
                 short, frame, ignoringRightColumns: stitcher.ignoredRightColumns)
             guard after == .still else {
-                phase = .halted(.uncertain)
+                offTravel()
                 return
             }
             // The page ended after the short step: it joins the stitch, and this frame is a still
@@ -96,16 +101,21 @@ public struct ScrollSession: Sendable {
             return
         }
         let expected = Double(travel)
-        let range =
-            Int(
-                (expected * Self.travelShare.lowerBound).rounded(.up))...Int(
-                (expected * Self.travelShare.upperBound).rounded(.down))
+        let shortest = Int((expected * Self.travelShare.lowerBound).rounded(.up))
+        let longest = Int((expected * Self.travelShare.upperBound).rounded(.down))
+        let range = shortest...longest
         let step = stitcher.add(frame, travel: range)
-        if case .unexpectedTravel(let offset) = step, offset < range.lowerBound {
-            shortStep = frame
+        if case .unexpectedTravel(let offset) = step {
+            if offset < range.lowerBound { shortStep = frame } else { offTravel() }
             return
         }
         record(step)
+    }
+
+    /// A step's travel can't be believed: the app scales wheel events if no step has moved the
+    /// page as posted, a false match if one has.
+    private mutating func offTravel() {
+        if moved { phase = .halted(.uncertain) } else { fallBack(.unexpectedTravel) }
     }
 
     private mutating func record(_ step: StitchStep) {
@@ -118,7 +128,8 @@ public struct ScrollSession: Sendable {
             if stillSteps >= Self.stillStepsToStop {
                 phase = moved ? .finished : .manual(.noMovement)
             }
-        case .uncertain, .unexpectedTravel: phase = .halted(.uncertain)
+        case .uncertain: phase = .halted(.uncertain)
+        case .unexpectedTravel: offTravel()
         case .reachedLimit: phase = .halted(.limit)
         }
     }
@@ -164,6 +175,8 @@ public struct ScrollSession: Sendable {
                 case .pointerMoved:
                     detail = "Move the pointer back over the region, or scroll it yourself"
                 case .eventFailed: detail = "Excerpt couldn't send scroll events"
+                case .unexpectedTravel:
+                    detail = "The page scrolled a different distance than Excerpt asked for"
                 }
             }
             return ScrollHUDText(

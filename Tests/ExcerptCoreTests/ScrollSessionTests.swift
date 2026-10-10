@@ -3,7 +3,7 @@ import Testing
 
 @testable import ExcerptCore
 
-@Suite struct ScrollSessionTests {
+@Suite(.timeLimit(.minutes(1))) struct ScrollSessionTests {
     let page = ScrollFixtures.page(width: 90, height: 1000)
 
     func frame(_ offset: Int) -> PixelBuffer {
@@ -188,11 +188,22 @@ import Testing
         #expect(s.phase == .auto)
     }
 
-    @Test func aStepFarBeyondTheExpectedTravelHalts() {
+    @Test func aStepFarBeyondTheExpectedTravelAfterMovingHalts() {
+        var s = session()
+        s.stepped(frame(100), travel: 100)
+        s.stepped(frame(260), travel: 100)
+        #expect(s.phase == .halted(.uncertain))
+        #expect(s.stitcher.height == 300)
+    }
+
+    @Test func aPageThatScrollsFurtherThanPostedFromTheStartHandsOver() {
         var s = session()
         s.stepped(frame(160), travel: 100)
-        #expect(s.phase == .halted(.uncertain))
+        #expect(s.phase == .manual(.unexpectedTravel))
         #expect(s.stitcher.height == 200)
+        #expect(s.hud.detail == "The page scrolled a different distance than Excerpt asked for")
+        s.sampled(frame(100))
+        #expect(s.stitcher.height == 300)
     }
 
     @Test func aShortStepIsKeptOnceTheNextShowsThePageEnded() {
@@ -208,11 +219,20 @@ import Testing
         #expect(s.stitcher.image == ScrollFixtures.rows(page, 0..<220))
     }
 
-    @Test func aShortStepFollowedByMovementHalts() {
+    @Test func aShortStepFollowedByMovementAfterMovingHalts() {
+        var s = session()
+        s.stepped(frame(120), travel: 120)
+        s.stepped(frame(140), travel: 120)
+        s.stepped(frame(260), travel: 120)
+        #expect(s.phase == .halted(.uncertain))
+        #expect(s.stitcher.height == 320)
+    }
+
+    @Test func aPageThatScrollsLessThanPostedFromTheStartHandsOver() {
         var s = session()
         s.stepped(frame(20), travel: 120)
-        s.stepped(frame(140), travel: 120)
-        #expect(s.phase == .halted(.uncertain))
+        s.stepped(frame(40), travel: 120)
+        #expect(s.phase == .manual(.unexpectedTravel))
         #expect(s.stitcher.height == 200)
     }
 

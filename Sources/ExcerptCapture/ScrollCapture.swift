@@ -57,6 +57,7 @@ public final class ScrollCapture {
     private var waker: CheckedContinuation<Void, Never>?
     /// The read in flight, which `cancel()` ends.
     private var reading: Task<PixelBuffer?, Error>?
+    private var running = false
     /// Called with the session after every change, on the main actor.
     public var onChange: ((ScrollSession) -> Void)?
 
@@ -75,7 +76,9 @@ public final class ScrollCapture {
     public func cancel() { stop(.cancel) }
 
     /// The first request wins: Return then Esc saves. Finishing lets a read in flight end on
-    /// its own, so the frame it brings is stitched; cancelling ends it now.
+    /// its own, so the frame it brings is stitched; cancelling ends it now. Finishing while a
+    /// short step waits for the next to confirm the page ended saves without that frame: an
+    /// unverified frame is never stitched.
     private func stop(_ next: Request) {
         if request == nil { request = next }
         if request == .cancel { reading?.cancel() }
@@ -84,7 +87,18 @@ public final class ScrollCapture {
         waiting?.resume()
     }
 
+    /// Runs the capture to its end; call it once. Cancelling the task running it is `cancel()`.
     public func run() async -> ScrollOutcome {
+        precondition(!running, "ScrollCapture runs one capture at a time")
+        running = true
+        return await withTaskCancellationHandler {
+            await capture()
+        } onCancel: {
+            Task { @MainActor [weak self] in self?.cancel() }
+        }
+    }
+
+    private func capture() async -> ScrollOutcome {
         let first: PixelBuffer
         do {
             guard let frame = try await read(timeout: Self.firstFrameTimeout) else {
@@ -161,6 +175,7 @@ public final class ScrollCapture {
 
     /// One read from the source, in a task `cancel()` can end.
     private func read(timeout: Duration) async throws -> PixelBuffer? {
+        if request == .cancel { throw CancellationError() }
         let task = Task { [source] in try await source.nextFrame(timeout: timeout) }
         reading = task
         defer { reading = nil }

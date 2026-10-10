@@ -19,8 +19,8 @@ final class FakePage: FrameSource, Scroller {
     var offset = 0
     var blocker: ManualReason?
     var moves = true
-    /// Rows the page moves past each step, as momentum would carry it.
-    var extraTravel = 0
+    /// Rows the page moves past step `n` (1 first), as momentum or a multiplier would carry it.
+    var extraTravel: (Int) -> Int = { _ in 0 }
     var eventFails = false
     var userOffsets: [Int] = []
     var scrolls: [Double] = []
@@ -47,7 +47,8 @@ final class FakePage: FrameSource, Scroller {
         scrolls.append(points)
         if moves {
             offset = min(
-                offset + Int(points) * pixelsPerPoint + extraTravel, page.height - viewport)
+                offset + Int(points) * pixelsPerPoint + extraTravel(scrolls.count),
+                page.height - viewport)
         }
         if let block = blockAfterScrolls, scrolls.count == block.count { blocker = block.reason }
         fresh = 2
@@ -72,7 +73,7 @@ final class FakePage: FrameSource, Scroller {
 }
 
 @MainActor
-@Suite struct ScrollCaptureTests {
+@Suite(.timeLimit(.minutes(1))) struct ScrollCaptureTests {
     let page = ScrollFixtures.page(width: 90, height: 1000)
 
     func saved(_ outcome: ScrollOutcome) -> PixelBuffer? {
@@ -217,8 +218,9 @@ final class FakePage: FrameSource, Scroller {
     }
 
     @Test func aJumpThatRepeatedContentDisguisesAsASmallMoveHalts() async {
-        // StitchMatcherTests' known limit: a page jumping 280 rows over blocks that repeat every
-        // 250 reads as a 30-row move. An auto step that posted 130 knows better.
+        // StitchMatcherTests' known limit, after an honest step of 130, a jump of 280 rows over
+        // blocks that repeat every 250 reads as a 30-row move. An auto step that posted 130
+        // knows better.
         let base = ScrollFixtures.page(width: 90, height: 1500, seed: 3)
         let long = ScrollFixtures.paint(width: 90, height: 1500) { x, y in
             let row = y % 250
@@ -230,16 +232,40 @@ final class FakePage: FrameSource, Scroller {
             default: return ScrollFixtures.paper
             }
         }
+        func frame(_ offset: Int) -> PixelBuffer {
+            ScrollFixtures.frame(long, offset: offset, viewport: 200)
+        }
+        guard
+            case .moved(30, _, _) = StitchMatcher.match(
+                frame(130), frame(410), ignoringRightColumns: 0)
+        else {
+            Issue.record("the jump no longer aliases as a 30-row move")
+            return
+        }
         let fake = FakePage(page: long, viewport: 200)
-        fake.extraTravel = 150
+        fake.extraTravel = { $0 == 2 ? 150 : 0 }
         let capture = ScrollCapture(source: fake, scroller: fake, stepPoints: 130, scale: 1)
         var phases: [ScrollPhase] = []
         capture.onChange = { session in
             phases.append(session.phase)
             if session.phase == .halted(.uncertain) { capture.finish() }
         }
-        #expect(saved(await capture.run()) == ScrollFixtures.rows(long, 0..<200))
+        #expect(saved(await capture.run()) == ScrollFixtures.rows(long, 0..<330))
         #expect(phases.last == .halted(.uncertain))
+    }
+
+    @Test func aPageThatScrollsFurtherThanPostedHandsScrollingToTheUser() async {
+        // An app that scrolls twice what is posted moves 120 rows on a 60-point step.
+        let fake = FakePage(page: page, viewport: 200)
+        fake.extraTravel = { _ in 60 }
+        fake.userOffsets = [100]
+        let capture = ScrollCapture(source: fake, scroller: fake, stepPoints: 60, scale: 1)
+        var phases: [ScrollPhase] = []
+        capture.onChange = { phases.append($0.phase) }
+        fake.onIdle = { capture.finish() }
+        #expect(saved(await capture.run()) == ScrollFixtures.rows(page, 0..<300))
+        #expect(fake.scrolls.count == 1)
+        #expect(phases.contains(.manual(.unexpectedTravel)))
     }
 
     @Test func returnMidScrollSavesWhatIsStitched() async {
@@ -313,6 +339,28 @@ final class FakePage: FrameSource, Scroller {
         #expect(cancelled(await run.value))
         timers.fire(0)
     }
+
+    @Test func cancellingTheRunningTaskCancelsTheCapture() async {
+        let timers = ManualTimers()
+        let mailbox = FrameMailbox(sleep: { [timers] in await timers.sleep($0) })
+        let fake = FakePage(page: page, viewport: 200)
+        let capture = ScrollCapture(source: mailbox, scroller: fake, stepPoints: 120, scale: 1)
+        let run = Task { await capture.run() }
+        while !mailbox.isWaiting || timers.started < 1 { await Task.yield() }
+        run.cancel()
+        #expect(cancelled(await run.value))
+        timers.fire(0)
+    }
+
+    @Test func escBeforeRunCancelsWithoutWaitingForAFrame() async {
+        let timers = ManualTimers()
+        let mailbox = FrameMailbox(sleep: { [timers] in await timers.sleep($0) })
+        let fake = FakePage(page: page, viewport: 200)
+        let capture = ScrollCapture(source: mailbox, scroller: fake, stepPoints: 120, scale: 1)
+        capture.cancel()
+        #expect(cancelled(await capture.run()))
+        #expect(timers.started == 0)
+    }
 }
 
 /// Plays back a fixed list of reads: a frame, or nil for a timeout.
@@ -327,7 +375,7 @@ final class ScriptedSource: FrameSource {
 }
 
 @MainActor
-@Suite struct SettleTests {
+@Suite(.timeLimit(.minutes(1))) struct SettleTests {
     let a = ScrollFixtures.page(width: 8, height: 4, seed: 1)
     let b = ScrollFixtures.page(width: 8, height: 4, seed: 2)
     let c = ScrollFixtures.page(width: 8, height: 4, seed: 3)
