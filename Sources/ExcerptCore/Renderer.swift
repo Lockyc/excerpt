@@ -2,26 +2,34 @@ import CoreGraphics
 
 public struct RenderResult {
     public let image: CGImage
-    /// Original→rendered maps, for placing anything else drawn on the result.
-    public let rows: AxisMap
-    public let columns: AxisMap
+    /// Original → rendered placement, for anything else drawn on the result.
+    public let map: RenderMap
 }
 
 /// The one renderer: export writes its output, and the editor draws it.
 public enum Renderer {
-    /// Removes rows, then columns (column bands are in original x, which row removal leaves
-    /// unchanged), then labels every seam on the final geometry.
-    public static func render(
+    /// Everything below the annotations: crop, then rows, then columns (column bands are in
+    /// original x, which row removal leaves unchanged), then a label on every seam. The editor
+    /// caches this stage.
+    public static func renderBase(
         _ original: CGImage, edits: EditDocument, style: SeamStyle = .standard
     ) -> RenderResult {
-        let rowBands = CutSet.normalized(edits.cuts, axis: .horizontal, extent: original.height)
-        let columnBands = CutSet.normalized(edits.cuts, axis: .vertical, extent: original.width)
+        let full = PixelRect(x: 0, y: 0, width: original.width, height: original.height)
+        let crop = edits.crop?.clamped(width: original.width, height: original.height) ?? full
+        let cropped = crop == full ? original : original.cropping(to: crop.cgRect)!
+        let cuts = edits.cuts.map { cut -> Cut in
+            let offset = cut.axis == .horizontal ? crop.y : crop.x
+            return Cut(axis: cut.axis, lower: cut.lower - offset, upper: cut.upper - offset)
+        }
+        let rowBands = CutSet.normalized(cuts, axis: .horizontal, extent: crop.height)
+        let columnBands = CutSet.normalized(cuts, axis: .vertical, extent: crop.width)
         let (afterRows, rows) = SeamRenderer.removeBands(
-            original, axis: .horizontal, bands: rowBands, style: style, scale: edits.scale)
+            cropped, axis: .horizontal, bands: rowBands, style: style, scale: edits.scale)
         let (afterColumns, columns) = SeamRenderer.removeBands(
             afterRows, axis: .vertical, bands: columnBands, style: style, scale: edits.scale)
+        let map = RenderMap(crop: crop, rows: rows, columns: columns)
         guard !rowBands.isEmpty || !columnBands.isEmpty else {
-            return RenderResult(image: original, rows: rows, columns: columns)
+            return RenderResult(image: cropped, map: map)
         }
 
         let width = afterColumns.width
@@ -56,7 +64,14 @@ public enum Renderer {
                 text, center: CGPoint(x: mid, y: y), vertical: true, in: context,
                 canvasHeight: height, scale: edits.scale)
         }
-        return RenderResult(image: context.makeImage()!, rows: rows, columns: columns)
+        return RenderResult(image: context.makeImage()!, map: map)
+    }
+
+    /// The full render that export writes.
+    public static func render(
+        _ original: CGImage, edits: EditDocument, style: SeamStyle = .standard
+    ) -> RenderResult {
+        renderBase(original, edits: edits, style: style)
     }
 
     /// Rendered range of the largest kept segment of `map`; the whole axis when nothing is kept.

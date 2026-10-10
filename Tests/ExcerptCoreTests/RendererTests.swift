@@ -27,8 +27,8 @@ import Testing
         let gap = SeamStyle.standard.gapPixels(scale: 2)
         #expect(result.image.height == 800 - 480 + gap)
         #expect(result.image.width == 600 - 240 + gap)
-        #expect(result.rows.gaps.count == 1)
-        #expect(result.columns.gaps.count == 1)
+        #expect(result.map.rows.gaps.count == 1)
+        #expect(result.map.columns.gaps.count == 1)
     }
 
     @Test func wholeExtentCutIsIgnored() {
@@ -51,8 +51,8 @@ import Testing
         let gap = SeamStyle.standard.gapPixels(scale: 1)
         #expect(result.image.height == 100 - 20 + 2 * gap)
         #expect(result.image.width == 100 - 20 + 2 * gap)
-        #expect(result.rows.gaps.count == 2)
-        #expect(result.columns.gaps.count == 2)
+        #expect(result.map.rows.gaps.count == 2)
+        #expect(result.map.columns.gaps.count == 2)
     }
 
     @Test func bothAxesGolden() throws {
