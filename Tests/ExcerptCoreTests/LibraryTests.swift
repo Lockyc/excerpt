@@ -218,6 +218,28 @@ import Testing
         #expect(FileManager.default.fileExists(atPath: primary.path))
     }
 
+    /// A library file cut short (an interrupted copy, a sync placeholder) refuses to open rather
+    /// than showing grey rows that a save would make permanent: cut mid-chunk, or whole chunks
+    /// with no IEND, as a primary and as a master.
+    @Test func aTruncatedFileRefusesToOpen() throws {
+        let store = LibraryStore(folder: tempFolder(), naming: LibraryNaming(timeZone: utc))
+        let image = Fixtures.sheet(width: 200, height: 400)
+        let primary = try store.saveCapture(image, scale: 2, at: date)
+        let whole = try Data(contentsOf: primary)
+        for cut in [whole.prefix(whole.count / 2), whole.dropLast(12)] {
+            try Data(cut).write(to: primary)
+            #expect(throws: PNGError.self) { try store.load(primary) }
+        }
+
+        try whole.write(to: primary)
+        try store.saveEdits(primary: primary, original: image, edits: EditDocument(scale: 2))
+        let master = primary.deletingLastPathComponent()
+            .appendingPathComponent(
+                LibraryNaming.originalName(forPrimary: primary.lastPathComponent))
+        try Data(Data(contentsOf: master).dropLast(12)).write(to: master)
+        #expect(throws: MasterUnreadable.self) { try store.load(master) }
+    }
+
     @Test func anUnwritableFolderThrows() throws {
         let blocker = FileManager.default.temporaryDirectory.appendingPathComponent(
             "excerpt-block-\(UUID().uuidString)")

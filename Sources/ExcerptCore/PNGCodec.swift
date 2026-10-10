@@ -43,7 +43,11 @@ public enum PNGCodec {
         guard CGImageSourceGetType(source) as String? == UTType.png.identifier else {
             throw PNGError.notPNG
         }
-        guard let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
+        // ImageIO decodes a PNG cut short without complaint, filling the rest with grey: a file
+        // still being copied or synced would open as grey rows and a save would keep them.
+        guard CGImageSourceGetStatusAtIndex(source, 0) == .statusComplete,
+            try PNGChunks.scan(data, keyword: PNGChunks.editsKeyword).isComplete,
+            let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
         else { throw PNGError.decodeFailed }
         let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any]
         return DecodedPNG(
