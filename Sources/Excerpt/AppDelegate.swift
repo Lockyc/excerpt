@@ -125,7 +125,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             capture: capture,
             save: { document in
                 try store.saveEdits(
-                    primary: capture.primary, original: capture.original, edits: document)
+                    primary: capture.primary, original: capture.original, edits: document,
+                    replacingMaster: capture.supersedesMaster)
             },
             copy: { makePNG in
                 do {
@@ -199,14 +200,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 }
 
 extension LibraryStore {
-    /// A capture to edit: `load`, so a primary opens its master, then refused when it or the
-    /// render of its edits is past the size limits. `load`'s image is decoded lazily, so its size
-    /// is known before any pixel is.
+    /// A capture to edit: `load`, so a primary opens its master while it is still the master's
+    /// render, with every image it reads refused when it or the render of its edits is past the
+    /// size limits, before any pixel is decoded or drawn.
     func loadForRendering(_ url: URL) throws -> LoadedCapture {
-        let capture = try load(url)
-        try ImageInput.checkEditable(
-            url.path, width: capture.original.width, height: capture.original.height,
-            edits: capture.edits)
-        return capture
+        try load(url) { file, width, height, edits in
+            try ImageInput.checkEditable(file.path, width: width, height: height, edits: edits)
+        }
     }
 }

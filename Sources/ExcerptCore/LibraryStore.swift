@@ -24,6 +24,9 @@ public struct LoadedCapture {
     public let primary: URL
     public let original: CGImage
     public let edits: EditDocument
+    /// The primary opened as its own pixels although a master sits beside it: it was changed
+    /// since Excerpt saved it, so saving it must replace that master's original with it.
+    public let supersedesMaster: Bool
 }
 
 /// Reads and writes captures in the library folder. The primary is always the clean render; the
@@ -61,9 +64,12 @@ public struct LibraryStore: Sendable {
 
     /// Writes the master first, then re-renders the primary, so a failure part-way never leaves
     /// an edited primary without its original. An existing master keeps its pixels: only its
-    /// edits chunk is rewritten; the first edit encodes `original`. A file at the master's path
-    /// that isn't Excerpt's throws `foreignOriginal` before anything is written.
-    public func saveEdits(primary: URL, original: CGImage, edits: EditDocument) throws {
+    /// edits chunk is rewritten; the first edit, and every save `replacingMaster` (a primary
+    /// loaded with `supersedesMaster`), encodes `original`. A file at the master's path that
+    /// isn't Excerpt's throws `foreignOriginal` before anything is written.
+    public func saveEdits(
+        primary: URL, original: CGImage, edits: EditDocument, replacingMaster: Bool = false
+    ) throws {
         let master = primary.deletingLastPathComponent()
             .appendingPathComponent(
                 LibraryNaming.originalName(forPrimary: primary.lastPathComponent))
@@ -73,9 +79,13 @@ public struct LibraryStore: Sendable {
             guard try Self.carriesEdits(existing) else {
                 throw LibraryError.foreignOriginal(master)
             }
-            let json = String(decoding: try edits.encoded(), as: UTF8.self)
-            masterData = try PNGChunks.settingText(
-                json, keyword: PNGChunks.editsKeyword, in: existing)
+            if replacingMaster {
+                masterData = try MasterFile.encode(original: original, edits: edits)
+            } else {
+                let json = String(decoding: try edits.encoded(), as: UTF8.self)
+                masterData = try PNGChunks.settingText(
+                    json, keyword: PNGChunks.editsKeyword, in: existing)
+            }
         } else {
             masterData = try MasterFile.encode(original: original, edits: edits)
         }
@@ -93,10 +103,18 @@ public struct LibraryStore: Sendable {
         }
     }
 
+    /// Called with each image `load` would take pixels from, before any is decoded or rendered:
+    /// the file, its size, and the edits it would be rendered with. Throwing refuses the open.
+    public typealias Admission = (
+        _ file: URL, _ width: Int, _ height: Int, _ edits: EditDocument
+    ) throws -> Void
+
     /// Opens a primary or a master. A file is a master only when it carries the edits chunk, so
-    /// a user's own `… original.png` opens as itself. A primary with no master loads as an
-    /// unedited capture. A master that can't be read or parsed throws `MasterUnreadable`.
-    public func load(_ url: URL) throws -> LoadedCapture {
+    /// a user's own `… original.png` opens as itself. A master opens with its edits. A primary
+    /// opens through its master only while `MasterFile.reproduces` it; one changed since
+    /// Excerpt saved it opens as its own pixels with `supersedesMaster` set, and one with no
+    /// master opens as its own pixels, unedited. A master that can't be read or parsed throws `MasterUnreadable`.
+    public func load(_ url: URL, admitting admit: Admission) throws -> LoadedCapture {
         let directory = url.deletingLastPathComponent()
         let name = url.lastPathComponent
         let (primary, master): (URL, URL)
@@ -107,21 +125,40 @@ public struct LibraryStore: Sendable {
                 url, directory.appendingPathComponent(LibraryNaming.originalName(forPrimary: name))
             )
         }
+        var fromMaster: (original: CGImage, edits: EditDocument)?
         if FileManager.default.fileExists(atPath: master.path) {
             do {
                 let data = try Data(contentsOf: master)
                 if try Self.carriesEdits(data) {
                     let (original, edits) = try MasterFile.decode(data)
-                    return LoadedCapture(
-                        primary: primary, original: original.image,
-                        edits: edits ?? EditDocument(scale: original.scale))
+                    fromMaster = (original.image, edits ?? EditDocument(scale: original.scale))
                 }
             } catch {
                 throw MasterUnreadable(file: master, underlying: error)
             }
         }
+        if let fromMaster {
+            try admit(
+                master, fromMaster.original.width, fromMaster.original.height, fromMaster.edits)
+            if url == master {
+                return LoadedCapture(
+                    primary: primary, original: fromMaster.original, edits: fromMaster.edits,
+                    supersedesMaster: false)
+            }
+        }
         let flat = try PNGCodec.decode(Data(contentsOf: url))
+        let flatEdits = EditDocument(scale: flat.scale)
+        try admit(url, flat.image.width, flat.image.height, flatEdits)
+        if let fromMaster,
+            MasterFile.reproduces(
+                PixelBuffer(flat.image), from: fromMaster.original, edits: fromMaster.edits)
+        {
+            return LoadedCapture(
+                primary: primary, original: fromMaster.original, edits: fromMaster.edits,
+                supersedesMaster: false)
+        }
         return LoadedCapture(
-            primary: url, original: flat.image, edits: EditDocument(scale: flat.scale))
+            primary: url, original: flat.image, edits: flatEdits,
+            supersedesMaster: fromMaster != nil)
     }
 }

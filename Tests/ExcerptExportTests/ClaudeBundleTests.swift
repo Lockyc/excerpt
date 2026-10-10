@@ -230,4 +230,26 @@ import Testing
         let tile = try PNGCodec.decode(Data(contentsOf: bundle.tiles[0])).image
         #expect(PixelBuffer(tile) == pixels)
     }
+
+    /// Review focus (privacy): the editor opens that primary the same way, so its For Claude,
+    /// which exports what the editor holds, sends the redacted pixels too.
+    @Test func aPrimaryAlteredAfterSavingExportsFlatFromTheEditor() throws {
+        let primary = try Self.savedCapture()
+        var pixels = PixelBuffer(try PNGCodec.decode(Data(contentsOf: primary)).image)
+        for y in 15..<35 {
+            for x in 15..<85 {
+                let i = (y * pixels.width + x) * 4
+                pixels.bytes[i..<(i + 4)] = [0, 0, 0, 255]
+            }
+        }
+        try PNGCodec.encode(pixels.makeImage(), scale: 1).write(to: primary)
+        let capture = try LibraryStore(folder: primary.deletingLastPathComponent()).load(primary)
+        let bundle = try ClaudeBundle.write(
+            original: capture.original, edits: capture.edits, name: "x",
+            cache: ClaudeBundleTests.cache(), recognizer: ColourWords())
+        #expect(!bundle.text.contains("alpha"))
+        #expect(!bundle.text.contains("secret"))
+        let tile = try PNGCodec.decode(Data(contentsOf: bundle.tiles[0])).image
+        #expect(PixelBuffer(tile) == pixels)
+    }
 }

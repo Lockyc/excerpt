@@ -179,9 +179,10 @@ private struct MasterCandidate {
     /// master (3456 × 30,000 at 2×), about 32 bytes per rendered pixel, so near 6.4 GB at
     /// `maximumPixels`.
     func original(ifItRenders primary: PixelBuffer) -> CGImage? {
-        guard let original = try? file.image(path, upright: false) else { return nil }
-        let rendered = PixelBuffer(Renderer.render(original, edits: edits).image)
-        return rendered == primary ? original : nil
+        guard let original = try? file.image(path, upright: false),
+            MasterFile.reproduces(primary, from: original, edits: edits)
+        else { return nil }
+        return original
     }
 }
 

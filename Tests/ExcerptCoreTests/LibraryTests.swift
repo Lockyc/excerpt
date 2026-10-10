@@ -240,6 +240,86 @@ import Testing
         #expect(throws: MasterUnreadable.self) { try store.load(master) }
     }
 
+    /// Review focus (privacy): a primary redacted outside Excerpt after saving opens as its own
+    /// pixels, so the editor never shows what the redaction covers, and saving it makes the
+    /// redacted pixels the master's original rather than restoring the covered ones. The master
+    /// opened directly still loads its edits.
+    @Test func aPrimaryChangedElsewhereOpensFlatAndSavingKeepsTheChange() throws {
+        let store = LibraryStore(folder: tempFolder(), naming: LibraryNaming(timeZone: utc))
+        let original = Fixtures.sheet(width: 200, height: 400)
+        let primary = try store.saveCapture(original, scale: 2, at: date)
+        let edits = EditDocument(scale: 2, cuts: [Cut(axis: .horizontal, lower: 241, upper: 321)])
+        try store.saveEdits(primary: primary, original: original, edits: edits)
+        let master = primary.deletingLastPathComponent()
+            .appendingPathComponent(
+                LibraryNaming.originalName(forPrimary: primary.lastPathComponent))
+
+        let untouched = try store.load(primary)
+        #expect(untouched.edits == edits && !untouched.supersedesMaster)
+        #expect(PixelBuffer(untouched.original) == PixelBuffer(original))
+
+        var redacted = PixelBuffer(try PNGCodec.decode(Data(contentsOf: primary)).image)
+        for y in 20..<60 {
+            for x in 10..<190 {
+                let i = (y * redacted.width + x) * 4
+                redacted.bytes[i..<(i + 4)] = [0, 0, 0, 255]
+            }
+        }
+        try PNGCodec.encode(redacted.makeImage(), scale: 2).write(to: primary)
+
+        let flat = try store.load(primary)
+        #expect(flat.supersedesMaster)
+        #expect(flat.primary == primary)
+        #expect(flat.edits.cuts.isEmpty && flat.edits.scale == 2)
+        #expect(PixelBuffer(flat.original) == redacted)
+        let direct = try store.load(master)
+        #expect(direct.edits == edits && !direct.supersedesMaster)
+        #expect(PixelBuffer(direct.original) == PixelBuffer(original))
+
+        let newer = EditDocument(scale: 2, cuts: [Cut(axis: .vertical, lower: 150, upper: 170)])
+        try store.saveEdits(
+            primary: flat.primary, original: flat.original, edits: newer,
+            replacingMaster: flat.supersedesMaster)
+        let saved = PixelBuffer(try PNGCodec.decode(Data(contentsOf: primary)).image)
+        #expect(saved == PixelBuffer(Renderer.render(redacted.makeImage(), edits: newer).image))
+        for y in 20..<60 {
+            for x in 10..<140 { #expect(saved[x: x, y: y] == RGBA(r: 0, g: 0, b: 0, a: 255)) }
+        }
+        let (masterOriginal, masterEdits) = try MasterFile.decode(Data(contentsOf: master))
+        #expect(PixelBuffer(masterOriginal.image) == redacted)
+        #expect(masterEdits == newer)
+        let reopened = try store.load(primary)
+        #expect(reopened.edits == newer && !reopened.supersedesMaster)
+    }
+
+    /// Every image `load` takes pixels from is admitted first — the master with its edits, then
+    /// the primary it is checked against — and a refusal stops the open.
+    @Test func loadAdmitsEachImageBeforeReadingIt() throws {
+        let store = LibraryStore(folder: tempFolder(), naming: LibraryNaming(timeZone: utc))
+        let original = Fixtures.sheet(width: 200, height: 400)
+        let primary = try store.saveCapture(original, scale: 2, at: date)
+        let edits = EditDocument(scale: 2, cuts: [Cut(axis: .horizontal, lower: 41, upper: 321)])
+        try store.saveEdits(primary: primary, original: original, edits: edits)
+        let master = primary.deletingLastPathComponent()
+            .appendingPathComponent(
+                LibraryNaming.originalName(forPrimary: primary.lastPathComponent))
+        let rendered = Renderer.render(original, edits: edits).image
+        var seen: [String] = []
+        _ = try store.load(primary) { file, width, height, admitted in
+            seen.append("\(file.lastPathComponent) \(width)x\(height) \(admitted == edits)")
+        }
+        #expect(
+            seen == [
+                "\(master.lastPathComponent) 200x400 true",
+                "\(primary.lastPathComponent) \(rendered.width)x\(rendered.height) false",
+            ])
+        struct Refused: Error {}
+        #expect(throws: Refused.self) { try store.load(master) { _, _, _, _ in throw Refused() } }
+        #expect(throws: Refused.self) {
+            try store.load(primary) { file, _, _, _ in if file == primary { throw Refused() } }
+        }
+    }
+
     @Test func anUnwritableFolderThrows() throws {
         let blocker = FileManager.default.temporaryDirectory.appendingPathComponent(
             "excerpt-block-\(UUID().uuidString)")

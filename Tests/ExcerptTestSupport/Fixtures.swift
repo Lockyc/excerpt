@@ -1,5 +1,6 @@
 import CoreGraphics
 import ExcerptCore
+import Foundation
 
 public enum Fixtures {
     /// Row y has a colour no other row shares (for y < 251²), so a test can tell exactly which
@@ -42,5 +43,12 @@ public enum Fixtures {
             }
         }
         return PixelBuffer(width: width, height: height, bytes: bytes).makeImage()
+    }
+}
+
+extension LibraryStore {
+    /// `load` admitting every image, for tests whose files are all within any limit.
+    public func load(_ url: URL) throws -> LoadedCapture {
+        try load(url, admitting: { _, _, _, _ in })
     }
 }

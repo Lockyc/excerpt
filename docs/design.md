@@ -40,10 +40,14 @@ Captures land in the **library** — `~/Documents/Screenshots/` by default (a se
   PNG fields. It is what gets copied, dragged and shared, so it must never contain pixels the
   user removed — an embedded original would hand every recipient the unredacted capture.
 - **`… original.png` is the private master**, written the first time a capture is edited. Its
-  pixels are the untouched capture and never change; the edit document (`excerpt.edits`, JSON)
-  lives in a PNG `iTXt` chunk, the only part a re-save rewrites. An unedited capture is one file.
-- **Re-editing** either file loads the original plus its edits; saving re-renders the primary.
-  A primary whose original is gone opens as a flat image.
+  pixels are the untouched capture; the edit document (`excerpt.edits`, JSON) lives in a PNG
+  `iTXt` chunk, the only part a re-save rewrites unless the primary was changed elsewhere
+  (below). An unedited capture is one file.
+- **Re-editing** the master loads the original plus its edits. The primary loads them too only
+  while re-rendering them reproduces it pixel for pixel; a primary changed elsewhere (a
+  redaction drawn over it) opens as a flat image, and saving it makes it the master's new
+  original, so nothing it covers comes back. A primary whose original is gone opens flat.
+  Saving re-renders the primary.
 - Sidecar files and a separate edits database are both wrong here: library files get moved and
   sorted by other tools, which would orphan either one. The edits travel inside the master.
 - "For Claude" output is scratch, not library content: `~/Library/Caches/excerpt/claude/<capture
