@@ -126,6 +126,13 @@ Tools: `V` select · `A` arrow · `R` rectangle · `T` text · `H` highlight · 
 **Blur is destructive**: pixelation in ≥12pt blocks over noise, so the covered content cannot be
 recovered from the primary. The editor shows the true result.
 
+**The edit document** holds the cuts, an optional crop and the annotations (arrow, rectangle,
+text, highlight, blur), all in original pixels, so every edit stays adjustable from the master.
+Render order: blur (from original pixels) → crop → cuts and their labels → annotations, placed
+through the coordinate map. The canvas caches the render up to the cuts and draws annotations
+over it through the same Core code, so a drag repaints only annotations; a cut, crop or blur
+change re-renders the cache. Undo is a stack of document values.
+
 `⌘S` re-renders the primary and writes or updates the master. Closing with unsaved edits asks.
 
 ## Export
