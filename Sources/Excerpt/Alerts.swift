@@ -34,6 +34,23 @@ enum Alerts {
         )
     }
 
+    /// A scrolling capture's stream stopped part-way; says whether what was stitched is saved.
+    static func scrollingStopped(_ error: Error, savedPartial: Bool) {
+        show(
+            "Scrolling capture stopped",
+            "Excerpt lost the picture of the region: \(error.localizedDescription) "
+                + (savedPartial
+                    ? "What was stitched before that is saved." : "Nothing was saved."))
+    }
+
+    /// The region's screen recording could not be stopped after a scrolling capture ended.
+    static func recordingNotStopped(_ error: Error, saved: Bool) {
+        show(
+            "Couldn't stop recording the region",
+            "Excerpt couldn't stop recording the screen: \(error.localizedDescription)."
+                + (saved ? " The capture is saved." : ""))
+    }
+
     /// The editor's current image could not be put on the clipboard.
     static func copyFailed(_ file: URL, _ error: Error) {
         show(

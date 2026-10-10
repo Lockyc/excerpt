@@ -13,6 +13,9 @@ public final class StreamFrameSource: FrameSource {
     private let mailbox = FrameMailbox()
     private var stream: SCStream?
     private var output: StreamOutput?
+    /// Called once, on the main actor, when the stream fails or stops on its own. A capture that
+    /// is halted reads no frames, so this is how the failure reaches it.
+    public var onFailure: ((Error) -> Void)?
 
     public init() {}
 
@@ -41,7 +44,12 @@ public final class StreamFrameSource: FrameSource {
         configuration.queueDepth = 3
         let mailbox = self.mailbox
         let output = StreamOutput(
-            onFrame: { mailbox.deliver($0) }, onError: { mailbox.fail($0) })
+            onFrame: { mailbox.deliver($0) },
+            onError: { [weak self] error in
+                guard !mailbox.hasFailed else { return }
+                mailbox.fail(error)
+                self?.onFailure?(error)
+            })
         let stream = SCStream(filter: filter, configuration: configuration, delegate: output)
         try stream.addStreamOutput(output, type: .screen, sampleHandlerQueue: output.queue)
         try await stream.startCapture()

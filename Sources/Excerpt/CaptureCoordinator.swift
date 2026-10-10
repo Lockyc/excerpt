@@ -11,6 +11,10 @@ final class CaptureCoordinator {
     private let capturer = ScreenCapturer()
     private let onDelivered: (URL, CGImage) -> Void
     private var running = false
+    /// Whether this launch has shown the system's Accessibility prompt.
+    private var askedForAccessibility = false
+    /// How the scrolling capture in progress was asked to end: the first request wins.
+    private var scrollEnd: ScrollEnd?
     static let shutter = NSSound(
         contentsOfFile:
             "/System/Library/Components/CoreAudio.component/Contents/SharedSupport/SystemSounds/system/Screen Capture.aif",
@@ -22,10 +26,11 @@ final class CaptureCoordinator {
     }
 
     func run(_ action: HotKeyAction) async {
-        guard !running else { return }  // a second hotkey press mid-selection is ignored
+        guard !running else { return }  // a second hotkey press mid-capture is ignored
         running = true
         defer { running = false }
         guard ensurePermission() else { return }
+        if action == .scrolling && promptForAccessibilityFirst() { return }
         do {
             let stills = try await capturer.stills()
             switch action {
@@ -55,13 +60,111 @@ final class CaptureCoordinator {
                 if let still = stills.first(where: { $0.frame.contains(mouse) }) ?? stills.first {
                     deliver(still.image, scale: still.scale)
                 }
+            case .scrolling:
+                if case .area(let still, let rect) = await SelectionOverlay().run(
+                    mode: .scrollingArea, stills: stills)
+                {
+                    try await captureScrolling(still: still, pixelRect: rect)
+                }
             }
         } catch {
             Alerts.show("Capture failed", error.localizedDescription)
         }
     }
 
-    private func deliver(_ image: CGImage, scale: CGFloat) {
+    /// How a scrolling capture was asked to end. The user's Done or Cancel needs no word after;
+    /// a failed stream or a display change does, even when what was stitched saved cleanly.
+    private enum ScrollEnd {
+        case user
+        case stopped(Error)
+    }
+
+    /// Streams the selected region while the page scrolls under it, stitching as it goes, with
+    /// the HUD and live preview beside it. Saves like any capture.
+    private func captureScrolling(still: DisplayStill, pixelRect: CGRect) async throws {
+        let region = ScrollRegion(
+            displayID: still.displayID, displayFrame: still.frame, scale: still.scale,
+            pixelRect: pixelRect, primaryHeight: NSScreen.primaryHeight)
+        let source = StreamFrameSource()
+        try await source.start(region: region)
+        scrollEnd = nil
+        let capture = ScrollCapture(
+            source: source, scroller: EventScroller(region: region),
+            stepPoints: region.stepPoints, scale: Double(region.scale))
+        let visible =
+            NSScreen.screens.first { $0.displayID == region.displayID }?.visibleFrame
+            ?? region.appKitFrame
+        let windows = ScrollWindows(
+            region: region.appKitFrame, visible: visible,
+            onDone: { [weak self, weak capture] in
+                self?.endScrolling(.user)
+                capture?.finish()
+            },
+            onCancel: { [weak self, weak capture] in
+                self?.endScrolling(.user)
+                capture?.cancel()
+            },
+            onOpenAccessibility: { Self.open(.accessibility) })
+        capture.onChange = { [weak windows] in windows?.update($0) }
+        // A failed stream or a display change ends the capture with what is stitched so far,
+        // including while it is halted and reading no frames.
+        source.onFailure = { [weak self, weak capture] error in
+            self?.endScrolling(.stopped(error))
+            capture?.finish()
+        }
+        let observer = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
+        ) { [weak self, weak capture] _ in
+            MainActor.assumeIsolated {
+                self?.endScrolling(.stopped(ScrollCaptureError.displayChanged))
+                capture?.finish()
+            }
+        }
+        let outcome = await capture.run()
+        NotificationCenter.default.removeObserver(observer)
+        source.onFailure = nil
+        windows.close()
+        var stopFailure: Error?
+        do {
+            try await source.stop()
+        } catch {
+            stopFailure = error
+        }
+        var saved = false
+        var stopped: Error?
+        switch outcome {
+        case .saved(let image):
+            saved = deliver(image.makeImage(), scale: region.scale)
+            if case .stopped(let error) = scrollEnd { stopped = error }
+        case .cancelled:
+            break
+        case .failed(let error, let partial):
+            if let partial { saved = deliver(partial.makeImage(), scale: region.scale) }
+            stopped = error
+        }
+        scrollEnd = nil
+        if let stopped { Alerts.scrollingStopped(stopped, savedPartial: saved) }
+        if let stopFailure { Alerts.recordingNotStopped(stopFailure, saved: saved) }
+    }
+
+    private func endScrolling(_ end: ScrollEnd) {
+        if scrollEnd == nil { scrollEnd = end }
+    }
+
+    /// The first scrolling capture of a launch without Accessibility shows the system's prompt
+    /// and starts nothing: started, the prompt would sit in the frozen still, under the overlay,
+    /// and in the first frame. True when the capture should wait for the next press, which then
+    /// scrolls by itself if access was granted and hands scrolling to the user if not.
+    private func promptForAccessibilityFirst() -> Bool {
+        guard !EventScroller.isTrusted, !askedForAccessibility else { return false }
+        askedForAccessibility = true
+        return !EventScroller.requestAccess()
+    }
+
+    /// Saves to the library, copies, plays the shutter and shows the thumbnail. False when the
+    /// capture could not be saved; its own alert has said why.
+    @discardableResult
+    private func deliver(_ image: CGImage, scale: CGFloat) -> Bool {
         let store = preferences.store
         do {
             let url = try store.saveCapture(image, scale: Double(scale), at: Date())
@@ -72,11 +175,26 @@ final class CaptureCoordinator {
             }
             if preferences.playSound { Self.shutter?.play() }
             onDelivered(url, image)
+            return true
         } catch let error as PNGError {
             Alerts.encodeFailed(error)
         } catch {
             Alerts.libraryUnwritable(store.folder, error)
         }
+        return false
+    }
+
+    /// The Privacy & Security panes a capture can need.
+    enum PrivacyPane: String {
+        case screenRecording = "Privacy_ScreenCapture"
+        case accessibility = "Privacy_Accessibility"
+    }
+
+    static func open(_ pane: PrivacyPane) {
+        NSWorkspace.shared.open(
+            URL(
+                string: "x-apple.systempreferences:com.apple.preference.security?\(pane.rawValue)"
+            )!)
     }
 
     /// Screen Recording must be granted before any capture; without it ScreenCaptureKit returns
@@ -90,13 +208,7 @@ final class CaptureCoordinator {
         alert.addButton(withTitle: "Open System Settings")
         alert.addButton(withTitle: "Cancel")
         NSApp.activate(ignoringOtherApps: true)
-        if alert.runModal() == .alertFirstButtonReturn {
-            NSWorkspace.shared.open(
-                URL(
-                    string:
-                        "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
-                )!)
-        }
+        if alert.runModal() == .alertFirstButtonReturn { Self.open(.screenRecording) }
         return false
     }
 }

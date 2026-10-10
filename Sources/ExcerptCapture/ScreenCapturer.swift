@@ -20,6 +20,10 @@ extension NSScreen {
     public var displayID: CGDirectDisplayID? {
         (deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value
     }
+
+    /// The primary display's height in points: the axis flip between AppKit and Quartz global
+    /// coordinates.
+    @MainActor public static var primaryHeight: CGFloat { screens.first?.frame.height ?? 0 }
 }
 
 /// Main-actor because it reads `NSScreen`; in Swift 5 mode a nonisolated async method would hop
@@ -78,7 +82,6 @@ public final class ScreenCapturer {
             (CGWindowListCopyWindowInfo(
                 [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID)
                 as? [[String: Any]]) ?? []
-        let primaryHeight = NSScreen.screens.first?.frame.height ?? 0
         return order.compactMap { info in
             guard let id = info[kCGWindowNumber as String] as? CGWindowID,
                 let window = byID[id], window.windowLayer == 0,
@@ -87,7 +90,7 @@ public final class ScreenCapturer {
             return CapturableWindow(
                 window: window,
                 frame: DisplayGeometry.appKitRect(
-                    fromQuartz: window.frame, primaryHeight: primaryHeight),
+                    fromQuartz: window.frame, primaryHeight: NSScreen.primaryHeight),
                 title: window.title ?? window.owningApplication?.applicationName ?? "")
         }
     }
