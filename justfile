@@ -26,7 +26,7 @@ fmt:
 [group("dev")]
 [doc("Pre-merge gate: format check, build, tests")]
 gate:
-    shellcheck scripts/*.sh
+    shellcheck install.sh scripts/*.sh
     swift format lint --strict --recursive Package.swift Sources Tests
     swift build
     swift test
