@@ -14,6 +14,9 @@ public enum FrameMatch: Equatable, Sendable {
 public enum StitchMatcher {
     /// The share of evidence rows that must match for an offset to be believed.
     public static let confidenceThreshold = 0.8
+    /// An offset with more than this many full-width mismatching rows is different content, not
+    /// animation, however high its share.
+    public static let maximumContradictions = 2
     /// An offset is believed only if every other offset scores at least this much lower.
     public static let ambiguityMargin = 0.02
     /// Fewer row pairs carrying evidence than this and an offset is not scored at all.
@@ -91,6 +94,11 @@ public enum StitchMatcher {
             return isCaretSized(span, rows: changedRows(wholePrevious, wholeNext), of: previous)
                 ? .still : .uncertain
         }
+        let contradictions = contradictions(
+            previous, next, columns: span, previousStart: header + best.offset,
+            nextStart: header, count: content - best.offset, previousUnique: uniqueA,
+            nextUnique: uniqueB)
+        guard contradictions <= maximumContradictions else { return .uncertain }
         return .moved(offset: best.offset, header: header, footer: footer)
     }
 
@@ -126,6 +134,38 @@ public enum StitchMatcher {
             if same { matches += 1 }
         }
         return (matches, evidence)
+    }
+
+    /// Evidence row pairs that differ across more than a quarter of `columns`. An animation or a
+    /// caret differs in a patch; text that differs across the width is other content.
+    static func contradictions(
+        _ previous: PixelBuffer, _ next: PixelBuffer, columns: Range<Int>, previousStart: Int,
+        nextStart: Int, count: Int, previousUnique: [Bool], nextUnique: [Bool]
+    ) -> Int {
+        var found = 0
+        previous.bytes.withUnsafeBytes { pa in
+            next.bytes.withUnsafeBytes { pb in
+                for i in 0..<count {
+                    let p = previousStart + i
+                    let n = nextStart + i
+                    guard previousUnique[p], nextUnique[n] else { continue }
+                    var first = Int.max
+                    var last = -1
+                    for x in columns {
+                        let u = pa.loadUnaligned(
+                            fromByteOffset: (p * previous.width + x) * 4, as: UInt32.self)
+                        let v = pb.loadUnaligned(
+                            fromByteOffset: (n * next.width + x) * 4, as: UInt32.self)
+                        if u != v {
+                            first = min(first, x)
+                            last = x
+                        }
+                    }
+                    if last >= 0 && (last - first + 1) * 4 > columns.count { found += 1 }
+                }
+            }
+        }
+        return found
     }
 
     /// Which rows of `rows` have a signature no other row of `rows` shares; rows outside it are

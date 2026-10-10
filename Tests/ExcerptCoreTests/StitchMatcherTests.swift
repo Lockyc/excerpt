@@ -138,7 +138,7 @@ import Testing
         #expect(StitchMatcher.match(blank, caret, ignoringRightColumns: 0) == .still)
     }
 
-    @Test func aSmallMoveOnASparsePageIsNeverStill() {
+    @Test func aSmallMoveOfWideLinesOnASparsePageIsNeverStill() {
         func lines(shift: Int) -> PixelBuffer {
             ScrollFixtures.paint(width: 90, height: 200) { x, y in
                 [40, 80, 120].contains { (y - shift) >= $0 && (y - shift) < $0 + 2 }
@@ -148,6 +148,61 @@ import Testing
         #expect(
             StitchMatcher.match(lines(shift: 0), lines(shift: -2), ignoringRightColumns: 0)
                 != .still)
+    }
+
+    @Test func aTinyGlyphMovingOnABlankPageReadsStill() {
+        // The documented limit: a patch this small is indistinguishable from a caret.
+        func glyph(at y: Int) -> PixelBuffer {
+            ScrollFixtures.paint(width: 90, height: 200) { x, row in
+                (20..<22).contains(x) && (y..<(y + 8)).contains(row)
+                    ? ScrollFixtures.ink : ScrollFixtures.paper
+            }
+        }
+        #expect(
+            StitchMatcher.match(glyph(at: 50), glyph(at: 52), ignoringRightColumns: 0) == .still)
+    }
+
+    /// A long page where `block` rows at `phase` repeat every 250 rows, so the frame one period
+    /// further on aliases the true offset; everything else is unique text.
+    func repeating(phase: Int, block: Int) -> PixelBuffer {
+        let base = ScrollFixtures.page(width: 90, height: 1500, seed: 3)
+        return ScrollFixtures.paint(width: 90, height: 1500) { x, y in
+            let row = y % 250
+            guard (phase..<(phase + block)).contains(row) else { return base[x: x, y: y] }
+            return base[x: x, y: row]
+        }
+    }
+
+    @Test func aLongRepeatedBlockWithTextAroundItIsUncertain() {
+        // The alias one period away matches the block's rows; the rows around it differ in
+        // full-width text, which is different content, not animation.
+        let long = repeating(phase: 60, block: 140)
+        let a = ScrollFixtures.frame(long, offset: 0, viewport: 200)
+        let b = ScrollFixtures.frame(long, offset: 300, viewport: 200)
+        #expect(StitchMatcher.match(a, b, ignoringRightColumns: 0) == .uncertain)
+    }
+
+    @Test func aRepeatedBlockWithAShortUniqueLabelIsUncertain() {
+        // Blank page, a 50-row block repeated every 250 rows, a 3-row label unique to each
+        // block and ten rows of text: the alias matches the block and mismatches the 13 rows
+        // of different content.
+        let base = ScrollFixtures.page(width: 90, height: 1500, seed: 3)
+        let long = ScrollFixtures.paint(width: 90, height: 1500) { x, y in
+            switch y % 250 {
+            case 100..<150: base[x: x, y: 100 + (y % 250 - 100)]
+            case 60..<63, 200..<210: base[x: x, y: y]
+            default: ScrollFixtures.paper
+            }
+        }
+        let a = ScrollFixtures.frame(long, offset: 0, viewport: 200)
+        let b = ScrollFixtures.frame(long, offset: 280, viewport: 200)
+        #expect(StitchMatcher.match(a, b, ignoringRightColumns: 0) == .uncertain)
+    }
+
+    @Test func anHonestMoveWithALocalAnimationIsStillFound() {
+        let a = ScrollFixtures.animated(frame(0), x: 30, y: 100, width: 10, height: 10, phase: 1)
+        let b = ScrollFixtures.animated(frame(150), x: 30, y: 60, width: 10, height: 10, phase: 2)
+        #expect(offset(StitchMatcher.match(a, b, ignoringRightColumns: 0)) == 150)
     }
 
     @Test func aTrueOverlapWithTooFewEvidenceRowsIsUncertain() {
