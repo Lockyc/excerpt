@@ -45,4 +45,18 @@ public enum HotKeyRules {
             keyCode: candidate.keyCode, modifiers: candidate.modifiers, in: system)
             ? .heldBySystem : .accepted
     }
+
+    /// Judges `candidate` as the hotkey of the action titled `action`, against every other
+    /// action's binding in `bindings` and the `reserved` shortcuts, all by title. Recording a
+    /// hotkey, clearing one and returning one to its default all go through here. No hotkey
+    /// (nil) is always accepted.
+    public static func judge(
+        _ candidate: HotKeyBinding?, for action: String, bindings: [String: HotKeyBinding],
+        reserved: [String: HotKeyBinding], system: [SymbolicHotKey]
+    ) -> HotKeyVerdict {
+        guard let candidate else { return .accepted }
+        let others = bindings.filter { $0.key != action }
+            .merging(reserved) { binding, _ in binding }
+        return judge(candidate, others: others, system: system)
+    }
 }

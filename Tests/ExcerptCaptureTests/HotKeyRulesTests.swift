@@ -53,4 +53,30 @@ import Testing
         let escape = HotKeyBinding(keyCode: UInt32(kVK_Escape), modifiers: UInt32(cmdKey))
         #expect(HotKeyRules.judge(escape, others: [:], system: []) == .unknownKey)
     }
+
+    /// Recording, clearing and returning to the default are judged against every other action's
+    /// binding and the reserved shortcuts, never against the action's own binding.
+    @Test func anActionsNewHotkeyIsJudgedAgainstTheOthersAndTheReserved() {
+        let bindings = ["Capture Area": four, "Capture Window": five]
+        let copy = HotKeyBinding(keyCode: UInt32(kVK_ANSI_C), modifiers: UInt32(cmdKey))
+        let reserved = ["Copy in the editor": copy]
+        func judge(_ candidate: HotKeyBinding?) -> HotKeyVerdict {
+            HotKeyRules.judge(
+                candidate, for: "Capture Area", bindings: bindings, reserved: reserved, system: [])
+        }
+        #expect(judge(four) == .accepted)
+        #expect(judge(five) == .taken(by: "Capture Window"))
+        #expect(judge(copy) == .taken(by: "Copy in the editor"))
+        #expect(judge(nil) == .accepted)
+    }
+
+    /// Default is judged like a recording: a default another action now holds is refused,
+    /// naming it, so the action keeps its binding.
+    @Test func aDefaultAnotherActionHoldsIsRefused() {
+        let verdict = HotKeyRules.judge(
+            four, for: "Capture Area", bindings: ["Capture Window": four], reserved: [:],
+            system: [])
+        #expect(verdict == .taken(by: "Capture Window"))
+        #expect(!verdict.keeps)
+    }
 }
