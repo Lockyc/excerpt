@@ -85,12 +85,19 @@ public enum CaptureText {
             for run in try recognizer.recognize(piece) {
                 let bounds = run.bounds.offsetBy(
                     dx: CGFloat(region.rect.x), dy: CGFloat(region.rect.y))
-                if region.owned.contains(Int(bounds.midY)) {
+                if usable(bounds), region.owned.contains(Int(bounds.midY)) {
                     runs.append(RecognizedText(run.string, bounds))
                 }
             }
         }
         return compose(runs, map: map, scale: scale)
+    }
+
+    /// Bounds a run can be placed by: finite, and near enough the image that its middle is an
+    /// `Int`. A recogniser's NaN or infinite box is dropped rather than trapping the conversion.
+    static func usable(_ bounds: CGRect) -> Bool {
+        let values = [bounds.minX, bounds.minY, bounds.width, bounds.height]
+        return values.allSatisfy { $0.isFinite && abs($0) <= 1e9 }
     }
 
     /// `[⋯ 1,240 px hidden]`: the seam's own label, in brackets.
@@ -100,9 +107,10 @@ public enum CaptureText {
 
     /// The text of `runs` (rendered pixels): lines in reading order, a row cut on its own line
     /// where it was made, and a column cut between the runs either side of it on each line it
-    /// splits. A column cut no line spans is written on its own line at the top. Empty when there
-    /// is neither text nor a cut.
+    /// splits. A column cut no line spans is written on its own line at the top. Runs whose bounds
+    /// aren't `usable` are dropped. Empty when there is neither text nor a cut.
     public static func compose(_ runs: [RecognizedText], map: RenderMap, scale: Double) -> String {
+        let runs = runs.filter { usable($0.bounds) }
         let columnSegments = map.columns.segments
         func column(_ run: RecognizedText) -> Int {
             columnSegments.lastIndex { Double($0.destination) <= Double(run.bounds.midX) } ?? 0

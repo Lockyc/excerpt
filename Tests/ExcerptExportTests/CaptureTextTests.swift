@@ -211,4 +211,28 @@ import Testing
         #expect(recorder.images.isEmpty)
         #expect(CaptureText.maximumRegions == 4_000)
     }
+
+    /// A recogniser's run with non-finite bounds is dropped, never converted to a row.
+    @Test func runsWithNonFiniteBoundsAreDropped() throws {
+        struct Broken: TextRecognizer {
+            func recognize(_ image: CGImage) throws -> [RecognizedText] {
+                [
+                    RecognizedText("nan", CGRect(x: 0, y: CGFloat.nan, width: 10, height: 10)),
+                    RecognizedText("inf", CGRect(x: 0, y: 0, width: 10, height: CGFloat.infinity)),
+                    RecognizedText("huge", CGRect(x: 0, y: 1e300, width: 10, height: 10)),
+                    RecognizedText("kept", CGRect(x: 2, y: 2, width: 10, height: 10)),
+                ]
+            }
+        }
+        let render = Renderer.render(
+            Fixtures.sheet(width: 100, height: 100), edits: EditDocument(scale: 1, salt: 7))
+        let text = try CaptureText.read(
+            render.image, map: render.map, scale: 1, recognizer: Broken())
+        #expect(text == "kept\n")
+        let runs = [
+            RecognizedText("nan", CGRect(x: CGFloat.nan, y: CGFloat.nan, width: 10, height: 10)),
+            RecognizedText("kept", CGRect(x: 2, y: 2, width: 10, height: 10)),
+        ]
+        #expect(CaptureText.compose(runs, map: render.map, scale: 1) == "kept\n")
+    }
 }
