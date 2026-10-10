@@ -320,7 +320,11 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         }
     }
 
-    @objc func saveDocument() { _ = writeDocument() }
+    /// ⌘S: with nothing unsaved there is nothing to write, so an unedited capture stays one file.
+    @objc func saveDocument() {
+        guard model.isDirty else { return }
+        _ = writeDocument()
+    }
 
     func undo() {
         canvas.endText()
