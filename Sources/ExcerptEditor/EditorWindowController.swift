@@ -420,6 +420,48 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
     public func windowWillClose(_ notification: Notification) { onClose() }
 }
 
+/// A key equivalent the editor handles itself. The one table of them: `EditorWindow` dispatches
+/// on it, and the app refuses to bind a global hotkey to any, since a global hotkey takes the
+/// press before the editor sees it.
+public enum EditorShortcut: CaseIterable, Sendable {
+    case save, forClaude, close, cut, copy, paste, selectAll, undo, redo
+
+    /// The command as the user knows it.
+    public var name: String {
+        switch self {
+        case .save: "Save"
+        case .forClaude: "For Claude"
+        case .close: "Close"
+        case .cut: "Cut"
+        case .copy: "Copy"
+        case .paste: "Paste"
+        case .selectAll: "Select All"
+        case .undo: "Undo"
+        case .redo: "Redo"
+        }
+    }
+
+    /// The lowercased key, as `charactersIgnoringModifiers` reports it.
+    public var key: String {
+        switch self {
+        case .save: "s"
+        case .forClaude, .copy: "c"
+        case .close: "w"
+        case .cut: "x"
+        case .paste: "v"
+        case .selectAll: "a"
+        case .undo, .redo: "z"
+        }
+    }
+
+    public var modifiers: NSEvent.ModifierFlags {
+        switch self {
+        case .forClaude, .redo: [.command, .shift]
+        default: [.command]
+        }
+    }
+}
+
 /// Routes the editor's shortcuts itself: an accessory app has no menu bar to carry them.
 @MainActor
 final class EditorWindow: NSWindow {
@@ -428,16 +470,21 @@ final class EditorWindow: NSWindow {
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         let flags = event.modifierFlags.intersection([.command, .shift, .option, .control])
         let key = event.charactersIgnoringModifiers?.lowercased()
+        guard
+            let shortcut = EditorShortcut.allCases.first(where: {
+                $0.modifiers == flags && $0.key == key
+            })
+        else { return super.performKeyEquivalent(with: event) }
         // Save, For Claude and close work everywhere, including while a text field is being
         // edited.
-        switch (flags, key) {
-        case ([.command], "s"):
+        switch shortcut {
+        case .save:
             editor?.saveDocument()
             return true
-        case ([.command, .shift], "c"):
+        case .forClaude:
             editor?.forClaudePressed()
             return true
-        case ([.command], "w"):
+        case .close:
             performClose(nil)
             return true
         default:
@@ -446,28 +493,22 @@ final class EditorWindow: NSWindow {
         // Without a main menu nothing translates the edit shortcuts, so a field being edited
         // gets them here.
         if firstResponder is NSTextView {
-            let action: Selector?
-            switch (flags, key) {
-            case ([.command], "x"): action = #selector(NSText.cut(_:))
-            case ([.command], "c"): action = #selector(NSText.copy(_:))
-            case ([.command], "v"): action = #selector(NSText.paste(_:))
-            case ([.command], "a"): action = #selector(NSText.selectAll(_:))
-            case ([.command], "z"): action = Selector(("undo:"))
-            case ([.command, .shift], "z"): action = Selector(("redo:"))
-            default: action = nil
+            let action: Selector
+            switch shortcut {
+            case .cut: action = #selector(NSText.cut(_:))
+            case .copy: action = #selector(NSText.copy(_:))
+            case .paste: action = #selector(NSText.paste(_:))
+            case .selectAll: action = #selector(NSText.selectAll(_:))
+            case .undo: action = Selector(("undo:"))
+            default: action = Selector(("redo:"))
             }
-            if let action { return NSApp.sendAction(action, to: nil, from: self) }
-            return super.performKeyEquivalent(with: event)
+            return NSApp.sendAction(action, to: nil, from: self)
         }
-        switch (flags, key) {
-        case ([.command], "z"):
-            editor?.undo()
-        case ([.command, .shift], "z"):
-            editor?.redo()
-        case ([.command], "c"):
-            editor?.copyPressed()
-        default:
-            return super.performKeyEquivalent(with: event)
+        switch shortcut {
+        case .undo: editor?.undo()
+        case .redo: editor?.redo()
+        case .copy: editor?.copyPressed()
+        default: return super.performKeyEquivalent(with: event)
         }
         return true
     }
