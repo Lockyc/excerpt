@@ -124,7 +124,9 @@ Tools: `V` select · `A` arrow · `R` rectangle · `T` text · `H` highlight · 
 **starts at the head**. Crop snaps using the same gap detection as cuts.
 
 **Blur is destructive**: pixelation in ≥12pt blocks over noise, so the covered content cannot be
-recovered from the primary. The editor shows the true result.
+read from the primary; pixelation defeats reading, not candidate-matching of short known
+strings. The noise is seeded from a per-document salt stored in the master. The editor shows the
+true result.
 
 **The edit document** holds the cuts, an optional crop and the annotations (arrow, rectangle,
 text, highlight, blur), all in original pixels, so every edit stays adjustable from the master.

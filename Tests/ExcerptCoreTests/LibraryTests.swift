@@ -96,7 +96,7 @@ import Testing
         let original = Fixtures.sheet(width: 200, height: 400)
         let flat = try store.saveCapture(original, scale: 2, at: date)
         let flatLoad = try store.load(flat)
-        #expect(flatLoad.edits == EditDocument(scale: 2))
+        #expect(flatLoad.edits.scale == 2 && flatLoad.edits.isEmpty)
         #expect(flatLoad.primary == flat)
 
         let edits = EditDocument(scale: 2, cuts: [Cut(axis: .horizontal, lower: 41, upper: 321)])

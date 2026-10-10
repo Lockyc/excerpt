@@ -20,7 +20,7 @@ public enum Renderer {
             if case .blur(let rect) = annotation.shape { return rect }
             return nil
         }
-        let blurred = BlurRenderer.apply(blurs, to: original, scale: edits.scale)
+        let blurred = BlurRenderer.apply(blurs, to: original, scale: edits.scale, salt: edits.salt)
         let cropped = crop == full ? blurred : blurred.cropping(to: crop.cgRect)!
         let cuts = edits.cuts.map { cut -> Cut in
             let offset = cut.axis == .horizontal ? crop.y : crop.x

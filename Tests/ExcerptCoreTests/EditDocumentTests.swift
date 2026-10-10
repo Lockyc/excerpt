@@ -10,6 +10,12 @@ import Testing
         #expect(try EditDocument.decode(doc.encoded()) == doc)
     }
 
+    @Test func saltRoundTripsExactlyAndDiffersPerDocument() throws {
+        let doc = EditDocument(scale: 2, salt: UInt64.max - 3)
+        #expect(try EditDocument.decode(doc.encoded()).salt == UInt64.max - 3)
+        #expect(EditDocument(scale: 2).salt != EditDocument(scale: 2).salt)
+    }
+
     @Test func encodingIsStable() throws {
         let doc = EditDocument(scale: 2, cuts: [Cut(axis: .vertical, lower: 1, upper: 2)])
         #expect(try doc.encoded() == doc.encoded())
@@ -47,7 +53,10 @@ import Testing
         let json = Data(
             #"{"cuts":[{"axis":"horizontal","lower":10,"upper":90}],"scale":2,"version":1}"#.utf8)
         let doc = try EditDocument.decode(json)
-        #expect(doc == EditDocument(scale: 2, cuts: [Cut(axis: .horizontal, lower: 10, upper: 90)]))
+        #expect(
+            doc
+                == EditDocument(
+                    scale: 2, cuts: [Cut(axis: .horizontal, lower: 10, upper: 90)], salt: 0))
         #expect(String(decoding: try doc.encoded(), as: UTF8.self).contains("\"version\":2"))
     }
 

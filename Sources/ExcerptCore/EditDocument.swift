@@ -53,10 +53,15 @@ public struct EditDocument: Codable, Equatable, Sendable {
     public var cuts: [Cut]
     public var crop: PixelRect?
     public var annotations: [Annotation]
+    /// Random per document and stored with it: seeds blur noise so it can't be recomputed from
+    /// the blur rect alone.
+    public var salt: UInt64
 
     public init(
-        scale: Double, cuts: [Cut] = [], crop: PixelRect? = nil, annotations: [Annotation] = []
+        scale: Double, cuts: [Cut] = [], crop: PixelRect? = nil, annotations: [Annotation] = [],
+        salt: UInt64 = .random(in: .min ... .max)
     ) {
+        self.salt = salt
         self.scale = scale
         self.cuts = cuts
         self.crop = crop
@@ -69,6 +74,7 @@ public struct EditDocument: Codable, Equatable, Sendable {
         case cuts
         case crop
         case annotations
+        case salt
     }
 
     /// Version 1 documents have no `crop` or `annotations` keys; they read as none.
@@ -78,6 +84,7 @@ public struct EditDocument: Codable, Equatable, Sendable {
         cuts = try container.decode([Cut].self, forKey: .cuts)
         crop = try container.decodeIfPresent(PixelRect.self, forKey: .crop)
         annotations = try container.decodeIfPresent([Annotation].self, forKey: .annotations) ?? []
+        salt = try container.decodeIfPresent(UInt64.self, forKey: .salt) ?? 0
     }
 
     /// Always writes `currentVersion`: whatever was read is now in this build's shape.
@@ -88,6 +95,7 @@ public struct EditDocument: Codable, Equatable, Sendable {
         try container.encode(cuts, forKey: .cuts)
         try container.encodeIfPresent(crop, forKey: .crop)
         try container.encode(annotations, forKey: .annotations)
+        try container.encode(salt, forKey: .salt)
     }
 
     public var isEmpty: Bool { cuts.isEmpty && crop == nil && annotations.isEmpty }
