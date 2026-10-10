@@ -230,6 +230,20 @@ import UniformTypeIdentifiers
         #expect(message.contains("renders at \(width)×2 pixels"))
     }
 
+    /// The app checks a capture it loaded the same way before the editor or For Claude renders
+    /// it, so a crafted master is refused there too, not drawn.
+    @Test func aLoadedCaptureIsCheckedForTheSizeItRendersAt() throws {
+        let cuts = stride(from: 0, to: 4000, by: 2).map {
+            Cut(axis: .vertical, lower: $0, upper: $0 + 1)
+        }
+        let edits = EditDocument(scale: 3, cuts: cuts)
+        let width = 2000 + 2000 * 54
+        #expect(throws: ImageInputError.rendersTooLarge("m.png", width: width, height: 2)) {
+            try ImageInput.checkRender("m.png", width: 4000, height: 2, edits: edits)
+        }
+        try ImageInput.checkRender("m.png", width: 4000, height: 2, edits: EditDocument(scale: 3))
+    }
+
     /// Review focus: the master beside a primary is checked like any input before it is read;
     /// one that fails leaves the primary to read as itself.
     @Test func aMasterOverTheLimitsLeavesThePrimaryFlat() throws {

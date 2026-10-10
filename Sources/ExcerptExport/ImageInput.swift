@@ -114,6 +114,16 @@ public struct ImageInput {
         }
     }
 
+    /// Refuses a `width`×`height` original whose edits render past the pixel limits, worked out
+    /// from the map before anything is drawn: the app checks every capture it loads this way
+    /// before the editor or For Claude renders it.
+    public static func checkRender(
+        _ path: String, width: Int, height: Int, edits: EditDocument
+    ) throws {
+        try Limits(pixels: maximumPixels, side: maximumSide)
+            .checkRender(path, width: width, height: height, edits: edits)
+    }
+
     private enum Step {
         case done(ImageInput)
         /// A primary, as 8-bit sRGB RGBA, with a master that may have rendered it.
