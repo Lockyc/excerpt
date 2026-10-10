@@ -68,10 +68,11 @@ import Testing
         return (image, blur)
     }
 
-    static func read(_ image: CGImage, scale: Double, blur: CGRect?) throws -> String {
+    static func read(_ image: CGImage, scale: Double, blurs: [CGRect]) throws -> String {
         let edits = EditDocument(
             scale: scale,
-            annotations: blur.map { [Annotation(id: 1, shape: .blur(rect: $0))] } ?? [], salt: 7)
+            annotations: blurs.enumerated().map { Annotation(id: $0 + 1, shape: .blur(rect: $1)) },
+            salt: 7)
         let render = Renderer.render(image, edits: edits)
         return try CaptureText.read(
             render.image, map: render.map, scale: scale, recognizer: VisionTextRecognizer())
@@ -84,14 +85,48 @@ import Testing
         let (image, blur) = Self.line(fontSize: fontSize, scale: scale)
         // Positive control: unblurred, the line is read, so its absence below is the blur's
         // doing and not a font or model miss.
-        let plain = try Self.read(image, scale: scale, blur: nil)
+        let plain = try Self.read(image, scale: scale, blurs: [])
         #expect(plain.contains("4729"), "\(fontSize)pt at \(scale)×: \(plain)")
-        let text = try Self.read(image, scale: scale, blur: blur)
+        let text = try Self.read(image, scale: scale, blurs: [blur])
+        Self.expectUnreadable(text, "\(fontSize)pt at \(scale)×")
+    }
+
+    static func expectUnreadable(_ text: String, _ label: String) {
         let upper = text.uppercased()
-        #expect(!upper.contains("TOKEN"), "\(fontSize)pt at \(scale)×: \(text)")
-        #expect(!upper.contains("KEY"), "\(fontSize)pt at \(scale)×: \(text)")
-        for digit in "4729" {
-            #expect(!text.contains(digit), "\(fontSize)pt at \(scale)×: \(text)")
+        #expect(!upper.contains("TOKEN"), "\(label): \(text)")
+        #expect(!upper.contains("KEY"), "\(label): \(text)")
+        for digit in "4729" { #expect(!text.contains(digit), "\(label): \(text)") }
+    }
+
+    /// The same tight cover drawn as several blurs: abutting strips, or a small blur nested in a
+    /// large one. Blurs that touch are pixelated as one, so none reads finer than the whole.
+    static func layouts(_ cover: CGRect) -> [(String, [CGRect])] {
+        let strips = [2, 3, 4, 6].map { count in
+            (
+                "\(count) strips",
+                (0..<count).map { i in
+                    let top = cover.minY + cover.height * Double(i) / Double(count)
+                    let bottom = cover.minY + cover.height * Double(i + 1) / Double(count)
+                    return CGRect(
+                        x: cover.minX, y: top.rounded(), width: cover.width,
+                        height: bottom.rounded() - top.rounded())
+                }
+            )
+        }
+        let small = CGRect(
+            x: cover.minX + cover.width * 0.3, y: cover.minY + cover.height * 0.35,
+            width: cover.width * 0.3, height: cover.height * 0.3)
+        return strips + [("nested", [cover, small])]
+    }
+
+    @Test(.timeLimit(.minutes(3)), arguments: [1.0, 2.0])
+    func touchingBlursOverALargeLineAreUnreadable(scale: Double) throws {
+        let (image, cover) = Self.line(fontSize: 120, scale: scale)
+        let plain = try Self.read(image, scale: scale, blurs: [])
+        #expect(plain.contains("4729"), "120pt at \(scale)×: \(plain)")
+        for (name, blurs) in Self.layouts(cover) {
+            let text = try Self.read(image, scale: scale, blurs: blurs)
+            Self.expectUnreadable(text, "\(name), 120pt at \(scale)×")
         }
     }
 }

@@ -1,12 +1,15 @@
 import CoreGraphics
 
-/// The destructive blur. Each rect is pixelated into blocks sized by `blockPixels`: at least
-/// `blockPoints` on a side and at least half the rect's shorter side, so any text the rect
-/// covers spans at most about two blocks across its height, however large it is drawn. Every
-/// block takes its average colour shifted by seeded noise, so the covered content cannot be read
-/// from the output; pixelation defeats reading, not candidate-matching of short known strings.
-/// Blocks are read from the original pixels and seeded from the document salt and the rect, so
-/// identical edits render identical pixels.
+/// The destructive blur. Rects that overlap or touch form one group, pixelated together on one
+/// grid aligned to the group's bounding box, in blocks sized by `blockPixels` from that box: at
+/// least `blockPoints` on a side and at least half its shorter side. So any text a group covers
+/// spans at most about two blocks across its height, however large it is drawn and however many
+/// thin or nested rects it is drawn with. Blocks fill only the group's rects; pixels outside
+/// every rect are untouched. Every block takes its average colour shifted by seeded noise, so the
+/// covered content cannot be read from the output; pixelation defeats reading, not
+/// candidate-matching of short known strings. Blocks are read from the original pixels and
+/// seeded from the document salt and the group's rects, so identical edits render identical
+/// pixels.
 public enum BlurRenderer {
     public static let blockPoints = 12.0
     /// The most a block's channel moves from its average, either way.
@@ -15,7 +18,7 @@ public enum BlurRenderer {
     static let minimumBlockPixels = 12
 
     /// `salt` is the document's random value: it keeps the noise from being recomputed from the
-    /// rect alone, which is readable off the output.
+    /// rects alone, which are readable off the output.
     public static func apply(
         _ rects: [CGRect], to image: CGImage, scale: Double, salt: UInt64
     ) -> CGImage {
@@ -35,20 +38,66 @@ public enum BlurRenderer {
         context.draw(image, in: bounds)
         // Copy, not source-over: a translucent block would otherwise show the detail beneath it.
         context.setBlendMode(.copy)
-        for region in regions {
-            let block = blockPixels(for: region, scale: scale)
-            guard let piece = image.cropping(to: region.cgRect) else {
-                preconditionFailure("clamped blur region lies inside the image")
+        let flip = CanvasFlip(height: image.height)
+        for group in groups(regions) {
+            let box = boundingBox(group)
+            guard let piece = image.cropping(to: box.cgRect) else {
+                preconditionFailure("clamped blur group lies inside the image")
             }
-            let blocks = pixelate(PixelBuffer(piece), block: block, seed: seed(region, salt: salt))
-            context.draw(
-                blocks.makeImage(), in: CanvasFlip(height: image.height).rect(region.cgRect))
+            let blocks = pixelate(
+                PixelBuffer(piece), block: blockPixels(for: box, scale: scale),
+                seed: seed(group, salt: salt))
+            context.saveGState()
+            context.clip(to: group.map { flip.rect($0.cgRect) })
+            context.draw(blocks.makeImage(), in: flip.rect(box.cgRect))
+            context.restoreGState()
         }
         return context.makeImage()!
     }
 
-    /// The side of `region`'s blocks, in pixels: `blockPoints` at `scale` (never under
-    /// `minimumBlockPixels`), or half the region's shorter side when that is larger.
+    /// The connected sets of `regions` that overlap or touch (corners included), each in input
+    /// order, ordered by their first member. A sweep down the rows compares each region only with
+    /// those still reaching its top.
+    static func groups(_ regions: [PixelRect]) -> [[PixelRect]] {
+        var parent = Array(regions.indices)
+        func root(_ i: Int) -> Int {
+            var i = i
+            while parent[i] != i {
+                parent[i] = parent[parent[i]]
+                i = parent[i]
+            }
+            return i
+        }
+        var active: [Int] = []
+        for i in regions.indices.sorted(by: { regions[$0].y < regions[$1].y }) {
+            let r = regions[i]
+            active.removeAll { regions[$0].y + regions[$0].height < r.y }
+            for j in active
+            where regions[j].x <= r.x + r.width && r.x <= regions[j].x + regions[j].width {
+                parent[root(j)] = root(i)
+            }
+            active.append(i)
+        }
+        var order: [Int] = []
+        var members: [Int: [PixelRect]] = [:]
+        for i in regions.indices {
+            let key = root(i)
+            if members[key] == nil { order.append(key) }
+            members[key, default: []].append(regions[i])
+        }
+        return order.map { members[$0]! }
+    }
+
+    static func boundingBox(_ group: [PixelRect]) -> PixelRect {
+        let left = group.map(\.x).min()!
+        let top = group.map(\.y).min()!
+        let right = group.map { $0.x + $0.width }.max()!
+        let bottom = group.map { $0.y + $0.height }.max()!
+        return PixelRect(x: left, y: top, width: right - left, height: bottom - top)
+    }
+
+    /// The side of a group's blocks, in pixels, from its bounding box `region`: `blockPoints` at
+    /// `scale` (never under `minimumBlockPixels`), or half the box's shorter side when larger.
     static func blockPixels(for region: PixelRect, scale: Double) -> Int {
         let floor = max(minimumBlockPixels, Int((blockPoints * scale).rounded(.up)))
         let half = (min(region.width, region.height) + 1) / 2
@@ -101,12 +150,14 @@ public enum BlurRenderer {
         return min(max(folded, 0), upper)
     }
 
-    /// Mixes the salt and every field of the rect through SplitMix64's finalizer.
-    static func seed(_ region: PixelRect, salt: UInt64) -> UInt64 {
+    /// Mixes the salt and every field of every rect of the group through SplitMix64's finalizer.
+    static func seed(_ group: [PixelRect], salt: UInt64) -> UInt64 {
         var state = salt
-        for field in [region.x, region.y, region.width, region.height] {
-            var mixer = SplitMix64(state: state ^ UInt64(truncatingIfNeeded: field))
-            state = mixer.next()
+        for region in group {
+            for field in [region.x, region.y, region.width, region.height] {
+                var mixer = SplitMix64(state: state ^ UInt64(truncatingIfNeeded: field))
+                state = mixer.next()
+            }
         }
         return state
     }

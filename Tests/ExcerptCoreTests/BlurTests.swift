@@ -149,12 +149,12 @@ import Testing
 
     @Test func saltChangesTheNoiseAndEveryRectFieldFeedsTheSeed() {
         let r = PixelRect(x: 1, y: 2, width: 3, height: 4)
-        #expect(BlurRenderer.seed(r, salt: 1) != BlurRenderer.seed(r, salt: 2))
-        #expect(BlurRenderer.seed(r, salt: 1) == BlurRenderer.seed(r, salt: 1))
+        #expect(BlurRenderer.seed([r], salt: 1) != BlurRenderer.seed([r], salt: 2))
+        #expect(BlurRenderer.seed([r], salt: 1) == BlurRenderer.seed([r], salt: 1))
         for other in [
             PixelRect(x: 9, y: 2, width: 3, height: 4), PixelRect(x: 1, y: 9, width: 3, height: 4),
             PixelRect(x: 1, y: 2, width: 9, height: 4), PixelRect(x: 1, y: 2, width: 3, height: 9),
-        ] { #expect(BlurRenderer.seed(r, salt: 1) != BlurRenderer.seed(other, salt: 1)) }
+        ] { #expect(BlurRenderer.seed([r], salt: 1) != BlurRenderer.seed([other], salt: 1)) }
     }
 
     @Test func aHugeRectBlursTheWholeImage() {
@@ -171,16 +171,59 @@ import Testing
         #expect(blurred[x: 25, y: 35] == blurred[x: 27, y: 37])
     }
 
-    @Test func overlappingBlursEachReadTheOriginal() {
-        let image = Fixtures.sheet(width: 200, height: 200)
-        let a = CGRect(x: 10, y: 10, width: 100, height: 100)
-        let b = CGRect(x: 60, y: 60, width: 100, height: 100)
-        let both = PixelBuffer(BlurRenderer.apply([a, b], to: image, scale: 2, salt: 7))
-        let onlyB = PixelBuffer(BlurRenderer.apply([b], to: image, scale: 2, salt: 7))
-        // The later blur wins in the overlap, and equals blurring B alone from the original.
-        for (x, y) in [(70, 70), (100, 100), (150, 150)] {
-            #expect(both[x: x, y: y] == onlyB[x: x, y: y])
+    @Test func blursThatOverlapOrTouchAreOneGroup() {
+        let a = PixelRect(x: 0, y: 0, width: 10, height: 10)
+        let touching = PixelRect(x: 10, y: 0, width: 10, height: 10)
+        let corner = PixelRect(x: 20, y: 10, width: 5, height: 5)
+        let apart = PixelRect(x: 40, y: 40, width: 5, height: 5)
+        let nested = PixelRect(x: 41, y: 41, width: 2, height: 2)
+        #expect(
+            BlurRenderer.groups([a, apart, touching, nested, corner])
+                == [[a, touching, corner], [apart, nested]])
+        #expect(BlurRenderer.groups([a, PixelRect(x: 11, y: 0, width: 5, height: 5)]).count == 2)
+        #expect(
+            BlurRenderer.boundingBox([a, corner]) == PixelRect(x: 0, y: 0, width: 25, height: 15))
+    }
+
+    /// Thin strips stacked over a line, or a small blur nested in a large one, pixelate as one:
+    /// blocks sized from the group's box, on one grid, as if drawn as the one rect they cover.
+    @Test func stackedAndNestedBlursUseTheGroupsBlocks() {
+        let image = Fixtures.sheet(width: 600, height: 300)
+        let whole = CGRect(x: 0, y: 20, width: 600, height: 240)
+        let strips = (0..<6).map { CGRect(x: 0, y: 20 + $0 * 40, width: 600, height: 40) }
+        let one = PixelBuffer(BlurRenderer.apply([whole], to: image, scale: 2, salt: 7))
+        let stacked = PixelBuffer(BlurRenderer.apply(strips, to: image, scale: 2, salt: 7))
+        // 120-pixel blocks: flat across what were six 40-pixel strips.
+        for y in stride(from: 20, to: 140, by: 7) {
+            #expect(stacked[x: 3, y: y] == stacked[x: 3, y: 20])
         }
+        #expect(stacked[x: 0, y: 140] != stacked[x: 0, y: 20])
+        let nested = PixelBuffer(
+            BlurRenderer.apply(
+                [whole, CGRect(x: 200, y: 100, width: 60, height: 30)], to: image, scale: 2,
+                salt: 7))
+        for y in stride(from: 100, to: 130, by: 3) {
+            for x in stride(from: 200, to: 240, by: 3) {
+                #expect(nested[x: x, y: y] == nested[x: 120, y: 20])
+            }
+        }
+        #expect(one[x: 0, y: 0] == PixelBuffer(image)[x: 0, y: 0])
+    }
+
+    /// Blocks fill the group's rects, never the rest of its bounding box.
+    @Test func pixelsOutsideEveryRectOfAGroupAreUntouched() {
+        let image = Fixtures.sheet(width: 200, height: 200)
+        let original = PixelBuffer(image)
+        let out = PixelBuffer(
+            BlurRenderer.apply(
+                [
+                    CGRect(x: 0, y: 0, width: 100, height: 20),
+                    CGRect(x: 0, y: 20, width: 20, height: 100),
+                ], to: image, scale: 1, salt: 7))
+        for (x, y) in [(50, 50), (99, 119), (21, 21)] {
+            #expect(out[x: x, y: y] == original[x: x, y: y])
+        }
+        #expect(out != original)
     }
 
     @Test func blocksNeverShrinkBelowTwelvePixels() {
