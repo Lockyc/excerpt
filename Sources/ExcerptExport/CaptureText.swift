@@ -45,19 +45,28 @@ public enum CaptureText {
     public static let maximumAspect = 8
 
     /// What the recogniser is shown for a `width`×`height` region: a white canvas whose shorter
-    /// side is at least the longer over `maximumAspect`, with the region whole and centred at
-    /// `content`. A region already within the aspect is its own canvas.
+    /// side is at least the longer over `maximumAspect`, as far as `maximumPixels` allows, with
+    /// the region whole and centred at `content`. A region already within the aspect is its own
+    /// canvas.
     public struct Canvas: Equatable, Sendable {
         public let width: Int
         public let height: Int
         /// Where the region sits on the canvas, in the canvas's pixels, top-left origin.
         public let content: PixelRect
 
+        /// The most pixels a canvas for a region of `region` pixels may have: four times the
+        /// region, or 16 megapixels when that is more. Padding stops there, so a tiny file of a
+        /// very wide, very short image can't make a canvas of gigabytes.
+        public static func maximumPixels(region: Int) -> Int { max(4 * region, 16_000_000) }
+
         public init(width regionWidth: Int, height regionHeight: Int) {
             let longer = max(regionWidth, regionHeight)
-            let shortest = (longer + CaptureText.maximumAspect - 1) / CaptureText.maximumAspect
-            width = max(regionWidth, regionWidth < regionHeight ? shortest : 0)
-            height = max(regionHeight, regionHeight <= regionWidth ? shortest : 0)
+            let shorter = min(regionWidth, regionHeight)
+            let wanted = (longer + CaptureText.maximumAspect - 1) / CaptureText.maximumAspect
+            let fits = Self.maximumPixels(region: regionWidth * regionHeight) / longer
+            let padded = max(shorter, min(wanted, fits))
+            width = regionWidth < regionHeight ? padded : regionWidth
+            height = regionWidth < regionHeight ? regionHeight : padded
             content = PixelRect(
                 x: (width - regionWidth) / 2, y: (height - regionHeight) / 2, width: regionWidth,
                 height: regionHeight)

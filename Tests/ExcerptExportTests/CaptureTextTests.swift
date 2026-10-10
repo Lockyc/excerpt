@@ -282,4 +282,41 @@ import Testing
         #expect(page.width == 800 && page.height == 100)
         #expect(page.content == PixelRect(x: 0, y: 0, width: 800, height: 100))
     }
+
+    /// Review focus: padding is bounded, so a tiny file of a very wide, very short image can't
+    /// make a canvas of gigabytes. It pads only as far as `Canvas.maximumPixels` allows.
+    @Test func paddingNeverGrowsACanvasPastItsLimit() {
+        let strip = CaptureText.Canvas(width: 100_000, height: 8)
+        #expect(strip.width == 100_000 && strip.height == 160)
+        #expect(strip.content == PixelRect(x: 0, y: 76, width: 100_000, height: 8))
+        let band = CaptureText.Canvas(width: 50_000, height: 40)
+        #expect(band.width == 50_000 && band.height == 320)
+        let column = CaptureText.Canvas(width: 8, height: 100_000)
+        #expect(column.width == 160 && column.height == 100_000)
+        // Past 16 megapixels a region may grow to four times its own pixels.
+        let full = CaptureText.Canvas(width: 400_000, height: 40)
+        #expect(full.width == 400_000 && full.height == 160)
+        for canvas in [strip, band, column, full] {
+            let region = canvas.content.width * canvas.content.height
+            #expect(
+                canvas.width * canvas.height
+                    <= max(region, CaptureText.Canvas.maximumPixels(region: region)))
+        }
+        #expect(CaptureText.Canvas.maximumPixels(region: 1_000) == 16_000_000)
+        #expect(CaptureText.Canvas.maximumPixels(region: 5_000_000) == 20_000_000)
+    }
+
+    @Test func aVeryWideShortImageIsShownOnABoundedCanvas() throws {
+        for (width, height) in [(100_000, 8), (50_000, 40)] {
+            let render = Renderer.render(
+                Fixtures.sheet(width: width, height: height), edits: EditDocument(scale: 1, salt: 7)
+            )
+            let recorder = RecordingRecognizer()
+            _ = try CaptureText.read(render.image, map: render.map, scale: 1, recognizer: recorder)
+            #expect(recorder.images.count == 1)
+            let shown = recorder.images[0]
+            #expect(shown.width == width)
+            #expect(shown.width * shown.height <= 16_000_000)
+        }
+    }
 }
