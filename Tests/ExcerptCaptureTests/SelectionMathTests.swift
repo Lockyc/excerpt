@@ -15,4 +15,12 @@ import Testing
         #expect(!SelectionMath.isCapturable(CGRect(x: 0, y: 0, width: 300, height: 3)))
         #expect(SelectionMath.isCapturable(CGRect(x: 0, y: 0, width: 4, height: 4)))
     }
+
+    @Test func dragOntoNextDisplayIsClampedBeforeTheSizeCheck() {
+        let bounds = CGRect(x: 0, y: 0, width: 100, height: 100)
+        let edge = SelectionMath.rect(
+            from: CGPoint(x: 98, y: 10), to: CGPoint(x: 150, y: 60), within: bounds)
+        #expect(edge == CGRect(x: 98, y: 10, width: 2, height: 50))
+        #expect(!SelectionMath.isCapturable(edge))
+    }
 }

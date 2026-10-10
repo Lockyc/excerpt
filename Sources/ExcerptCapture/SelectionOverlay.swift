@@ -18,6 +18,7 @@ public enum SelectionResult {
 public final class SelectionOverlay {
     private var windows: [OverlayWindow] = []
     private var continuation: CheckedContinuation<SelectionResult, Never>?
+    private var observers: [NSObjectProtocol] = []
 
     public init() {}
 
@@ -36,6 +37,19 @@ public final class SelectionOverlay {
             let mouse = NSEvent.mouseLocation
             (windows.first { $0.frame.contains(mouse) } ?? windows.first)?.makeKey()
             NSCursor.crosshair.push()
+            // Losing activation (Esc would never arrive) or a display change (the stills no
+            // longer match the screens) must not strand the full-screen overlay.
+            for name in [
+                NSApplication.didResignActiveNotification,
+                NSApplication.didChangeScreenParametersNotification,
+            ] {
+                observers.append(
+                    NotificationCenter.default.addObserver(
+                        forName: name, object: nil, queue: .main
+                    ) { [weak self] _ in
+                        MainActor.assumeIsolated { self?.finish(.cancelled) }
+                    })
+            }
         }
     }
 
@@ -43,6 +57,8 @@ public final class SelectionOverlay {
         guard let continuation else { return }
         self.continuation = nil
         NSCursor.pop()
+        for observer in observers { NotificationCenter.default.removeObserver(observer) }
+        observers.removeAll()
         for window in windows { window.orderOut(nil) }
         windows.removeAll()
         continuation.resume(returning: result)
@@ -99,7 +115,7 @@ final class OverlayView: NSView {
 
     private var selection: CGRect? {
         guard let anchor, let current else { return nil }
-        return SelectionMath.rect(from: anchor, to: current)
+        return SelectionMath.rect(from: anchor, to: current, within: bounds)
     }
 
     // MARK: Events
@@ -116,7 +132,7 @@ final class OverlayView: NSView {
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
         if case .window = mode {
-            if let hovered { finish(.window(hovered)) }
+            finish(hovered.map { .window($0) } ?? .cancelled)  // a click on nothing cancels
             return
         }
         anchor = point
