@@ -115,23 +115,37 @@ final class OverlayView: NSView {
 
     private var selection: CGRect? {
         guard let anchor, let current else { return nil }
-        return SelectionMath.rect(from: anchor, to: current, within: bounds)
+        // Space-move can push the drag fully off the display, leaving nothing to draw or crop.
+        let rect = SelectionMath.rect(from: anchor, to: current, within: bounds)
+        return rect.isNull || rect.isEmpty ? nil : rect
+    }
+
+    /// The window under the global cursor; the one lookup behind both the highlight and a click.
+    private func updateHover() {
+        guard case .window(let list) = mode else { return }
+        let global = NSEvent.mouseLocation
+        hovered = list.first { $0.frame.contains(global) }
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard window != nil else { return }
+        updateHover()  // highlight appears before the mouse moves
+        needsDisplay = true
     }
 
     // MARK: Events
 
     override func mouseMoved(with event: NSEvent) {
         cursor = convert(event.locationInWindow, from: nil)
-        if case .window(let list) = mode {
-            let global = NSEvent.mouseLocation
-            hovered = list.first { $0.frame.contains(global) }
-        }
+        updateHover()
         needsDisplay = true
     }
 
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
         if case .window = mode {
+            updateHover()
             finish(hovered.map { .window($0) } ?? .cancelled)  // a click on nothing cancels
             return
         }
