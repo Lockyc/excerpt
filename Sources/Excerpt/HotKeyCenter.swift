@@ -28,10 +28,13 @@ final class HotKeyCenter {
             GetApplicationEventTarget(),
             { _, event, userData in
                 var hotKey = EventHotKeyID()
-                GetEventParameter(
+                let status = GetEventParameter(
                     event, EventParamName(kEventParamDirectObject),
                     EventParamType(typeEventHotKeyID),
                     nil, MemoryLayout<EventHotKeyID>.size, nil, &hotKey)
+                guard status == noErr, hotKey.signature == HotKeyCenter.signature else {
+                    return OSStatus(eventNotHandledErr)
+                }
                 let center = Unmanaged<HotKeyCenter>.fromOpaque(userData!).takeUnretainedValue()
                 let id = hotKey.id
                 DispatchQueue.main.async { MainActor.assumeIsolated { center.actions[id]?() } }
