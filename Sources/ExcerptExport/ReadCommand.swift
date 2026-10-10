@@ -80,6 +80,8 @@ public enum ReadCommand {
             return failure(error, status(for: error))
         } catch let error as ClaudeBundleError {
             return failure(error, status(for: error))
+        } catch let error as CaptureTextError {
+            return failure(error, status(for: error))
         } catch {
             return failure(error, Status.software)
         }
@@ -91,6 +93,13 @@ public enum ReadCommand {
         case .missing, .folder, .unreadable: Status.noInput
         case .notAnImage, .fileTooLarge, .tooManyPixels, .rendersTooLarge, .damagedEdits:
             Status.dataError
+        }
+    }
+
+    /// A capture cut too finely to read is bad data, like damaged edits.
+    static func status(for error: CaptureTextError) -> Int32 {
+        switch error {
+        case .tooManyRegions: Status.dataError
         }
     }
 

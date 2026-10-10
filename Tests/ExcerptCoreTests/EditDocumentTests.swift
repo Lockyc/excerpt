@@ -150,6 +150,30 @@ import Testing
         }
     }
 
+    /// Every cut is a seam and a region to read: a crafted master's thousands are refused.
+    @Test(.timeLimit(.minutes(1))) func rejectsMoreThanAThousandCutsOnAnAxis() throws {
+        func document(horizontal: Int, vertical: Int) -> Data {
+            let cuts =
+                (0..<horizontal).map {
+                    #"{"axis":"horizontal","lower":\#($0 * 3),"upper":\#($0 * 3 + 1)}"#
+                }
+                + (0..<vertical).map {
+                    #"{"axis":"vertical","lower":\#($0 * 3),"upper":\#($0 * 3 + 1)}"#
+                }
+            return Data(#"{"version":2,"scale":2,"cuts":[\#(cuts.joined(separator: ","))]}"#.utf8)
+        }
+        let limit = EditDocument.maximumCutsPerAxis
+        #expect(limit == 1_000)
+        #expect(
+            try EditDocument.decode(document(horizontal: limit, vertical: limit)).cuts.count == 2
+                * limit)
+        for (horizontal, vertical) in [(limit + 1, 0), (0, limit + 1)] {
+            #expect(throws: EditDocumentError.invalidGeometry) {
+                try EditDocument.decode(document(horizontal: horizontal, vertical: vertical))
+            }
+        }
+    }
+
     @Test func rejectsAnEmptyOrNegativeCrop() {
         rejects(#""crop":{"x":0,"y":0,"width":0,"height":10}"#)
         rejects(#""crop":{"x":0,"y":0,"width":10,"height":-5}"#)

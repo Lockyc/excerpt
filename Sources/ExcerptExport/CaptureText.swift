@@ -9,6 +9,18 @@ public protocol TextRecognizer: Sendable {
     func recognize(_ image: CGImage) throws -> [RecognizedText]
 }
 
+public enum CaptureTextError: Error, Equatable, LocalizedError {
+    /// The render's cuts split it into more regions than `CaptureText.maximumRegions`.
+    case tooManyRegions(Int)
+
+    public var errorDescription: String? {
+        switch self {
+        case .tooManyRegions(let count):
+            "Its cuts split it into \(count) parts to read; text is read from at most \(CaptureText.maximumRegions)."
+        }
+    }
+}
+
 /// The text of a render, read only from what the render shows, with every cut written in where
 /// it was made. The render is the primary's pixels, so nothing a cut removed or a blur covered
 /// can reach the text.
@@ -22,6 +34,10 @@ public enum CaptureText {
         /// share are reported once.
         public let owned: Range<Int>
     }
+
+    /// The most regions one read takes. Each is a recognition pass of its own, so a render cut
+    /// into more is refused before any is read rather than recognised for hours.
+    public static let maximumRegions = 4_000
 
     /// Regions too thin to hold a line of text are not read.
     public static let minimumRegionSide = 8
@@ -51,15 +67,20 @@ public enum CaptureText {
         return regions
     }
 
-    /// Reads every region of `image`, the render `map` describes, and writes the text.
+    /// Reads every region of `image`, the render `map` describes, and writes the text. Throws
+    /// `tooManyRegions` before reading any when there are more than `maximumRegions`.
     public static func read(
         _ image: CGImage, map: RenderMap, scale: Double, recognizer: any TextRecognizer
     ) throws -> String {
         precondition(
             image.width == map.renderedWidth && image.height == map.renderedHeight,
             "the map describes this render")
+        let regions = regions(of: map, scale: scale)
+        guard regions.count <= maximumRegions else {
+            throw CaptureTextError.tooManyRegions(regions.count)
+        }
         var runs: [RecognizedText] = []
-        for region in regions(of: map, scale: scale) {
+        for region in regions {
             let piece = image.cropping(to: region.rect.cgRect)!
             for run in try recognizer.recognize(piece) {
                 let bounds = run.bounds.offsetBy(

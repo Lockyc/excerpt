@@ -191,4 +191,24 @@ import Testing
         _ = try CaptureText.read(render.image, map: render.map, scale: 1, recognizer: recorder)
         #expect(recorder.images.isEmpty)
     }
+
+    /// Review focus: cuts multiply the regions, each one a recognition pass, so a capture cut
+    /// into more than `maximumRegions` is refused before any is read.
+    @Test(.timeLimit(.minutes(1))) func tooManyRegionsAreRefusedBeforeAnyIsRead() throws {
+        let original = Fixtures.sheet(width: 2_000, height: 2_000)
+        // 70 cuts a side, 28 pixels apart: 71 × 71 = 5,041 kept regions of 18 pixels.
+        let cuts = (0..<70).flatMap { i in
+            [Axis.horizontal, .vertical].map {
+                Cut(axis: $0, lower: 18 + i * 28, upper: 28 + i * 28)
+            }
+        }
+        let render = Renderer.render(original, edits: EditDocument(scale: 1, cuts: cuts, salt: 7))
+        #expect(CaptureText.regions(of: render.map, scale: 1).count == 5_041)
+        let recorder = RecordingRecognizer()
+        #expect(throws: CaptureTextError.tooManyRegions(5_041)) {
+            try CaptureText.read(render.image, map: render.map, scale: 1, recognizer: recorder)
+        }
+        #expect(recorder.images.isEmpty)
+        #expect(CaptureText.maximumRegions == 4_000)
+    }
 }

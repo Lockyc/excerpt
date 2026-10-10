@@ -8,7 +8,8 @@ public enum EditDocumentError: Error, Equatable, LocalizedError {
     /// would trap or exhaust memory.
     case invalidScale(Double)
     /// A cut bound, crop, annotation coordinate or annotation id outside
-    /// `EditDocument.coordinateLimit` or `EditDocument.idLimit`, or an id used twice.
+    /// `EditDocument.coordinateLimit` or `EditDocument.idLimit`, an id used twice, or more than
+    /// `EditDocument.maximumCutsPerAxis` cuts on an axis.
     case invalidGeometry
     /// The edits JSON isn't a readable edit document at all.
     case damaged
@@ -126,11 +127,19 @@ public struct EditDocument: Codable, Equatable, Sendable {
     /// The largest magnitude, in original pixels, any stored cut bound, coordinate or size may
     /// have.
     public static let coordinateLimit = 1_000_000.0
+    /// The most cuts a document may make on either axis. Each one is a seam to draw and
+    /// multiplies the regions read for text, so a crafted master's thousands are refused.
+    public static let maximumCutsPerAxis = 1_000
     /// Annotation ids are in `0..<idLimit`, which keeps `nextAnnotationID` clear of overflow.
     public static let idLimit = Int.max / 2
 
-    /// Throws `invalidGeometry` unless every stored coordinate, size and id is in range.
+    /// Throws `invalidGeometry` unless every stored coordinate, size and id is in range and
+    /// neither axis has more than `maximumCutsPerAxis` cuts.
     private func validateGeometry() throws {
+        for axis in [Axis.horizontal, .vertical]
+        where cuts.lazy.filter({ $0.axis == axis }).count > Self.maximumCutsPerAxis {
+            throw EditDocumentError.invalidGeometry
+        }
         let limit = Self.coordinateLimit
         for cut in cuts where abs(Double(cut.lower)) > limit || abs(Double(cut.upper)) > limit {
             throw EditDocumentError.invalidGeometry

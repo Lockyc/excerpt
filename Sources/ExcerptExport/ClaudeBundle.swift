@@ -61,6 +61,8 @@ public struct ClaudeBundle: Sendable {
         do {
             text = try CaptureText.read(
                 render.image, map: render.map, scale: edits.scale, recognizer: recognizer)
+        } catch let error as CaptureTextError {
+            throw error
         } catch {
             throw ClaudeBundleError.recognitionFailed(error)
         }

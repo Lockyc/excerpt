@@ -118,9 +118,9 @@ public struct ImageInput {
 
     /// Refuses a decoded `width`×`height` original whose edits render it past the pixel limits
     /// and larger than itself on either side, worked out from the map before anything is drawn:
-    /// the app checks every capture it loads this way before the editor or For Claude renders
-    /// it. Only seams grow a render, so this refuses a crafted master's thousands of cuts; a
-    /// render no larger than the original already in memory is let through.
+    /// the app checks every capture it opens in the editor this way. Only seams grow a render,
+    /// so this refuses a crafted master's many cuts; a render no larger than the original already
+    /// in memory is let through.
     public static func checkRender(
         _ path: String, width: Int, height: Int, edits: EditDocument
     ) throws {

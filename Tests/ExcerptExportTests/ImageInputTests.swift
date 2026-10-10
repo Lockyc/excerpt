@@ -211,14 +211,15 @@ import UniformTypeIdentifiers
     /// the size it would render at, before anything is drawn.
     @Test func aMasterWhoseRenderIsOverTheLimitIsRefused() throws {
         let master = try Self.folder().appendingPathComponent("Excerpt x original.png")
-        let original = Fixtures.sheet(width: 4000, height: 2)
-        let cuts = stride(from: 0, to: 4000, by: 2).map {
+        let original = Fixtures.sheet(width: 60_000, height: 2)
+        let cuts = stride(from: 0, to: 60_000, by: 60).map {
             Cut(axis: .vertical, lower: $0, upper: $0 + 1)
         }
+        #expect(cuts.count == EditDocument.maximumCutsPerAxis)
         let edits = EditDocument(scale: 3, cuts: cuts)
         try MasterFile.encode(original: original, edits: edits).write(to: master)
-        // 2000 kept columns and 2000 seams of 54 pixels.
-        let width = 2000 + 2000 * 54
+        // 59,000 kept columns and 1,000 seams of 54 pixels.
+        let width = 59_000 + 1_000 * 54
         #expect(throws: ImageInputError.rendersTooLarge(master.path, width: width, height: 2)) {
             try ImageInput.load(master)
         }
@@ -230,7 +231,7 @@ import UniformTypeIdentifiers
         #expect(message.contains("renders at \(width)×2 pixels"))
     }
 
-    /// The app checks a capture it loaded before the editor or For Claude renders it: a crafted
+    /// The app checks a capture it loaded before the editor renders it: a crafted
     /// master whose cuts render it past the limits, and larger than its original, is refused.
     @Test func aLoadedCaptureIsCheckedForTheSizeItRendersAt() throws {
         let cuts = stride(from: 0, to: 4000, by: 2).map {
