@@ -1,0 +1,105 @@
+import CoreGraphics
+import ExcerptCore
+import Foundation
+
+public enum ClaudeBundleError: Error, LocalizedError {
+    /// The cache folder couldn't be made, pruned or written: unwritable, or the disk is full.
+    case cacheUnwritable(URL, any Error)
+    /// The recogniser failed on the render.
+    case recognitionFailed(any Error)
+    /// A tile couldn't be encoded as a PNG; the cache is not at fault.
+    case tileEncodingFailed(any Error)
+
+    public var errorDescription: String? {
+        switch self {
+        case .cacheUnwritable(let folder, let error):
+            "Couldn't write to \(folder.path): \(error.localizedDescription)"
+        case .recognitionFailed(let error):
+            "Couldn't read the text: \(error.localizedDescription)"
+        case .tileEncodingFailed(let error):
+            "Couldn't encode an image tile: \(error.localizedDescription)"
+        }
+    }
+}
+
+/// A capture shaped for Claude: tiles at 1× and the text, in the capture's cache folder.
+public struct ClaudeBundle: Sendable {
+    public let folder: URL
+    /// Top to bottom.
+    public let tiles: [URL]
+    /// `text.md`.
+    public let textFile: URL
+    /// What `text.md` holds.
+    public let text: String
+    /// Expired cache entries the prune before this export could not remove.
+    public let pruneFailures: [(url: URL, error: ClaudeCacheError)]
+
+    /// `@` references to every tile, then `text.md`, on one line: what the clipboard gets. One
+    /// line, because a terminal may fold a pasted block of many lines into a placeholder.
+    public var references: String {
+        (tiles + [textFile]).map { "@" + $0.path }.joined(separator: " ")
+    }
+
+    /// Renders `original` with `edits`, reads its text and tiles it, then replaces the capture's
+    /// cache folder with the result. Tiles and text come from the render alone, which is the
+    /// primary's pixels: nothing a cut removed or a blur covered is in either. Expired folders
+    /// are pruned first; entries that could not be removed are reported in `pruneFailures`.
+    /// The bundle is built in a hidden staging folder (a dot-name, which `folderName` never
+    /// yields) and swapped in atomically, so a failure leaves the previous bundle in place.
+    public static func write(
+        original: CGImage, edits: EditDocument, name: String, cache: ClaudeCache,
+        recognizer: any TextRecognizer, now: Date = Date()
+    ) throws -> ClaudeBundle {
+        let pruned: ClaudeCache.Pruned
+        do {
+            pruned = try cache.prune(now: now)
+        } catch {
+            throw ClaudeBundleError.cacheUnwritable(cache.root, error)
+        }
+        let render = Renderer.render(original, edits: edits)
+        let text: String
+        do {
+            text = try CaptureText.read(
+                render.image, map: render.map, scale: edits.scale, recognizer: recognizer)
+        } catch {
+            throw ClaudeBundleError.recognitionFailed(error)
+        }
+        let tiles = Tiling.tiles(of: render.image, scale: edits.scale)
+        let encoded: [Data]
+        do {
+            encoded = try tiles.map { try PNGCodec.encode($0, scale: 1) }
+        } catch {
+            throw ClaudeBundleError.tileEncodingFailed(error)
+        }
+
+        let manager = FileManager.default
+        let folder = cache.folder(for: name)
+        let staging = cache.root.appendingPathComponent(
+            ".\(folder.lastPathComponent)-\(UUID().uuidString)", isDirectory: true)
+        let digits = String(tiles.count).count
+        let names = tiles.indices.map {
+            "tile-\(padded($0 + 1, digits))-of-\(padded(tiles.count, digits)).png"
+        }
+        do {
+            try cache.ensureRoot()
+            try manager.createDirectory(at: staging, withIntermediateDirectories: true)
+            for (data, tileName) in zip(encoded, names) {
+                try data.write(to: staging.appendingPathComponent(tileName))
+            }
+            try Data(text.utf8).write(to: staging.appendingPathComponent("text.md"))
+            _ = try manager.replaceItemAt(folder, withItemAt: staging)
+        } catch {
+            try? manager.removeItem(at: staging)
+            throw ClaudeBundleError.cacheUnwritable(cache.root, error)
+        }
+        return ClaudeBundle(
+            folder: folder, tiles: names.map { folder.appendingPathComponent($0) },
+            textFile: folder.appendingPathComponent("text.md"), text: text,
+            pruneFailures: pruned.failed)
+    }
+
+    private static func padded(_ number: Int, _ digits: Int) -> String {
+        let text = String(number)
+        return String(repeating: "0", count: max(0, digits - text.count)) + text
+    }
+}
