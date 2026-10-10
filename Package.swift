@@ -14,16 +14,30 @@ let package = Package(
             dependencies: ["ExcerptCore"],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
-        .executableTarget(
-            name: "Excerpt",
-            dependencies: ["ExcerptCore", "ExcerptCapture"],
+        .target(
+            name: "ExcerptEditor",
+            dependencies: ["ExcerptCore"],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
+        .executableTarget(
+            name: "Excerpt",
+            dependencies: ["ExcerptCore", "ExcerptCapture", "ExcerptEditor"],
+            swiftSettings: [.swiftLanguageMode(.v5)]
+        ),
+        .target(
+            name: "ExcerptTestSupport", dependencies: ["ExcerptCore"],
+            path: "Tests/ExcerptTestSupport"),
         .testTarget(
-            name: "ExcerptCoreTests", dependencies: ["ExcerptCore"], exclude: ["Goldens"]),
+            name: "ExcerptCoreTests", dependencies: ["ExcerptCore", "ExcerptTestSupport"],
+            exclude: ["Goldens"]),
         .testTarget(
             name: "ExcerptCaptureTests",
             dependencies: ["ExcerptCapture"],
+            swiftSettings: [.swiftLanguageMode(.v5)]
+        ),
+        .testTarget(
+            name: "ExcerptEditorTests",
+            dependencies: ["ExcerptEditor", "ExcerptTestSupport"],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
     ]

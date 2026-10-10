@@ -1,4 +1,5 @@
 import CoreGraphics
+import ExcerptTestSupport
 import Testing
 
 @testable import ExcerptCore

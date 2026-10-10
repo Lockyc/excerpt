@@ -1,4 +1,5 @@
 import CoreGraphics
+import ExcerptTestSupport
 import Foundation
 import Testing
 
