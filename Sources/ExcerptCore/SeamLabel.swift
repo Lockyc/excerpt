@@ -5,11 +5,7 @@ import Foundation
 public enum SeamLabel {
     /// `⋯ 1,240 px hidden`: the removed length in points, as the user saw it on screen.
     public static func text(removedPixels: Int, scale: Double) -> String {
-        let points = Int((Double(removedPixels) / scale).rounded())
-        let formatter = NumberFormatter()
-        formatter.locale = Locale(identifier: "en_US")
-        formatter.numberStyle = .decimal
-        return "⋯ \(formatter.string(from: NSNumber(value: points))!) px hidden"
+        "⋯ \(LengthText.points(removedPixels, scale: scale)) hidden"
     }
 
     static func attributedLine(_ text: String, scale: Double) -> (
