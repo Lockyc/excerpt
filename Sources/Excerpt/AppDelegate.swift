@@ -22,8 +22,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             hotKeyStatus: hotKeyStatus)
     }
 
-    private lazy var coordinator = CaptureCoordinator(preferences: preferences) { url, _ in
-        NSLog("captured \(url.lastPathComponent)")  // the thumbnail replaces this in Task 14
+    private lazy var thumbnails = ThumbnailStack(preferences: preferences)
+    private lazy var coordinator = CaptureCoordinator(preferences: preferences) {
+        [weak self] url, image in
+        self?.thumbnails.show(url: url, image: image)
     }
 
     func perform(_ action: HotKeyAction) {
