@@ -125,12 +125,14 @@ enum Alerts {
             ))
     }
 
-    /// Capture Text recognised the selection's text but could not put it on the clipboard.
+    /// Capture Text recognised the selection's text but could not put it on the clipboard, which
+    /// was cleared for it.
     static func textCopyFailed(_ error: Error) {
         show(
             "Couldn't copy to the clipboard",
             sentence(
-                "Excerpt read the text but couldn't copy it: \(error.localizedDescription)"))
+                "Excerpt read the text but couldn't copy it, and the clipboard is now empty: \(error.localizedDescription)"
+            ))
     }
 
     /// Capture Text could not read the selection's text.
