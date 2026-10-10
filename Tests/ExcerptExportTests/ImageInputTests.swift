@@ -268,20 +268,33 @@ import UniformTypeIdentifiers
         let edits = EditDocument(scale: 3, cuts: cuts)
         let width = 2000 + 2000 * 54
         #expect(throws: ImageInputError.rendersTooLarge("m.png", width: width, height: 2)) {
-            try ImageInput.checkRender("m.png", width: 4000, height: 2, edits: edits)
+            try ImageInput.checkEditable("m.png", width: 4000, height: 2, edits: edits)
         }
-        try ImageInput.checkRender("m.png", width: 4000, height: 2, edits: EditDocument(scale: 3))
+        try ImageInput.checkEditable(
+            "m.png", width: 4000, height: 2, edits: EditDocument(scale: 3))
     }
 
-    /// The original is already decoded by then, so a render over the limits that is no larger
-    /// than it costs nothing more and is let through.
+    /// An original past the limits — a crafted or huge PNG opened from Finder — is refused
+    /// before the editor decodes it, edited or not.
+    @Test func anOriginalPastTheLimitsFailsTheAppCheck() throws {
+        let plain = EditDocument(scale: 1)
+        #expect(throws: ImageInputError.tooManyPixels("p.png", width: 40_000, height: 40_000)) {
+            try ImageInput.checkEditable("p.png", width: 40_000, height: 40_000, edits: plain)
+        }
+        let side = ImageInput.maximumSide + 1
+        #expect(throws: ImageInputError.tooManyPixels("p.png", width: side, height: 1)) {
+            try ImageInput.checkEditable("p.png", width: side, height: 1, edits: plain)
+        }
+    }
+
+    /// A render no larger than an original within the limits is let through, even at the limit.
     @Test func aRenderNoLargerThanItsOriginalPassesTheAppCheck() throws {
-        let side = 20_000  // 400 megapixels, past every limit
-        try ImageInput.checkRender(
-            "p.png", width: side, height: side, edits: EditDocument(scale: 2))
+        let (width, height) = (6_720, Stitcher.defaultMaximumHeight)
+        try ImageInput.checkEditable(
+            "p.png", width: width, height: height, edits: EditDocument(scale: 2))
         let cropped = EditDocument(
-            scale: 2, crop: PixelRect(x: 0, y: 0, width: side, height: side - 10))
-        try ImageInput.checkRender("p.png", width: side, height: side, edits: cropped)
+            scale: 2, crop: PixelRect(x: 0, y: 0, width: width, height: height - 10))
+        try ImageInput.checkEditable("p.png", width: width, height: height, edits: cropped)
     }
 
     /// Excerpt's own largest capture: a full-width scroll capture of a 6K-class display at 2×,
@@ -296,7 +309,7 @@ import UniformTypeIdentifiers
             .saveCapture(context.makeImage()!, scale: 2, at: Date())
         let input = try ImageInput.load(primary)
         #expect(input.original.width == width && input.original.height == height)
-        try ImageInput.checkRender(
+        try ImageInput.checkEditable(
             primary.path, width: width, height: height, edits: input.edits)
     }
 

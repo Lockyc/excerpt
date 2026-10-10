@@ -130,18 +130,19 @@ public struct ImageInput {
         }
     }
 
-    /// Refuses a decoded `width`×`height` original whose edits render it past the pixel limits
-    /// and larger than itself on either side, worked out from the map before anything is drawn:
-    /// the app checks every capture it opens in the editor this way. Only seams grow a render,
-    /// so this refuses a crafted master's many cuts; a render no larger than the original already
-    /// in memory is let through.
-    public static func checkRender(
+    /// Refuses a `width`×`height` original past the pixel limits, or one whose edits render it
+    /// past them and larger than itself on either side, worked out from its size and the map
+    /// before any pixel is decoded or drawn: the app checks every capture it opens in the editor
+    /// this way. Only seams grow a render, so the second check refuses a crafted master's many
+    /// cuts; a render no larger than an original within the limits is let through.
+    public static func checkEditable(
         _ path: String, width: Int, height: Int, edits: EditDocument
     ) throws {
+        let limits = Limits(pixels: maximumPixels, side: maximumSide)
+        try limits.check(path, width: width, height: height)
         let map = Renderer.map(width: width, height: height, edits: edits)
         guard map.renderedWidth > width || map.renderedHeight > height else { return }
-        try Limits(pixels: maximumPixels, side: maximumSide)
-            .checkRender(path, width: width, height: height, edits: edits)
+        try limits.checkRender(path, width: width, height: height, edits: edits)
     }
 
     private enum Step {

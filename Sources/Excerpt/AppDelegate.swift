@@ -199,11 +199,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 }
 
 extension LibraryStore {
-    /// A capture to edit: `load`, so a primary opens its master, then refused when its edits
-    /// render it past the size limits, before anything is drawn.
+    /// A capture to edit: `load`, so a primary opens its master, then refused when it or the
+    /// render of its edits is past the size limits. `load`'s image is decoded lazily, so its size
+    /// is known before any pixel is.
     func loadForRendering(_ url: URL) throws -> LoadedCapture {
         let capture = try load(url)
-        try ImageInput.checkRender(
+        try ImageInput.checkEditable(
             url.path, width: capture.original.width, height: capture.original.height,
             edits: capture.edits)
         return capture
