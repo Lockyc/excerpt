@@ -8,6 +8,13 @@ import UniformTypeIdentifiers
 
 /// Golden-image comparison. A missing golden, or `EXCERPT_RECORD_GOLDENS=1`, writes the image
 /// to `Goldens/<name>.png` and fails the test so the new image is looked at before committing.
+struct GoldenError: Error, CustomStringConvertible {
+    let description: String
+    static func writeFailed(_ path: String) -> GoldenError {
+        GoldenError(description: "Could not write golden to \(path)")
+    }
+}
+
 enum Golden {
     static let directory = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent()
@@ -19,10 +26,14 @@ enum Golden {
         let url = directory.appendingPathComponent("\(name).png")
         let record = ProcessInfo.processInfo.environment["EXCERPT_RECORD_GOLDENS"] == "1"
         if record || !FileManager.default.fileExists(atPath: url.path) {
-            let destination = CGImageDestinationCreateWithURL(
-                url as CFURL, UTType.png.identifier as CFString, 1, nil)!
+            guard
+                let destination = CGImageDestinationCreateWithURL(
+                    url as CFURL, UTType.png.identifier as CFString, 1, nil)
+            else { throw GoldenError.writeFailed(url.path) }
             CGImageDestinationAddImage(destination, image, nil)
-            CGImageDestinationFinalize(destination)
+            guard CGImageDestinationFinalize(destination) else {
+                throw GoldenError.writeFailed(url.path)
+            }
             Issue.record(
                 "Recorded golden \(name).png: inspect it, then re-run",
                 sourceLocation: sourceLocation)
