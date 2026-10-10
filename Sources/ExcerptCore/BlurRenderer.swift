@@ -1,9 +1,10 @@
 import CoreGraphics
 
 /// The destructive blur. Each rect is pixelated into blocks at least `blockPoints` on a side, and
-/// every block takes its average colour shifted by seeded noise, so the covered content can't be
-/// recovered by matching rendered candidates against the blocks. Blocks are read from the
-/// original pixels and seeded from the rect, so identical edits render identical pixels.
+/// every block takes its average colour shifted by seeded noise, so the covered content cannot be
+/// read from the output; pixelation defeats reading, not candidate-matching of short known
+/// strings. Blocks are read from the original pixels and seeded from the document salt and the
+/// rect, so identical edits render identical pixels.
 public enum BlurRenderer {
     public static let blockPoints = 12.0
     /// The most a block's channel moves from its average, either way.
@@ -18,7 +19,9 @@ public enum BlurRenderer {
     ) -> CGImage {
         let bounds = CGRect(x: 0, y: 0, width: image.width, height: image.height)
         let regions = rects.compactMap { rect -> PixelRect? in
-            precondition(!rect.isNull && !rect.isInfinite, "blur rect must be finite")
+            precondition(
+                [rect.minX, rect.minY, rect.width, rect.height].allSatisfy(\.isFinite),
+                "blur rect must be finite")
             let r = rect.standardized.intersection(bounds).integral
             guard !r.isNull, r.width > 0, r.height > 0 else { return nil }
             return PixelRect(

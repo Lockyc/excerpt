@@ -125,9 +125,14 @@ import Testing
         let image = Self.grey(width: 50, height: 70)
         let out = BlurRenderer.apply(
             [CGRect(x: -5e11, y: -5e11, width: 1e12, height: 1e12)], to: image, scale: 1, salt: 7)
+        let whole = BlurRenderer.apply(
+            [CGRect(x: 0, y: 0, width: 50, height: 70)], to: image, scale: 1, salt: 7)
+        #expect(PixelBuffer(out) == PixelBuffer(whole))
         #expect(PixelBuffer(out) != PixelBuffer(image))
-        let top = PixelBuffer(out)
-        #expect(top[x: 0, y: 0] == top[x: 5, y: 5])
+        let blurred = PixelBuffer(out)
+        // Far corner and a block in the middle are blurred too: flat within their blocks.
+        #expect(blurred[x: 49, y: 69] == blurred[x: 45, y: 65])
+        #expect(blurred[x: 25, y: 35] == blurred[x: 27, y: 37])
     }
 
     @Test func overlappingBlursEachReadTheOriginal() {
