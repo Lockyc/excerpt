@@ -96,7 +96,7 @@ final class ThumbnailPanel: NSPanel {
     }
 
     private func button(_ title: String, _ action: Selector?) -> NSButton {
-        let b = NSButton(title: title, target: self, action: action)
+        let b = FirstMouseButton(title: title, target: self, action: action)
         b.bezelStyle = .recessed
         b.controlSize = .small
         return b
@@ -138,6 +138,8 @@ final class DragImageView: NSImageView, NSDraggingSource {
 
     required init?(coder: NSCoder) { fatalError("not used") }
 
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
     override func mouseDown(with event: NSEvent) {}  // keep NSImageView from eating the drag
 
     override func mouseDragged(with event: NSEvent) {
@@ -159,4 +161,10 @@ final class DragImageView: NSImageView, NSDraggingSource {
     ) {
         if operation != [] { onDragged() }
     }
+}
+
+/// A button that acts on the first click even while another app is frontmost.
+@MainActor
+final class FirstMouseButton: NSButton {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }
