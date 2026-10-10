@@ -160,6 +160,56 @@ import Testing
         #expect(try store.load(primary).original.width == 200)
     }
 
+    @Test func savingBesideAForeignOriginalThrowsAndWritesNothing() throws {
+        let store = LibraryStore(folder: tempFolder(), naming: LibraryNaming(timeZone: utc))
+        let image = Fixtures.sheet(width: 200, height: 400)
+        let primary = try store.saveCapture(image, scale: 2, at: date)
+        let foreign = primary.deletingLastPathComponent()
+            .appendingPathComponent(
+                LibraryNaming.originalName(forPrimary: primary.lastPathComponent))
+        try PNGCodec.encode(Fixtures.sheet(width: 60, height: 40), scale: 1).write(to: foreign)
+        let primaryBefore = try Data(contentsOf: primary)
+        let foreignBefore = try Data(contentsOf: foreign)
+        let edits = EditDocument(scale: 2, cuts: [Cut(axis: .horizontal, lower: 41, upper: 321)])
+        #expect(throws: LibraryError.foreignOriginal(foreign)) {
+            try store.saveEdits(primary: primary, original: image, edits: edits)
+        }
+        #expect(try Data(contentsOf: primary) == primaryBefore)
+        #expect(try Data(contentsOf: foreign) == foreignBefore)
+    }
+
+    @Test func aMasterWithDamagedEditsThrowsOnLoad() throws {
+        let store = LibraryStore(folder: tempFolder(), naming: LibraryNaming(timeZone: utc))
+        let image = Fixtures.sheet(width: 200, height: 400)
+        let primary = try store.saveCapture(image, scale: 2, at: date)
+        try store.saveEdits(primary: primary, original: image, edits: EditDocument(scale: 2))
+        let master = primary.deletingLastPathComponent()
+            .appendingPathComponent(
+                LibraryNaming.originalName(forPrimary: primary.lastPathComponent))
+        try PNGChunks.settingText(
+            "{broken", keyword: PNGChunks.editsKeyword, in: Data(contentsOf: master)
+        ).write(to: master)
+        #expect(throws: EditDocumentError.damaged) { try store.load(primary) }
+        #expect(throws: EditDocumentError.damaged) { try store.load(master) }
+    }
+
+    @Test func aMasterOpensWhenItsPrimaryIsGone() throws {
+        let store = LibraryStore(folder: tempFolder(), naming: LibraryNaming(timeZone: utc))
+        let image = Fixtures.sheet(width: 200, height: 400)
+        let primary = try store.saveCapture(image, scale: 2, at: date)
+        let edits = EditDocument(scale: 2, cuts: [Cut(axis: .horizontal, lower: 41, upper: 321)])
+        try store.saveEdits(primary: primary, original: image, edits: edits)
+        let master = primary.deletingLastPathComponent()
+            .appendingPathComponent(
+                LibraryNaming.originalName(forPrimary: primary.lastPathComponent))
+        try FileManager.default.removeItem(at: primary)
+        let loaded = try store.load(master)
+        #expect(loaded.primary == primary)
+        #expect(loaded.edits == edits)
+        try store.saveEdits(primary: loaded.primary, original: loaded.original, edits: loaded.edits)
+        #expect(FileManager.default.fileExists(atPath: primary.path))
+    }
+
     @Test func anUnwritableFolderThrows() throws {
         let blocker = FileManager.default.temporaryDirectory.appendingPathComponent(
             "excerpt-block-\(UUID().uuidString)")

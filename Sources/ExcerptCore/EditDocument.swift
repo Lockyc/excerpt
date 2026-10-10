@@ -9,6 +9,8 @@ public enum EditDocumentError: Error, Equatable {
     /// A crop, annotation coordinate or annotation id outside `EditDocument.coordinateLimit` or
     /// `EditDocument.idLimit`, or an id used twice.
     case invalidGeometry
+    /// The edits JSON isn't a readable edit document at all.
+    case damaged
 }
 
 /// A rectangle of whole original pixels, top-left origin.
@@ -152,11 +154,17 @@ public struct EditDocument: Codable, Equatable, Sendable {
 
     public static func decode(_ data: Data) throws -> EditDocument {
         struct Header: Decodable { let version: Int }
-        let version = try JSONDecoder().decode(Header.self, from: data).version
+        let version: Int
+        do {
+            version = try JSONDecoder().decode(Header.self, from: data).version
+        } catch { throw EditDocumentError.damaged }
         guard (1...currentVersion).contains(version) else {
             throw EditDocumentError.unsupportedVersion(version)
         }
-        let document = try JSONDecoder().decode(EditDocument.self, from: data)
+        let document: EditDocument
+        do {
+            document = try JSONDecoder().decode(EditDocument.self, from: data)
+        } catch { throw EditDocumentError.damaged }
         guard document.scale.isFinite, document.scale > 0 else {
             throw EditDocumentError.invalidScale(document.scale)
         }

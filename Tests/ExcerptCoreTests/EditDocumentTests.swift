@@ -10,6 +10,12 @@ import Testing
         #expect(try EditDocument.decode(doc.encoded()) == doc)
     }
 
+    @Test func unreadableJSONIsDamaged() {
+        #expect(throws: EditDocumentError.damaged) { try EditDocument.decode(Data("{nope".utf8)) }
+        let json = Data(#"{"version":2,"scale":"two"}"#.utf8)
+        #expect(throws: EditDocumentError.damaged) { try EditDocument.decode(json) }
+    }
+
     @Test func saltRoundTripsExactlyAndDiffersPerDocument() throws {
         let doc = EditDocument(scale: 2, salt: UInt64.max - 3)
         #expect(try EditDocument.decode(doc.encoded()).salt == UInt64.max - 3)

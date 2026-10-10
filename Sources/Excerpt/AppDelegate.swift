@@ -50,6 +50,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func openEditor(_ url: URL) {
+        // Re-opening an open capture (or its master) focuses its window without decoding.
+        let directory = url.deletingLastPathComponent()
+        let sibling = LibraryNaming.primaryName(forOriginal: url.lastPathComponent)
+            .map { directory.appendingPathComponent($0) }
+        for key in [url, sibling].compactMap({ $0 }) {
+            if let open = editors[key.standardizedFileURL] {
+                open.show()
+                return
+            }
+        }
         let store = preferences.store
         let capture: LoadedCapture
         do {
@@ -73,7 +83,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 do {
                     try Pasteboard.copyPNG(data: data)
                 } catch {
-                    Alerts.clipboardFailed(capture.primary, error)
+                    Alerts.copyFailed(capture.primary, error)
                 }
             },
             onClose: { [weak self] in
