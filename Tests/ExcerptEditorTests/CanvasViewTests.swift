@@ -119,4 +119,29 @@ import Testing
         #expect(canvas.base.image !== first)
         #expect(canvas.frame.height == CGFloat(400 - 100 + 18))
     }
+
+    @Test func theCanvasFollowsTheModelWithoutBeingTold() {
+        let model = EditorModel(original: sheet(), document: EditDocument(scale: 1))
+        let canvas = CanvasView(model: model)
+        model.apply { $0.cuts.append(Cut(axis: .horizontal, lower: 100, upper: 200)) }
+        #expect(canvas.frame.height == CGFloat(400 - 100 + 18))
+        model.undo()
+        #expect(canvas.frame.height == 400)
+        let first = canvas.base.image
+        model.apply {
+            $0.annotations.append(
+                Annotation(
+                    id: 1, shape: .blur(rect: CGRect(x: 10, y: 10, width: 60, height: 40))))
+        }
+        #expect(canvas.base.image !== first)
+    }
+
+    @Test func aNonPositiveZoomChangesNothing() {
+        let model = EditorModel(original: sheet(), document: EditDocument(scale: 1))
+        let canvas = CanvasView(model: model)
+        canvas.zoom = 0.5
+        canvas.zoom = 0
+        #expect(canvas.zoom == 0.5)
+        #expect(model.viewScale == 0.5)
+    }
 }

@@ -13,7 +13,11 @@ enum Selection: Equatable {
 /// identical pixels across undo and redo.
 final class EditorModel {
     let original: CGImage
-    private(set) var document: EditDocument
+    private(set) var document: EditDocument { didSet { onChange?() } }
+    /// Called after anything the editor shows changed: the document, tool, selection, a drag.
+    var onChange: (() -> Void)?
+    /// The text annotation being retyped in place; the display hides it while the field is up.
+    var editingID: Int? { didSet { onChange?() } }
     private var saved: EditDocument
     private var history = UndoStack<EditDocument>()
 
@@ -21,19 +25,20 @@ final class EditorModel {
         didSet {
             cancelDrag()
             selection = nil
+            onChange?()
         }
     }
     private(set) var color: Palette = .initial
     private(set) var width: StrokeWidth = .initial
-    var selection: Selection?
+    var selection: Selection? { didSet { onChange?() } }
     /// View points per rendered pixel, so hit slop and minimum drags stay the same size on screen.
     var viewScale: Double = 1 {
         didSet { precondition(viewScale > 0, "viewScale must be positive") }
     }
     /// The overlay for a drag in progress.
-    private(set) var pending: Pending?
+    private(set) var pending: Pending? { didSet { onChange?() } }
     /// The drag in progress; undo and redo wait for it to end.
-    private(set) var drag: Drag?
+    private(set) var drag: Drag? { didSet { onChange?() } }
     /// The original's pixels, for snapping; read on first use.
     private(set) lazy var pixels = PixelBuffer(original)
 
@@ -49,12 +54,12 @@ final class EditorModel {
     var canRedo: Bool { history.canRedo }
 
     /// What the canvas shows: the whole capture while the crop tool is active, so a crop can
-    /// be redrawn; otherwise the document.
+    /// be redrawn; otherwise the document, less the text being retyped.
     var displayDocument: EditDocument {
-        guard tool == .crop else { return document }
-        var uncropped = document
-        uncropped.crop = nil
-        return uncropped
+        var shown = document
+        if tool == .crop { shown.crop = nil }
+        if let editingID { shown.annotations.removeAll { $0.id == editingID } }
+        return shown
     }
 
     /// The part of `displayDocument` the canvas's cached base depends on: everything except the

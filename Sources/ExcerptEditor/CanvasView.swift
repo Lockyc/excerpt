@@ -12,13 +12,19 @@ final class CanvasView: NSView, NSTextFieldDelegate {
     /// View points per rendered pixel.
     var zoom: CGFloat = 1 {
         didSet {
-            if zoom > 0 { model.viewScale = Double(zoom) }
+            guard zoom > 0 else {
+                zoom = oldValue
+                return
+            }
+            model.viewScale = Double(zoom)
             resize()
         }
     }
 
     /// The cut-band shade, on the pending band and on the collapse that follows its release.
     private static let bandShade = NSColor.systemRed.withAlphaComponent(0.25)
+
+    private static let accent = NSColor.controlAccentColor.cgColor
 
     private(set) var base: RenderResult
     private var baseDocument: EditDocument
@@ -30,6 +36,7 @@ final class CanvasView: NSView, NSTextFieldDelegate {
         baseDocument = model.baseDocument
         base = Renderer.renderBase(model.original, edits: baseDocument)
         super.init(frame: .zero)
+        model.onChange = { [weak self] in self?.refresh() }
         resize()
     }
 
@@ -100,7 +107,7 @@ final class CanvasView: NSView, NSTextFieldDelegate {
     private func drawChrome(in context: CGContext) {
         let map = base.map
         let line = 1 / zoom
-        let accent = NSColor.controlAccentColor.cgColor
+        let accent = Self.accent
         context.setLineWidth(2 * line)
 
         if model.tool == .crop, let crop = model.document.crop, let rect = map.rect(crop.cgRect) {
@@ -121,9 +128,7 @@ final class CanvasView: NSView, NSTextFieldDelegate {
                     AnnotationGeometry.bounds(of: annotation, scale: model.document.scale))
             {
                 context.setStrokeColor(accent)
-                context.setLineDash(phase: 0, lengths: [4 * line, 3 * line])
-                context.stroke(rect.insetBy(dx: -3 * line, dy: -3 * line))
-                context.setLineDash(phase: 0, lengths: [])
+                strokeDashed(rect.insetBy(dx: -3 * line, dy: -3 * line), in: context)
             }
         case .seam(let axis, let band):
             if let seam = map.seams(axis).first(where: { $0.band == band }) {
@@ -140,9 +145,7 @@ final class CanvasView: NSView, NSTextFieldDelegate {
         case .region(let region)?:
             if let rect = map.rect(region) {
                 context.setStrokeColor(accent)
-                context.setLineDash(phase: 0, lengths: [4 * line, 3 * line])
-                context.stroke(rect)
-                context.setLineDash(phase: 0, lengths: [])
+                strokeDashed(rect, in: context)
             }
         case .edge(let seam, _, let position)?:
             let point = map.point(
@@ -163,11 +166,18 @@ final class CanvasView: NSView, NSTextFieldDelegate {
         }
     }
 
+    private func strokeDashed(_ rect: CGRect, in context: CGContext) {
+        let line = 1 / zoom
+        context.setLineDash(phase: 0, lengths: [4 * line, 3 * line])
+        context.stroke(rect)
+        context.setLineDash(phase: 0, lengths: [])
+    }
+
     /// The seam's gap outlined, with a round handle on each edge.
     private func drawSeamSelection(_ seam: Seam, in context: CGContext) {
         let line = 1 / zoom
         let gap = gapRect(seam)
-        context.setStrokeColor(NSColor.controlAccentColor.cgColor)
+        context.setStrokeColor(Self.accent)
         context.stroke(gap)
         let radius = 5 * line
         let handles: [CGPoint] =
@@ -216,6 +226,15 @@ final class CanvasView: NSView, NSTextFieldDelegate {
         return Pointer(rendered: CGPoint(x: p.x / zoom, y: p.y / zoom), map: base.map)
     }
 
+    /// Rendered pixels to view points.
+    private func viewPoint(_ p: CGPoint) -> CGPoint { CGPoint(x: p.x * zoom, y: p.y * zoom) }
+
+    private func viewRect(_ r: CGRect) -> CGRect {
+        CGRect(
+            origin: viewPoint(r.origin),
+            size: CGSize(width: r.width * zoom, height: r.height * zoom))
+    }
+
     private func snap(_ event: NSEvent) -> Bool { !event.modifierFlags.contains(.option) }
 
     override func mouseDown(with event: NSEvent) {
@@ -233,12 +252,10 @@ final class CanvasView: NSView, NSTextFieldDelegate {
             }
         }
         model.mouseDown(p, map: base.map)
-        refresh()
     }
 
     override func mouseDragged(with event: NSEvent) {
         model.mouseDragged(pointer(event), map: base.map, snap: snap(event))
-        refresh()
     }
 
     override func mouseUp(with event: NSEvent) {
@@ -246,7 +263,6 @@ final class CanvasView: NSView, NSTextFieldDelegate {
         if case .cut(let cut)? = model.pending { pendingCut = cut } else { pendingCut = nil }
         let before = pendingCut.map(bandRect)
         model.mouseUp(pointer(event), map: base.map, snap: snap(event))
-        refresh()
         if let cut = pendingCut, let before { animateCollapse(of: cut, from: before) }
     }
 
@@ -255,11 +271,11 @@ final class CanvasView: NSView, NSTextFieldDelegate {
         guard
             let seam = base.map.seams(cut.axis).first(where: { $0.band.contains(cut.lower) })
         else { return }
-        let shade = NSView(frame: band.applying(CGAffineTransform(scaleX: zoom, y: zoom)))
+        let shade = NSView(frame: viewRect(band))
         shade.wantsLayer = true
         shade.layer?.backgroundColor = Self.bandShade.cgColor
         addSubview(shade)
-        let target = gapRect(seam).applying(CGAffineTransform(scaleX: zoom, y: zoom))
+        let target = viewRect(gapRect(seam))
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.2
             shade.animator().frame = target
@@ -275,16 +291,13 @@ final class CanvasView: NSView, NSTextFieldDelegate {
             characters.count == 1, let tool = Tool(key: characters.first!)
         {
             model.tool = tool
-            refresh()
             return
         }
         switch event.keyCode {
         case 51, 117:  // delete, forward delete
             model.deleteSelection()
-            refresh()
         case 53:  // escape
             model.selection = nil
-            refresh()
         default:
             super.keyDown(with: event)
         }
@@ -295,25 +308,31 @@ final class CanvasView: NSView, NSTextFieldDelegate {
     private func beginText(_ target: TextTarget) {
         endText()
         let map = base.map
-        let origin = map.point(target.origin, bias: .after)
+        let origin = viewPoint(map.point(target.origin, bias: .after))
         let size = CGFloat(target.width.textPoints * model.document.scale) * zoom
         let field = NSTextField(string: target.string)
         field.font = TextLayout.font(pixelSize: Double(size)) as NSFont
         field.textColor = NSColor(cgColor: target.color.rgba.cgColor)
         field.isBordered = false
         field.drawsBackground = true
-        field.backgroundColor = NSColor.textBackgroundColor.withAlphaComponent(0.85)
+        field.backgroundColor = NSColor(white: 1, alpha: 0.85)
         field.focusRingType = .none
         field.usesSingleLineMode = false
         field.cell?.wraps = false
         field.cell?.isScrollable = true
         field.delegate = self
         field.frame = CGRect(
-            x: origin.x * zoom, y: origin.y * zoom, width: max(240, size * 8),
+            x: origin.x, y: origin.y, width: max(240, size * 8),
             height: size * 1.4 * CGFloat(max(1, target.string.components(separatedBy: "\n").count)))
+        // The cell insets its text, so the field moves back by that much and the typed text sits
+        // where the committed text will be drawn.
+        if let inset = field.cell?.titleRect(forBounds: field.bounds).origin {
+            field.frame.origin = CGPoint(x: origin.x - inset.x, y: origin.y - inset.y)
+        }
         addSubview(field)
         textField = field
         textTarget = target
+        model.editingID = target.id
         window?.makeFirstResponder(field)
         onChange()
     }
@@ -325,9 +344,9 @@ final class CanvasView: NSView, NSTextFieldDelegate {
         textTarget = nil
         let string = field.stringValue
         field.removeFromSuperview()
+        model.editingID = nil
         model.commitText(target, string: string)
         window?.makeFirstResponder(self)
-        refresh()
     }
 
     func controlTextDidEndEditing(_ notification: Notification) { endText() }
