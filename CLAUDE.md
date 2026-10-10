@@ -9,7 +9,7 @@ A macOS menu-bar screenshot tool in Swift (SwiftPM, macOS 15+). The architecture
 [docs/design.md](docs/design.md); what's next is [docs/roadmap.md](docs/roadmap.md) — start
 there before planning work.
 
-**State:** Phase 0 (Core) shipped; Phases 1 (capture shell), 2 (editor) and 3 (scrolling capture) built, real-app hand checks pending; Phase 4's For Claude export and `excerpt read` built. Next: the rest of Phase 4 — text capture, the all-in-one selector, hotkey rebinding.
+**State:** Phase 0 (Core) shipped; Phases 1 (capture shell), 2 (editor), 3 (scrolling capture) and 4 (text + Claude) built, real-app hand checks pending. Next: Phase 5, the v1 release.
 
 `just gate` per change; `just run` launches a signed build; `swift run Excerpt read <image>`
 runs the command without the app.

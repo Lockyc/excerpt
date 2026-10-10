@@ -22,10 +22,10 @@ AppKit / ScreenCaptureKit targets build in Swift 5 mode (see `Package.swift`).
 | Module | Owns | Depends on |
 |---|---|---|
 | `ExcerptCore` | The capture document (original image, cuts, annotations) as values; the pure algorithms — render, cut geometry, the original→rendered coordinate map, stitching, gap detection, tiling | CoreGraphics, ImageIO |
-| `ExcerptCapture` | ScreenCaptureKit capture, the multi-display selection overlay, the auto-scroll driver that feeds frames to Core's stitcher | Core |
+| `ExcerptCapture` | ScreenCaptureKit capture, the multi-display selection overlay, the auto-scroll driver that feeds frames to Core's stitcher, the hotkey bindings and the rules that judge a rebinding | Core |
 | `ExcerptEditor` | Canvas, tools, undo; edits Core's document | Core |
 | `ExcerptExport` | Vision OCR, the For Claude bundle (tiles + `text.md`) and the `excerpt read` command, with no UI | Core, Vision |
-| `Excerpt` (app) | Menu bar, global hotkeys, preview thumbnail, settings, export UI, file I/O; runs `excerpt read` before AppKit starts | all |
+| `Excerpt` (app) | Menu bar, hotkey registration, preview thumbnail, settings, export UI, file I/O; runs `excerpt read` before AppKit starts | all |
 
 The hard logic lives in Core as pure functions over values, so it is tested without UI or
 permissions. **One renderer:** the editor canvas draws through Core's renderer, so what the
@@ -79,8 +79,9 @@ The tear's shape is seeded from the cut's position, so identical edits render id
 | ⌘⇧5 | Capture text (OCR → clipboard, no file) |
 | ⌘⇧6 | All-in-one selector (area / window / fullscreen / scrolling / text) |
 
-Hotkeys use Carbon `RegisterEventHotKey` (no permission, no dependency) and are all rebindable.
-A binding Carbon reports as taken, or that an enabled macOS shortcut holds, is flagged in the
+Hotkeys use Carbon `RegisterEventHotKey` (no permission, no dependency) and are all rebindable
+in Settings, which refuses a combination another action holds, or one without ⌘, ⌃ or ⌥ unless
+it is an F-key. A binding Carbon reports as taken, or that an enabled macOS shortcut holds, is flagged in the
 menu and Settings, never failed silently.
 
 - **Area:** the screen freezes when selection starts (a still of every display is taken first,
@@ -88,6 +89,9 @@ menu and Settings, never failed silently.
   W×H readout; `Space` moves the selection, `Esc` cancels.
 - **Window:** hover-highlight, click; placed on a plain backdrop with padding (both settings).
 - **Fullscreen:** the display under the cursor.
+- **Text:** select an area on the frozen screen; its text is copied in reading order and no file
+  is saved. A note gives the line count, or says no text was found and leaves the clipboard alone.
+- **All-in-one selector:** a menu of the five modes at the pointer, each showing its hotkey.
 - Stills exclude desktop icons and excerpt's own windows through the `SCContentFilter`.
 - **After every capture** the file is saved, copied to the clipboard, and shown as a large
   thumbnail (Copy · Edit · For Claude · Close, draggable) that closes after 15s (paused while

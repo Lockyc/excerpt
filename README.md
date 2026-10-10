@@ -17,13 +17,14 @@ read.
 
 | | |
 |---|---|
-| Capture | Area (frozen screen), window, fullscreen, scrolling (auto-scroll or scroll it yourself, stitched with sticky bars kept once) → library + clipboard + thumbnail; hand checks pending |
+| Capture | Area (frozen screen), window, fullscreen, scrolling (auto-scroll or scroll it yourself, stitched with sticky bars kept once) → library + clipboard + thumbnail; text (OCR straight to the clipboard); an all-in-one selector; every hotkey rebindable in Settings; hand checks pending |
 | Editor | Arrow, rectangle, text, highlight, blur, crop and cut over the capture; ⌘S writes the primary and its master; hand checks pending |
 | For Claude | The thumbnail's For Claude or the editor's ⇧⌘C writes 1× tiles and `text.md` (cuts marked) and copies `@` references to them; `excerpt read <image>` does the same for any image file; hand checks pending |
 | Core | Cuts render as torn seams; edits round-trip through the master PNG; frames stitch on row signatures |
-| Next | Text capture, the all-in-one selector and hotkey rebinding — see [docs/roadmap.md](docs/roadmap.md) |
+| Next | The v1 release — see [docs/roadmap.md](docs/roadmap.md) |
 
-macOS's own Screenshots shortcuts (⌘⇧3 / ⌘⇧4) must be turned off for Excerpt's defaults to fire.
+macOS's own screenshot shortcuts (⌘⇧3 to ⌘⇧6) hold Excerpt's defaults until they are turned off
+in System Settings → Keyboard → Keyboard Shortcuts, or Excerpt's are rebound in its Settings.
 
 ## Build
 
