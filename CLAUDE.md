@@ -9,7 +9,9 @@ A macOS menu-bar screenshot tool in Swift (SwiftPM, macOS 15+). The architecture
 [docs/design.md](docs/design.md); what's next is [docs/roadmap.md](docs/roadmap.md) — start
 there before planning work.
 
-**State:** Phase 0 (Core) shipped; Phases 1–4 (capture shell, editor, scrolling capture, text + Claude) built, real-app hand checks pending; Phase 5 (v1 release: notarized build, `install.sh`, `/excerpt:install`) built, v1.0.0 held until those hand checks pass.
+**State:** Phase 0 (Core) shipped; Phases 1–4 (capture shell, editor, scrolling capture,
+text + Claude) built, real-app hand checks pending; Phase 5 (v1 release: notarized build,
+`install.sh`, `/excerpt:install`) built, v1.0.0 held until those hand checks pass.
 
 `just gate` per change; `just run` launches a signed build; `swift run Excerpt read <image>`
 runs the command without the app.
@@ -34,9 +36,11 @@ runs the command without the app.
 
 ## Branch and release model
 
-`main` + `dev`. Work lands on `dev`; `main` advances only by `git merge --ff-only dev` at a
-release, or by a docs-only commit forward-merged into `dev` straight after. The version's one
-source is the tracked root `VERSION` file; a release tags `v<version>` and publishes a GitHub
-release with notes. `just release NOTES.md` cuts it and needs the notary credentials in the env
+`main` + `dev`. Work lands on `dev`. `main` advances two ways only: at a release, `just release`
+moves it to the release commit with `git push origin HEAD:main` — a non-force push, so
+fast-forward only, and the shared checkout never switches branch; or by a docs-only commit
+forward-merged into `dev` straight after. The version's one source is the tracked root
+`VERSION` file; a release tags `v<version>` and publishes a GitHub release with notes.
+`just release NOTES.md` cuts it and needs the notary credentials in the env
 (`scripts/release.sh` names them). No CI: excerpt ships on macOS only, so the local `just gate`
 is the check.
