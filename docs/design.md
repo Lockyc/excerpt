@@ -129,7 +129,8 @@ strings. The noise is seeded from a per-document salt stored in the master. The 
 true result.
 
 **The edit document** holds the cuts, an optional crop, the annotations (arrow, rectangle,
-text, highlight, blur) and the blur salt, all in original pixels, so every edit stays adjustable from the master.
+text, highlight, blur), all in original pixels, plus the blur salt, so every edit stays
+adjustable from the master.
 Render order: blur (from original pixels) → crop → cuts and their labels → annotations, placed
 through the coordinate map. The canvas caches the render up to the cuts and draws annotations
 over it through the same Core code, so a drag repaints only annotations; a cut, crop or blur
@@ -139,7 +140,8 @@ change re-renders the cache. Undo is a stack of document values.
 
 ## Export
 
-- **Copy** (`⌘C`) — the primary PNG, or in the editor the current render. **Drag** from the thumbnail or the editor's title bar.
+- **Copy** (`⌘C`) — the primary PNG, or in the editor the current render. **Drag** from the
+  thumbnail or the editor's title bar.
 - **For Claude** (`⌘⇧C`), shaped for Claude's ~1568px long-edge downscale:
   - tiles render at **1× (points)** — Retina doubles pixels without adding legible text;
   - a capture that fits is one image; taller ones split into ~1500px tiles overlapping ~100px,
