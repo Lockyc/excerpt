@@ -70,12 +70,8 @@ final class HotKeyModel: ObservableObject {
         self.controls = controls
     }
 
-    /// Reads every hotkey's state. Skipped while recording: every hotkey is unregistered then,
-    /// so the states would read as registered whatever happens once they are back.
-    func refresh() {
-        guard recording == nil else { return }
-        states = controls.states()
-    }
+    /// Reads every hotkey's state.
+    func refresh() { states = controls.states() }
 
     /// Records the next key press as `action`'s hotkey. Every hotkey is unregistered meanwhile,
     /// so the press reaches here instead of starting a capture. Esc, Cancel, or any window

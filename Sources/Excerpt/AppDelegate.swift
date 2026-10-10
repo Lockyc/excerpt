@@ -43,6 +43,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Registers every action's current binding that the rules keep, in place of whatever was
     /// registered.
     func applyHotKeys() {
+        hotKeys.resume()
         for action in HotKeyAction.allCases { hotKeys.unregister(id: action.id) }
         for (action, binding, verdict) in judgedHotKeys() where verdict.keeps {
             hotKeys.register(binding, id: action.id) { [weak self] in self?.perform(action) }
@@ -60,10 +61,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Unregisters every hotkey, so a press reaches Settings' recorder instead of starting a
-    /// capture; `applyHotKeys` brings them back.
-    func suspendHotKeys() {
-        for action in HotKeyAction.allCases { hotKeys.unregister(id: action.id) }
-    }
+    /// capture, while their states read as before; `applyHotKeys` brings them back.
+    func suspendHotKeys() { hotKeys.suspend() }
 
     /// The one source of hotkey state, for every action that has a hotkey; read when the menu
     /// opens and whenever Settings shows the hotkeys.

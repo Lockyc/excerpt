@@ -23,6 +23,9 @@ final class HotKeyCenter {
     private var references: [UInt32: EventHotKeyRef] = [:]
     private var bindings: [UInt32: HotKeyBinding] = [:]
     private var failures: [UInt32: Registration] = [:]
+    /// Every hotkey's state as `suspend` found it; reported in place of the live state until
+    /// `resume`.
+    private var suspended: [UInt32: Registration]?
     private var installStatus: OSStatus = noErr
     nonisolated private static let signature: OSType = 0x4558_4350  // 'EXCP'
 
@@ -79,9 +82,22 @@ final class HotKeyCenter {
         failures[id] = nil
     }
 
+    /// Unregisters every hotkey, so a key press reaches the app instead, while `status(id:)`
+    /// goes on reporting the states they had until `resume`.
+    func suspend() {
+        guard suspended == nil else { return }
+        let ids = Array(bindings.keys)
+        suspended = Dictionary(uniqueKeysWithValues: ids.map { ($0, status(id: $0)) })
+        for id in ids { unregister(id: id) }
+    }
+
+    /// Ends a suspension: `status(id:)` reports live states again. Registering is the caller's.
+    func resume() { suspended = nil }
+
     /// The hotkey's state now: its registration outcome, or `.system` while a macOS shortcut
-    /// holds the same keys.
+    /// holds the same keys. While suspended, the state it had when suspended.
     func status(id: UInt32) -> Registration {
+        if let suspended { return suspended[id] ?? .registered }
         if let failure = failures[id] { return failure }
         guard let binding = bindings[id] else { return .registered }
         return systemShortcutHolds(
