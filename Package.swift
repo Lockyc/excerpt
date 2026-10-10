@@ -19,7 +19,8 @@ let package = Package(
             dependencies: ["ExcerptCore", "ExcerptCapture"],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
-        .testTarget(name: "ExcerptCoreTests", dependencies: ["ExcerptCore"]),
+        .testTarget(
+            name: "ExcerptCoreTests", dependencies: ["ExcerptCore"], exclude: ["Goldens"]),
         .testTarget(
             name: "ExcerptCaptureTests",
             dependencies: ["ExcerptCapture"],
