@@ -312,6 +312,23 @@ import Testing
                 == .rectangle(rect: CGRect(x: 110, y: 55, width: 40, height: 20)))
     }
 
+    @Test func adjustingASeamUnderACropKeepsTheOffCropPartOfItsCut() {
+        // The cut 20..<120 straddles the crop's top edge (40); the seam shows 40..<120.
+        let m = model(
+            EditDocument(
+                scale: 1, cuts: [Cut(axis: .horizontal, lower: 20, upper: 120)],
+                crop: PixelRect(x: 60, y: 40, width: 240, height: 300), salt: 7))
+        m.tool = .select
+        let seam = map(m).seams(.horizontal)[0]
+        #expect(seam.band == 40..<120)
+        m.selection = .seam(.horizontal, seam.band)
+        // Drag the in-crop handle (the band's after edge) up 10 rendered pixels.
+        let y = Double(seam.gap.upperBound)
+        drag(m, CGPoint(x: 30, y: y), CGPoint(x: 30, y: y - 10))
+        #expect(m.document.cuts == [Cut(axis: .horizontal, lower: 20, upper: 110)])
+        #expect(m.selection == .seam(.horizontal, 40..<110))
+    }
+
     @Test func movingAnAnnotationAcrossASeamMovesItByOriginalPixels() {
         let m = model(
             EditDocument(scale: 1, cuts: [Cut(axis: .horizontal, lower: 100, upper: 200)], salt: 7))

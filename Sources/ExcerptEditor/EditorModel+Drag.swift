@@ -166,17 +166,37 @@ extension EditorModel {
                 position != (edge == .before ? seam.band.lowerBound : seam.band.upperBound)
             else { return }
             let extent = seam.axis == .horizontal ? original.height : original.width
+            // Cuts live in original pixels: under a crop the seam shows only the part of its
+            // band inside the crop, so adjust the whole band and move its edge by the same amount.
+            let whole =
+                CutSet.normalized(document.cuts, axis: seam.axis, extent: extent)
+                .first(where: {
+                    $0.lowerBound <= seam.band.lowerBound && seam.band.upperBound <= $0.upperBound
+                })
+                ?? seam.band
+            let shownEdge = edge == .before ? seam.band.lowerBound : seam.band.upperBound
+            let wholeEdge = edge == .before ? whole.lowerBound : whole.upperBound
             let cuts = Gestures.adjusting(
-                document.cuts, axis: seam.axis, band: seam.band, edge: edge, to: position,
+                document.cuts, axis: seam.axis, band: whole, edge: edge,
+                to: wholeEdge + position - shownEdge,
                 extent: extent, snapping: snap ? pixels : nil, radius: snapRadius)
-            let kept = Gestures.removing(document.cuts, axis: seam.axis, band: seam.band)
+            let kept = Gestures.removing(document.cuts, axis: seam.axis, band: whole)
             apply { $0.cuts = cuts }
-            // The cut `adjusting` added is whichever one the surviving cuts don't have.
+            // The cut `adjusting` added is whichever one the surviving cuts don't have; the
+            // selection is the part of its band the crop shows.
+            let crop = map.crop
+            let visible =
+                seam.axis == .horizontal
+                ? crop.y..<(crop.y + crop.height) : crop.x..<(crop.x + crop.width)
             if let moved = cuts.first(where: { !kept.contains($0) }),
                 let band = CutSet.normalized(cuts, axis: seam.axis, extent: extent)
                     .first(where: { $0.lowerBound <= moved.lower && moved.upper <= $0.upperBound })
             {
-                selection = .seam(seam.axis, band)
+                let shown =
+                    max(
+                        band.lowerBound, visible.lowerBound)..<min(
+                        band.upperBound, visible.upperBound)
+                if !shown.isEmpty { selection = .seam(seam.axis, shown) }
             }
         case nil:
             break
