@@ -74,11 +74,20 @@ public enum Renderer {
         return RenderResult(image: context.makeImage()!, map: map)
     }
 
-    /// The full render that export writes.
+    /// The full render that export writes: the base, then the annotations through its map.
     public static func render(
         _ original: CGImage, edits: EditDocument, style: SeamStyle = .standard
     ) -> RenderResult {
-        renderBase(original, edits: edits, style: style)
+        let base = renderBase(original, edits: edits, style: style)
+        guard edits.annotations.contains(where: { !$0.shape.isBlur }) else { return base }
+        let width = base.image.width
+        let height = base.image.height
+        let context = PixelBuffer.makeContext(width: width, height: height)
+        context.draw(base.image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        AnnotationRenderer.draw(
+            edits.annotations, map: base.map, scale: edits.scale, in: context,
+            canvasHeight: height)
+        return RenderResult(image: context.makeImage()!, map: base.map)
     }
 
     /// Rendered range of the largest kept segment of `map`; the whole axis when nothing is kept.

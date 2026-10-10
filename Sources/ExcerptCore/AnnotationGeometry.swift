@@ -21,7 +21,7 @@ public enum AnnotationGeometry {
         let ux = dx / length
         let uy = dy / length
         let headLength = min(3 * lineWidth, length)
-        let halfWidth = 1.5 * lineWidth * headLength / (3 * lineWidth)
+        let halfWidth = headLength / 2
         let base = CGPoint(x: Double(head.x) - ux * headLength, y: Double(head.y) - uy * headLength)
         return Arrow(
             shaftEnd: base,
@@ -63,12 +63,26 @@ public enum AnnotationGeometry {
         }
     }
 
-    /// How many annotations lie wholly inside a removed band: the editor reports these
+    /// Whether an annotation shows on the render: the one test the renderer and the hidden
+    /// count share. It fails when the stroke-inflated bounds lie wholly inside a removed band, or
+    /// when a rectangle or highlight collapses to nothing beside one (so a stroke whose raw rect
+    /// is cut away never draws as a hairline on the seam).
+    public static func isDrawn(_ annotation: Annotation, map: RenderMap, scale: Double) -> Bool {
+        guard !map.isHidden(bounds(of: annotation, scale: scale)) else { return false }
+        switch annotation.shape {
+        case .rectangle(let rect), .highlight(let rect), .blur(let rect):
+            return map.rect(rect.standardized) != nil
+        case .arrow, .text:
+            return true
+        }
+    }
+
+    /// How many annotations the render does not show: the editor reports these
     /// ("1 annotation hidden by a cut").
     public static func hiddenCount(_ annotations: [Annotation], map: RenderMap, scale: Double)
         -> Int
     {
-        annotations.filter { map.isHidden(bounds(of: $0, scale: scale)) }.count
+        annotations.filter { !isDrawn($0, map: map, scale: scale) }.count
     }
 }
 
@@ -83,7 +97,9 @@ public struct TextLayout {
     /// The one text font: annotation text is measured, drawn and typed in it. `pixelSize` is the
     /// text size in points times the capture scale (times the editor zoom when typing).
     public static func font(pixelSize: Double) -> CTFont {
-        CTFontCreateUIFontForLanguage(.emphasizedSystem, CGFloat(pixelSize), nil)!
+        let size = CGFloat(pixelSize)
+        return CTFontCreateUIFontForLanguage(.emphasizedSystem, size, nil)
+            ?? CTFontCreateWithName(".AppleSystemUIFont" as CFString, size, nil)
     }
 
     init(_ string: String, pixelSize: Double, color: CGColor) {
