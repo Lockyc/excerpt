@@ -230,8 +230,8 @@ import UniformTypeIdentifiers
         #expect(message.contains("renders at \(width)×2 pixels"))
     }
 
-    /// The app checks a capture it loaded the same way before the editor or For Claude renders
-    /// it, so a crafted master is refused there too, not drawn.
+    /// The app checks a capture it loaded before the editor or For Claude renders it: a crafted
+    /// master whose cuts render it past the limits, and larger than its original, is refused.
     @Test func aLoadedCaptureIsCheckedForTheSizeItRendersAt() throws {
         let cuts = stride(from: 0, to: 4000, by: 2).map {
             Cut(axis: .vertical, lower: $0, upper: $0 + 1)
@@ -242,6 +242,33 @@ import UniformTypeIdentifiers
             try ImageInput.checkRender("m.png", width: 4000, height: 2, edits: edits)
         }
         try ImageInput.checkRender("m.png", width: 4000, height: 2, edits: EditDocument(scale: 3))
+    }
+
+    /// The original is already decoded by then, so a render over the limits that is no larger
+    /// than it costs nothing more and is let through.
+    @Test func aRenderNoLargerThanItsOriginalPassesTheAppCheck() throws {
+        let side = 20_000  // 400 megapixels, past every limit
+        try ImageInput.checkRender(
+            "p.png", width: side, height: side, edits: EditDocument(scale: 2))
+        let cropped = EditDocument(
+            scale: 2, crop: PixelRect(x: 0, y: 0, width: side, height: side - 10))
+        try ImageInput.checkRender("p.png", width: side, height: side, edits: cropped)
+    }
+
+    /// Excerpt's own largest capture: a full-width scroll capture of a 6K-class display at 2×,
+    /// stopped at the stitcher's height cap. It reads with `excerpt read` and opens in the app.
+    @Test func excerptsTallestCaptureIsWithinTheLimits() throws {
+        let (width, height) = (3456, Stitcher.defaultMaximumHeight)
+        #expect(ImageInput.maximumPixels >= 6_720 * Stitcher.defaultMaximumHeight)
+        let context = PixelBuffer.makeContext(width: width, height: height)
+        context.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        let primary = try LibraryStore(folder: try Self.folder())
+            .saveCapture(context.makeImage()!, scale: 2, at: Date())
+        let input = try ImageInput.load(primary)
+        #expect(input.original.width == width && input.original.height == height)
+        try ImageInput.checkRender(
+            primary.path, width: width, height: height, edits: input.edits)
     }
 
     /// Review focus: the master beside a primary is checked like any input before it is read;

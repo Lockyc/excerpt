@@ -43,7 +43,9 @@ public enum ImageInputError: Error, Equatable, LocalizedError {
 /// reader. Anything else is uncut, at the scale its DPI gives.
 public struct ImageInput {
     public static let maximumBytes = 512 * 1_048_576
-    public static let maximumPixels = 100_000_000
+    /// The largest capture Excerpt makes, with room: a scroll capture stops at the stitcher's
+    /// height cap, and 6,720 pixels is a 6K display's full width at 2×. About 202 megapixels.
+    public static let maximumPixels = Stitcher.defaultMaximumHeight * 6_720
     public static let maximumSide = 100_000
 
     public let original: CGImage
@@ -114,12 +116,16 @@ public struct ImageInput {
         }
     }
 
-    /// Refuses a `width`×`height` original whose edits render past the pixel limits, worked out
-    /// from the map before anything is drawn: the app checks every capture it loads this way
-    /// before the editor or For Claude renders it.
+    /// Refuses a decoded `width`×`height` original whose edits render it past the pixel limits
+    /// and larger than itself on either side, worked out from the map before anything is drawn:
+    /// the app checks every capture it loads this way before the editor or For Claude renders
+    /// it. Only seams grow a render, so this refuses a crafted master's thousands of cuts; a
+    /// render no larger than the original already in memory is let through.
     public static func checkRender(
         _ path: String, width: Int, height: Int, edits: EditDocument
     ) throws {
+        let map = Renderer.map(width: width, height: height, edits: edits)
+        guard map.renderedWidth > width || map.renderedHeight > height else { return }
         try Limits(pixels: maximumPixels, side: maximumSide)
             .checkRender(path, width: width, height: height, edits: edits)
     }
@@ -154,8 +160,9 @@ private struct MasterCandidate {
     /// The master's original when its render is `primary` pixel for pixel. The primary's file
     /// and decode are already released; what remains at the peak is the primary's pixels, the
     /// master's decoded original, the renderer's working images and the render's pixels:
-    /// measured at 715 MB for a 25-megapixel capture, about 7 × 4 bytes per rendered pixel, so
-    /// near 2.8 GB at `maximumPixels`.
+    /// measured at 3.3 GB resident for `excerpt read` on a 104-megapixel primary with its
+    /// master (3456 × 30,000 at 2×), about 32 bytes per rendered pixel, so near 6.4 GB at
+    /// `maximumPixels`.
     func original(ifItRenders primary: PixelBuffer) -> CGImage? {
         guard let original = try? file.image(path, upright: false) else { return nil }
         let rendered = PixelBuffer(Renderer.render(original, edits: edits).image)
