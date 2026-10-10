@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import Testing
 
@@ -13,12 +14,57 @@ import Testing
         let doc = EditDocument(scale: 2, cuts: [Cut(axis: .vertical, lower: 1, upper: 2)])
         #expect(try doc.encoded() == doc.encoded())
         let json = String(decoding: try doc.encoded(), as: UTF8.self)
-        #expect(json.contains("\"version\":1"))
+        #expect(json.contains("\"version\":2"))
     }
 
     @Test func rejectsANewerVersion() {
-        let json = Data(#"{"version":2,"scale":2,"cuts":[]}"#.utf8)
-        #expect(throws: EditDocumentError.unsupportedVersion(2)) { try EditDocument.decode(json) }
+        let json = Data(#"{"version":3,"scale":2,"cuts":[]}"#.utf8)
+        #expect(throws: EditDocumentError.unsupportedVersion(3)) { try EditDocument.decode(json) }
+    }
+
+    @Test func roundTripsCropAndEveryAnnotationKind() throws {
+        let doc = EditDocument(
+            scale: 2, cuts: [Cut(axis: .vertical, lower: 5, upper: 9)],
+            crop: PixelRect(x: 4, y: 6, width: 100, height: 80),
+            annotations: [
+                Annotation(
+                    id: 1, shape: .arrow(tail: CGPoint(x: 1, y: 2), head: CGPoint(x: 30, y: 40))),
+                Annotation(
+                    id: 2, shape: .rectangle(rect: CGRect(x: 1, y: 2, width: 3, height: 4)),
+                    color: .blue, width: .thick),
+                Annotation(
+                    id: 3, shape: .text(origin: CGPoint(x: 5, y: 6), string: "Total ⋯\nline 2"),
+                    color: .black, width: .thin),
+                Annotation(
+                    id: 4, shape: .highlight(rect: CGRect(x: 0, y: 0, width: 50, height: 10)),
+                    color: .yellow),
+                Annotation(id: 5, shape: .blur(rect: CGRect(x: 10, y: 10, width: 24, height: 24))),
+            ])
+        #expect(try EditDocument.decode(doc.encoded()) == doc)
+    }
+
+    @Test func readsAVersion1Document() throws {
+        let json = Data(
+            #"{"cuts":[{"axis":"horizontal","lower":10,"upper":90}],"scale":2,"version":1}"#.utf8)
+        let doc = try EditDocument.decode(json)
+        #expect(doc == EditDocument(scale: 2, cuts: [Cut(axis: .horizontal, lower: 10, upper: 90)]))
+        #expect(String(decoding: try doc.encoded(), as: UTF8.self).contains("\"version\":2"))
+    }
+
+    @Test func emptinessCoversCropAndAnnotations() {
+        #expect(EditDocument(scale: 1).isEmpty)
+        #expect(!EditDocument(scale: 1, crop: PixelRect(x: 0, y: 0, width: 5, height: 5)).isEmpty)
+        let note = Annotation(id: 1, shape: .blur(rect: CGRect(x: 0, y: 0, width: 5, height: 5)))
+        #expect(!EditDocument(scale: 1, annotations: [note]).isEmpty)
+    }
+
+    @Test func nextAnnotationIDIsAboveEveryID() {
+        let shape = Shape.blur(rect: .zero)
+        #expect(EditDocument(scale: 1).nextAnnotationID == 1)
+        let doc = EditDocument(
+            scale: 1,
+            annotations: [Annotation(id: 7, shape: shape), Annotation(id: 3, shape: shape)])
+        #expect(doc.nextAnnotationID == 8)
     }
 }
 
@@ -36,5 +82,17 @@ import Testing
     @Test func rejectsNonFiniteScale() {
         let json = Data(#"{"version":1,"scale":1e999,"cuts":[]}"#.utf8)
         #expect(throws: (any Error).self) { try EditDocument.decode(json) }
+    }
+}
+
+@Suite struct PixelRectTests {
+    @Test func clampsToTheImage() {
+        let r = PixelRect(x: -10, y: 5, width: 50, height: 200)
+        #expect(r.clamped(width: 30, height: 100) == PixelRect(x: 0, y: 5, width: 30, height: 95))
+    }
+
+    @Test func whollyOutsideIsNil() {
+        #expect(PixelRect(x: 40, y: 0, width: 10, height: 10).clamped(width: 30, height: 30) == nil)
+        #expect(PixelRect(x: 0, y: 0, width: 0, height: 10).clamped(width: 30, height: 30) == nil)
     }
 }
