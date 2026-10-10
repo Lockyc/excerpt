@@ -189,8 +189,16 @@ import Testing
         try PNGChunks.settingText(
             "{broken", keyword: PNGChunks.editsKeyword, in: Data(contentsOf: master)
         ).write(to: master)
-        #expect(throws: EditDocumentError.damaged) { try store.load(primary) }
-        #expect(throws: EditDocumentError.damaged) { try store.load(master) }
+        // Opening either file names the master, the file that is bad.
+        for opened in [primary, master] {
+            do {
+                _ = try store.load(opened)
+                Issue.record("load should throw")
+            } catch let error as MasterUnreadable {
+                #expect(error.file == master)
+                #expect(error.underlying as? EditDocumentError == .damaged)
+            }
+        }
     }
 
     @Test func aMasterOpensWhenItsPrimaryIsGone() throws {

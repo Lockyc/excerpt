@@ -42,7 +42,12 @@ enum Alerts {
     }
 
     /// A file the editor can't open: not a PNG, unreadable, damaged, or edited by a newer Excerpt.
-    static func openFailed(_ file: URL, _ error: Error) {
+    static func openFailed(_ opened: URL, _ error: Error) {
+        var file = opened
+        var error = error
+        if let unreadable = error as? MasterUnreadable {
+            (file, error) = (unreadable.file, unreadable.underlying)
+        }
         let reason: String
         switch error {
         case EditDocumentError.unsupportedVersion:

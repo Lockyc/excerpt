@@ -13,6 +13,13 @@ public enum LibraryError: Error, Equatable, LocalizedError {
     }
 }
 
+/// A master that can't be read or parsed: `file` is the master, so an error shown for opening
+/// the primary names the file that is bad.
+public struct MasterUnreadable: Error {
+    public let file: URL
+    public let underlying: any Error
+}
+
 public struct LoadedCapture {
     public let primary: URL
     public let original: CGImage
@@ -88,7 +95,7 @@ public struct LibraryStore: Sendable {
 
     /// Opens a primary or a master. A file is a master only when it carries the edits chunk, so
     /// a user's own `… original.png` opens as itself. A primary with no master loads as an
-    /// unedited capture. A master that can't be read or parsed throws.
+    /// unedited capture. A master that can't be read or parsed throws `MasterUnreadable`.
     public func load(_ url: URL) throws -> LoadedCapture {
         let directory = url.deletingLastPathComponent()
         let name = url.lastPathComponent
@@ -101,12 +108,16 @@ public struct LibraryStore: Sendable {
             )
         }
         if FileManager.default.fileExists(atPath: master.path) {
-            let data = try Data(contentsOf: master)
-            if try Self.carriesEdits(data) {
-                let (original, edits) = try MasterFile.decode(data)
-                return LoadedCapture(
-                    primary: primary, original: original.image,
-                    edits: edits ?? EditDocument(scale: original.scale))
+            do {
+                let data = try Data(contentsOf: master)
+                if try Self.carriesEdits(data) {
+                    let (original, edits) = try MasterFile.decode(data)
+                    return LoadedCapture(
+                        primary: primary, original: original.image,
+                        edits: edits ?? EditDocument(scale: original.scale))
+                }
+            } catch {
+                throw MasterUnreadable(file: master, underlying: error)
             }
         }
         let flat = try PNGCodec.decode(Data(contentsOf: url))
