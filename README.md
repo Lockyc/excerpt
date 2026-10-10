@@ -21,8 +21,7 @@ read.
 | Core | Cuts render as torn seams; edits round-trip through the master PNG |
 | Next | The editor and cut tool — see [docs/roadmap.md](docs/roadmap.md) |
 
-macOS's own Screenshots shortcuts (⌘⇧3 / ⌘⇧4) must be turned off for Excerpt's defaults to fire;
-Excerpt flags it in the menu and Settings.
+macOS's own Screenshots shortcuts (⌘⇧3 / ⌘⇧4) must be turned off for Excerpt's defaults to fire.
 
 ## Build
 

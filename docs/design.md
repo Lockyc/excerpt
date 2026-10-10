@@ -34,7 +34,7 @@ editor shows is byte-for-byte what export writes.
 ## Files
 
 Captures land in the **library** — `~/Documents/Screenshots/` by default (a setting) — named
-`Excerpt 2026-10-10 at 09.43.29.png` (the name pattern is a setting; no `@2x` suffix).
+`Excerpt 2026-10-10 at 09.43.29.png` (the prefix is a setting; no `@2x` suffix).
 
 - **The dated file is the primary**: the flattened render, carrying no metadata beyond standard
   PNG fields. It is what gets copied, dragged and shared, so it must never contain pixels the
@@ -79,7 +79,8 @@ The tear's shape is seeded from the cut's position, so identical edits render id
 | ⌘⇧6 | All-in-one selector (area / window / fullscreen / scrolling / text) |
 
 Hotkeys use Carbon `RegisterEventHotKey` (no permission, no dependency) and are all rebindable.
-A binding that collides with another registration or an enabled macOS shortcut is flagged in the menu and Settings, never failed silently.
+A binding Carbon reports as taken, or that an enabled macOS shortcut holds, is flagged in the
+menu and Settings, never failed silently.
 
 - **Area:** the screen freezes when selection starts (a still of every display is taken first,
   and the selection is cut from it), so hover states and open menus survive. Crosshair, loupe,
@@ -88,8 +89,8 @@ A binding that collides with another registration or an enabled macOS shortcut i
 - **Fullscreen:** the display under the cursor.
 - Desktop icons and excerpt's own windows are excluded through the `SCContentFilter`.
 - **After every capture** the file is saved, copied to the clipboard, and shown as a large
-  thumbnail (Copy · Edit · For Claude · Close, draggable) that closes after 15s (paused while hovered), or on drag-out.
-  Shutter sound on.
+  thumbnail (Copy · Edit · For Claude · Close, draggable) that closes 15s after the pointer
+  leaves it, or on drag-out. Shutter sound on.
 
 ### Scrolling capture (vertical)
 
