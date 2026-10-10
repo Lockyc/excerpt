@@ -248,7 +248,7 @@ struct SettingsView: View {
                 Text("Hotkeys")
             } footer: {
                 Text(
-                    "Record, then press the new shortcut; Esc cancels. A hotkey needs ⌘, ⌃ or ⌥ unless it's an F-key."
+                    "Record, then press the new shortcut; Esc cancels. A hotkey needs ⌘, ⌃ or ⌥ unless it's an F-key. Turn a macOS shortcut off before recording it."
                 )
                 .font(.caption).foregroundStyle(.secondary)
             }
