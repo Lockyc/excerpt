@@ -11,34 +11,43 @@ public enum SeamEdge: Sendable {
 /// rendered pixels for seams.
 public enum HitTest {
     /// The topmost annotation under `p` (original pixels): within `slop` of an arrow's shaft, or
-    /// of any other annotation's bounds. With a `map`, an annotation the render doesn't draw
-    /// (`AnnotationGeometry.isDrawn`) can't be hit.
+    /// of any other annotation's bounds. `slop` is in original pixels (`scale` already converts
+    /// stroke points to original pixels). An annotation the render doesn't draw
+    /// (`AnnotationGeometry.isDrawn` under `map`) can't be hit.
     public static func annotation(
         at p: CGPoint, in annotations: [Annotation], scale: Double, slop: Double,
-        map: RenderMap? = nil
+        map: RenderMap
     ) -> Int? {
         for annotation in annotations.reversed() {
-            if let map, !AnnotationGeometry.isDrawn(annotation, map: map, scale: scale) {
-                continue
-            }
+            if !AnnotationGeometry.isDrawn(annotation, map: map, scale: scale) { continue }
             switch annotation.shape {
             case .arrow(let tail, let head):
                 let reach = AnnotationGeometry.lineWidth(annotation, scale: scale) / 2 + slop
                 if distance(from: p, toSegment: tail, head) <= reach { return annotation.id }
             default:
                 let bounds = AnnotationGeometry.bounds(of: annotation, scale: scale)
-                if bounds.insetBy(dx: -slop, dy: -slop).contains(p) { return annotation.id }
+                let reach = bounds.insetBy(dx: -slop, dy: -slop)
+                if p.x >= reach.minX, p.x <= reach.maxX, p.y >= reach.minY, p.y <= reach.maxY {
+                    return annotation.id
+                }
             }
         }
         return nil
     }
 
-    /// The seam whose gap is nearest rendered point `p`, within `slop` rendered pixels.
+    /// The seam whose gap is nearest rendered point `p`, within `slop` rendered pixels (`slop`
+    /// is in rendered pixels). Where seams cross, the smaller distance wins, then the seam whose
+    /// centre line is nearer `p`, then the vertical one.
     public static func seam(at p: CGPoint, map: RenderMap, slop: Double) -> Seam? {
+        func candidate(_ seam: Seam, _ v: CGFloat) -> (Seam, Double, Double) {
+            let centre = Double(seam.gap.lowerBound + seam.gap.upperBound) / 2
+            return (seam, distance(Double(v), to: seam.gap), abs(Double(v) - centre))
+        }
         let candidates =
-            map.seams(.horizontal).map { ($0, distance(Double(p.y), to: $0.gap)) }
-            + map.seams(.vertical).map { ($0, distance(Double(p.x), to: $0.gap)) }
-        return candidates.filter { $0.1 <= slop }.min { $0.1 < $1.1 }?.0
+            map.seams(.vertical).map { candidate($0, p.x) }
+            + map.seams(.horizontal).map { candidate($0, p.y) }
+        return candidates.filter { $0.1 <= slop }
+            .min { ($0.1, $0.2) < ($1.1, $1.2) }?.0
     }
 
     static func distance(_ v: Double, to range: Range<Int>) -> Double {
@@ -71,29 +80,45 @@ public enum Gestures {
             height: abs(end.y - start.y))
     }
 
-    /// The cut a drag makes. A mostly vertical drag removes rows (a horizontal cut); a mostly
-    /// horizontal one removes columns. nil when the drag is shorter than `minimum` along its
-    /// axis.
+    /// `position` snapped to a uniform line, unless it is on the image boundary (`0` or
+    /// `extent`), which has no line of its own to test and stays put. The one snapping rule for
+    /// cuts, seam handles and crops.
+    static func snapEdge(
+        _ position: Int, axis: Axis, extent: Int, snapping buffer: PixelBuffer?, radius: Int
+    ) -> Int {
+        let clamped = min(max(0, position), extent)
+        guard let buffer, clamped > 0, clamped < extent else { return clamped }
+        return GapSnapper.snap(clamped, axis: axis, in: buffer, radius: radius)
+    }
+
+    /// The cut a drag makes, clamped to the `width` x `height` image. A mostly vertical drag
+    /// removes rows (a horizontal cut); a mostly horizontal one removes columns; an exact
+    /// diagonal removes rows. nil when the drag is shorter than `minimum` along its axis or the
+    /// clamped, snapped cut is empty.
     public static func cut(
-        from start: CGPoint, to end: CGPoint, minimum: Double, snapping buffer: PixelBuffer?,
-        radius: Int
+        from start: CGPoint, to end: CGPoint, width: Int, height: Int, minimum: Double,
+        snapping buffer: PixelBuffer?, radius: Int
     ) -> Cut? {
         let dx = abs(Double(end.x - start.x))
         let dy = abs(Double(end.y - start.y))
         let axis: Axis = dy >= dx ? .horizontal : .vertical
+        let extent = axis == .horizontal ? height : width
         let a = Double(axis == .horizontal ? start.y : start.x)
         let b = Double(axis == .horizontal ? end.y : end.x)
         guard abs(b - a) >= minimum, abs(b - a) > 0 else { return nil }
         var lower = Int(min(a, b).rounded())
         var upper = Int(max(a, b).rounded())
-        if let buffer {
-            let snappedLower = GapSnapper.snap(lower, axis: axis, in: buffer, radius: radius)
-            let snappedUpper = GapSnapper.snap(upper, axis: axis, in: buffer, radius: radius)
-            if snappedLower < snappedUpper {
-                lower = snappedLower
-                upper = snappedUpper
-            }
+        lower = min(max(0, lower), extent)
+        upper = min(max(0, upper), extent)
+        let snappedLower = snapEdge(
+            lower, axis: axis, extent: extent, snapping: buffer, radius: radius)
+        let snappedUpper = snapEdge(
+            upper, axis: axis, extent: extent, snapping: buffer, radius: radius)
+        if snappedLower < snappedUpper {
+            lower = snappedLower
+            upper = snappedUpper
         }
+        guard upper > lower else { return nil }
         return Cut(axis: axis, lower: lower, upper: upper)
     }
 
@@ -104,8 +129,8 @@ public enum Gestures {
         _ cuts: [Cut], axis: Axis, band: Range<Int>, edge: SeamEdge, to position: Int,
         extent: Int, snapping buffer: PixelBuffer?, radius: Int
     ) -> [Cut] {
-        var target = position
-        if let buffer { target = GapSnapper.snap(target, axis: axis, in: buffer, radius: radius) }
+        let target = snapEdge(
+            position, axis: axis, extent: extent, snapping: buffer, radius: radius)
         var lower = band.lowerBound
         var upper = band.upperBound
         switch edge {
@@ -136,23 +161,18 @@ public enum Gestures {
         var right = clamp(max(start.x, end.x), width)
         var top = clamp(min(start.y, end.y), height)
         var bottom = clamp(max(start.y, end.y), height)
-        if let buffer {
-            func snap(_ v: Int, _ axis: Axis, _ extent: Int) -> Int {
-                // An edge on the far boundary has no line of its own to test; it stays put.
-                v >= extent ? v : GapSnapper.snap(v, axis: axis, in: buffer, radius: radius)
-            }
-            let l = snap(left, .vertical, width)
-            let r = snap(right, .vertical, width)
-            let t = snap(top, .horizontal, height)
-            let b = snap(bottom, .horizontal, height)
-            if l < r {
-                left = l
-                right = r
-            }
-            if t < b {
-                top = t
-                bottom = b
-            }
+        let l = snapEdge(left, axis: .vertical, extent: width, snapping: buffer, radius: radius)
+        let r = snapEdge(right, axis: .vertical, extent: width, snapping: buffer, radius: radius)
+        let t = snapEdge(top, axis: .horizontal, extent: height, snapping: buffer, radius: radius)
+        let b = snapEdge(
+            bottom, axis: .horizontal, extent: height, snapping: buffer, radius: radius)
+        if l < r {
+            left = l
+            right = r
+        }
+        if t < b {
+            top = t
+            bottom = b
         }
         guard Double(right - left) >= minimum, Double(bottom - top) >= minimum else { return nil }
         return PixelRect(x: left, y: top, width: right - left, height: bottom - top)

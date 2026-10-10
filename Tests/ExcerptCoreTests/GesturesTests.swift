@@ -11,19 +11,36 @@ import Testing
         Annotation(id: 3, shape: .highlight(rect: CGRect(x: 50, y: 50, width: 100, height: 20))),
     ]
 
+    let identity = RenderMap(
+        crop: PixelRect(x: 0, y: 0, width: 400, height: 400),
+        rows: AxisMap(extent: 400, bands: [], gap: 20),
+        columns: AxisMap(extent: 400, bands: [], gap: 20))
+    let partlyHidden = RenderMap(
+        crop: PixelRect(x: 0, y: 0, width: 400, height: 400),
+        rows: AxisMap(extent: 400, bands: [0..<50], gap: 20),
+        columns: AxisMap(extent: 400, bands: [], gap: 20))
+    let hidden = RenderMap(
+        crop: PixelRect(x: 0, y: 0, width: 400, height: 400),
+        rows: AxisMap(extent: 400, bands: [0..<100], gap: 20),
+        columns: AxisMap(extent: 400, bands: [], gap: 20))
+
     @Test func picksTheTopmost() {
         #expect(
-            HitTest.annotation(at: CGPoint(x: 60, y: 60), in: annotations, scale: 1, slop: 4) == 3)
+            HitTest.annotation(
+                at: CGPoint(x: 60, y: 60), in: annotations, scale: 1, slop: 4, map: identity) == 3)
         #expect(
-            HitTest.annotation(at: CGPoint(x: 10, y: 10), in: annotations, scale: 1, slop: 4) == 1)
+            HitTest.annotation(
+                at: CGPoint(x: 10, y: 10), in: annotations, scale: 1, slop: 4, map: identity) == 1)
     }
 
     @Test func arrowsHitAlongTheShaftOnly() {
         #expect(
-            HitTest.annotation(at: CGPoint(x: 100, y: 207), in: annotations, scale: 1, slop: 4) == 2
+            HitTest.annotation(
+                at: CGPoint(x: 100, y: 207), in: annotations, scale: 1, slop: 4, map: identity) == 2
         )
         #expect(
-            HitTest.annotation(at: CGPoint(x: 100, y: 230), in: annotations, scale: 1, slop: 4)
+            HitTest.annotation(
+                at: CGPoint(x: 100, y: 230), in: annotations, scale: 1, slop: 4, map: identity)
                 == nil)
     }
 
@@ -39,13 +56,40 @@ import Testing
     }
 
     @Test func anAnnotationTheCutHidesCannotBeHit() {
+        let p = CGPoint(x: 10, y: 10)
+        #expect(HitTest.annotation(at: p, in: annotations, scale: 1, slop: 4, map: identity) == 1)
+        #expect(HitTest.annotation(at: p, in: annotations, scale: 1, slop: 4, map: hidden) == nil)
+    }
+
+    @Test func theSlopBoundaryIsInclusive() {
+        // Rectangle 1 spans 0...100 plus half its 10pt stroke: 105.
+        #expect(
+            HitTest.annotation(
+                at: CGPoint(x: 109, y: 20), in: annotations, scale: 1, slop: 4, map: identity)
+                == 1)
+        #expect(
+            HitTest.annotation(
+                at: CGPoint(x: 109.5, y: 20), in: annotations, scale: 1, slop: 4, map: identity)
+                == nil)
+    }
+
+    @Test func aPartlyHiddenAnnotationIsHitOnItsKeptPart() {
+        // Rows 0..<100 are cut; rectangle 1 survives below the cut.
+        #expect(
+            HitTest.annotation(
+                at: CGPoint(x: 10, y: 80), in: annotations, scale: 1, slop: 0, map: partlyHidden)
+                == 1)
+    }
+
+    @Test func crossingSeamsPreferTheNearerCentreLineThenTheVerticalOne() {
         let map = RenderMap(
             crop: PixelRect(x: 0, y: 0, width: 300, height: 400),
-            rows: AxisMap(extent: 400, bands: [0..<100], gap: 20),
-            columns: AxisMap(extent: 300, bands: [], gap: 20))
-        let p = CGPoint(x: 10, y: 10)
-        #expect(HitTest.annotation(at: p, in: annotations, scale: 1, slop: 4) == 1)
-        #expect(HitTest.annotation(at: p, in: annotations, scale: 1, slop: 4, map: map) == nil)
+            rows: AxisMap(extent: 400, bands: [100..<200], gap: 20),
+            columns: AxisMap(extent: 300, bands: [50..<80], gap: 20))
+        // Row gap is 100..<120 (centre 110), column gap 50..<70 (centre 60).
+        #expect(HitTest.seam(at: CGPoint(x: 62, y: 118), map: map, slop: 6)?.axis == .vertical)
+        #expect(HitTest.seam(at: CGPoint(x: 68, y: 111), map: map, slop: 6)?.axis == .horizontal)
+        #expect(HitTest.seam(at: CGPoint(x: 60, y: 110), map: map, slop: 6)?.axis == .vertical)
     }
 }
 
@@ -55,11 +99,13 @@ import Testing
 
     @Test func theDominantDirectionPicksTheAxis() {
         let down = Gestures.cut(
-            from: CGPoint(x: 10, y: 50), to: CGPoint(x: 30, y: 150), minimum: 8, snapping: nil,
+            from: CGPoint(x: 10, y: 50), to: CGPoint(x: 30, y: 150), width: 360, height: 400,
+            minimum: 8, snapping: nil,
             radius: 0)
         #expect(down == Cut(axis: .horizontal, lower: 50, upper: 150))
         let left = Gestures.cut(
-            from: CGPoint(x: 200, y: 50), to: CGPoint(x: 90, y: 70), minimum: 8, snapping: nil,
+            from: CGPoint(x: 200, y: 50), to: CGPoint(x: 90, y: 70), width: 360, height: 400,
+            minimum: 8, snapping: nil,
             radius: 0)
         #expect(left == Cut(axis: .vertical, lower: 90, upper: 200))
     }
@@ -67,13 +113,15 @@ import Testing
     @Test func aShortDragMakesNoCut() {
         #expect(
             Gestures.cut(
-                from: CGPoint(x: 10, y: 50), to: CGPoint(x: 12, y: 55), minimum: 8, snapping: nil,
+                from: CGPoint(x: 10, y: 50), to: CGPoint(x: 12, y: 55), width: 360, height: 400,
+                minimum: 8, snapping: nil,
                 radius: 0) == nil)
     }
 
     @Test func cutEdgesSnapToGridlines() {
         let cut = Gestures.cut(
-            from: CGPoint(x: 10, y: 47), to: CGPoint(x: 10, y: 154), minimum: 8,
+            from: CGPoint(x: 10, y: 47), to: CGPoint(x: 10, y: 154), width: 360, height: 400,
+            minimum: 8,
             snapping: sheet, radius: 12)
         #expect(cut == Cut(axis: .horizontal, lower: 40, upper: 160))
     }
@@ -155,8 +203,59 @@ import Testing
             minimum: 8, snapping: nil, radius: 0)
         #expect(crop == PixelRect(x: 20, y: 40, width: 180, height: 260))
         let up = Gestures.cut(
-            from: CGPoint(x: 10, y: 150), to: CGPoint(x: 10, y: 50), minimum: 8, snapping: nil,
+            from: CGPoint(x: 10, y: 150), to: CGPoint(x: 10, y: 50), width: 360, height: 400,
+            minimum: 8, snapping: nil,
             radius: 0)
         #expect(up == Cut(axis: .horizontal, lower: 50, upper: 150))
+    }
+
+    @Test func draggingToTheFarEdgeKeepsTheEdge() {
+        let cut = Gestures.cut(
+            from: CGPoint(x: 10, y: 250), to: CGPoint(x: 10, y: 400), width: 360, height: 400,
+            minimum: 8, snapping: sheet, radius: 12)
+        #expect(cut == Cut(axis: .horizontal, lower: 240, upper: 400))
+        let past = Gestures.cut(
+            from: CGPoint(x: 10, y: 250), to: CGPoint(x: 10, y: 900), width: 360, height: 400,
+            minimum: 8, snapping: sheet, radius: 12)
+        #expect(past == cut)
+        let handle = Gestures.adjusting(
+            [Cut(axis: .horizontal, lower: 100, upper: 200)], axis: .horizontal, band: 100..<200,
+            edge: .after, to: 400, extent: 400, snapping: sheet, radius: 12)
+        #expect(handle.last == Cut(axis: .horizontal, lower: 100, upper: 400))
+    }
+
+    @Test func anEdgeBandStartsAtZero() {
+        let cut = Gestures.cut(
+            from: CGPoint(x: 10, y: -30), to: CGPoint(x: 10, y: 100), width: 360, height: 400,
+            minimum: 8, snapping: sheet, radius: 12)
+        #expect(cut == Cut(axis: .horizontal, lower: 0, upper: 100))
+    }
+
+    @Test func aDragThatRoundsToNothingMakesNoCut() {
+        #expect(
+            Gestures.cut(
+                from: CGPoint(x: 10, y: 50.2), to: CGPoint(x: 10, y: 50.4), width: 360, height: 400,
+                minimum: 0, snapping: nil, radius: 0) == nil)
+    }
+
+    @Test func anExactDiagonalRemovesRows() {
+        let cut = Gestures.cut(
+            from: CGPoint(x: 10, y: 10), to: CGPoint(x: 110, y: 110), width: 360, height: 400,
+            minimum: 8, snapping: nil, radius: 0)
+        #expect(cut?.axis == .horizontal)
+    }
+
+    @Test func snappingThatWouldCollapseTheCutKeepsTheDraggedEdges() {
+        // Both edges are within reach of the same gridline (y 40), so snapping would collapse
+        // the cut; the dragged positions stand.
+        let cut = Gestures.cut(
+            from: CGPoint(x: 10, y: 38), to: CGPoint(x: 10, y: 46), width: 360, height: 400,
+            minimum: 8, snapping: sheet, radius: 12)
+        #expect(cut == Cut(axis: .horizontal, lower: 38, upper: 46))
+    }
+
+    @Test func theRadiusConvertsPointsToPixels() {
+        #expect(GapSnapper.radius(scale: 2) == 24)
+        #expect(GapSnapper.radius(scale: 1.25) == 15)
     }
 }

@@ -5,6 +5,10 @@ public enum GapSnapper {
     /// How far an edge looks for a line to snap to, in points.
     public static let radiusPoints = 12.0
 
+    /// `radiusPoints` in original pixels at `scale` (original pixels per point), rounded to the
+    /// nearest whole pixel.
+    public static func radius(scale: Double) -> Int { Int((radiusPoints * scale).rounded()) }
+
     public static func snap(
         _ position: Int, axis: Axis, in buffer: PixelBuffer, radius: Int, tolerance: UInt8 = 6
     ) -> Int {
