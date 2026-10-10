@@ -80,9 +80,10 @@ The tear's shape is seeded from the cut's position, so identical edits render id
 | ⌘⇧6 | All-in-one selector (area / window / fullscreen / scrolling / text) |
 
 Hotkeys use Carbon `RegisterEventHotKey` (no permission, no dependency) and are all rebindable
-in Settings, which refuses a combination another action holds, or one without ⌘, ⌃ or ⌥ unless
-it is an F-key. A binding Carbon reports as taken, or that an enabled macOS shortcut holds, is flagged in the
-menu and Settings, never failed silently.
+in Settings, which refuses a combination another action holds, one of the editor's shortcuts or
+an app-wide one such as ⌘Q, or one without ⌘, ⌃ or ⌥ unless it is an F-key. A binding Carbon
+reports as taken, or that an enabled macOS shortcut holds, is flagged in the menu and Settings,
+never failed silently.
 
 - **Area:** the screen freezes when selection starts (a still of every display is taken first,
   and the selection is cut from it), so hover states and open menus survive. Crosshair, loupe,
@@ -91,11 +92,12 @@ menu and Settings, never failed silently.
 - **Fullscreen:** the display under the cursor.
 - **Text:** select an area on the frozen screen; its text is copied in reading order and no file
   is saved. A note gives the line count, or says no text was found and leaves the clipboard alone.
-- **All-in-one selector:** a menu of the five modes at the pointer, each showing its hotkey.
+- **All-in-one selector:** a menu of the five modes at the pointer, each showing its hotkey,
+  shown once the stills are taken; the mode picked runs on them.
 - Stills exclude desktop icons and excerpt's own windows through the `SCContentFilter`.
-- **After every capture** the file is saved, copied to the clipboard, and shown as a large
-  thumbnail (Copy · Edit · For Claude · Close, draggable) that closes after 15s (paused while
-  the pointer is over it), or on drag-out. Shutter sound on.
+- **After every capture that makes a file** it is saved, copied to the clipboard, and shown as
+  a large thumbnail (Copy · Edit · For Claude · Close, draggable) that closes after 15s (paused
+  while the pointer is over it), or on drag-out. Shutter sound on.
 
 ### Scrolling capture (vertical)
 
