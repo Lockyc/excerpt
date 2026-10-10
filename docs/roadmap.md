@@ -20,7 +20,7 @@ Each phase is a shippable slice with an acceptance gate. The design behind every
 | 2 | **Editor** — annotation model + rendering in Core, canvas over Core's renderer, the eight tools, undo, save to primary + master | Cut a spreadsheet capture, reopen it from the library, adjust the cut | Built — hand checks pending |
 | 3 | **Scrolling capture** — auto-scroll, stitcher, sticky regions, manual fallback, uncertain-stop | Stitcher fixtures (sticky header, long form, animated element) pass; a real long page captures cleanly | Built — hand checks pending |
 | 4 | **Text + Claude** — capture text (⌘⇧5), all-in-one selector (⌘⇧6), hotkey rebinding, For Claude export, `excerpt read <image>` over the same bundle builder | A 10,000px capture pastes into Claude Code as legible tiles + `text.md` with cut markers; `excerpt read` on a foreign 2× screenshot prints its text and legible tiles | Built — hand checks pending |
-| 5 | **v1 release** — notarized build, `install.sh` + `/excerpt:install` (links `excerpt` onto `PATH`), README curation | Fresh-machine install from the curl one-liner; `excerpt read` runs from a new shell | Not started |
+| 5 | **v1 release** — notarized build, `install.sh` + `/excerpt:install` (links `excerpt` onto `PATH`), README curation | Fresh-machine install from the curl one-liner; `excerpt read` runs from a new shell | Built — release pending |
 
 ## After v1
 
@@ -30,6 +30,7 @@ Each phase is a shippable slice with an acceptance gate. The design behind every
 | Live-text editing | Click text in a capture and retype it, matching font and background | Spike Vision text bounds + font matching on a UI screenshot |
 | Horizontal scrolling capture | The stitcher along the x axis, for wide sheets | Generalise the stitcher's axis once vertical is proven |
 | Tiling wide captures | Tiles split on height only, so a wide capture arrives downscaled and its text shrinks | Split tiles on width too and teach `text.md` the tile grid |
+| In-app updates | Re-running the installer is the update path | Decide between Sparkle and a release check |
 
 ## Sequencing
 

@@ -179,8 +179,9 @@ change re-renders the cache. Undo is a stack of document values.
     primary file as `excerpt read` takes it, so a primary changed since it was saved exports as
     its own pixels.
 - **`excerpt read <image>`** — the same bundle for any image file, not only a capture, so a
-  Claude session handed a large screenshot can read it. The app binary runs it headless when
-  given arguments, before any `NSApplication` starts. It prints `text.md` to stdout and the tile
+  Claude session handed a large screenshot can read it. It runs headless in the app's binary,
+  before any `NSApplication` starts; see [Install and release](#install-and-release) for when
+  that binary is the command and when it is the app. It prints `text.md` to stdout and the tile
   paths to stderr, and needs no Screen Recording permission. A master gets its cut markers, and
   so does a primary while it is exactly its master's render; a primary changed elsewhere reads
   as its own pixels, so a redaction drawn over it holds. Any other file is treated as uncut,
@@ -193,3 +194,16 @@ change re-renders the cache. Undo is a stack of document values.
   Known limits: `text.md` reads two-column layouts row by row; `@path` references assume a home
   folder without spaces; Vision can miss text on busy synthetic backgrounds. Tiles split on height
   only, so a wide capture reaches Claude downscaled.
+
+## Install and release
+
+A release is one asset, `Excerpt.zip`: the Developer ID–signed app, notarized and stapled,
+cut by `just release NOTES.md` (`scripts/release.sh`) from a clean, pushed `dev` at `VERSION`.
+`install.sh` downloads the latest one and refuses it, before anything in the install
+directories changes, unless its signature verifies, its Team ID is `G9V8U6ZU5E` and Gatekeeper
+accepts it as notarized. It then quits the user's running Excerpt, replaces
+`/Applications/Excerpt.app`, links `/usr/local/bin/excerpt` to the app's binary and relaunches.
+The binary reads its invoked name: as `excerpt` it is always a command, so a bare or mistyped
+call prints usage and exits 64; as `Excerpt` with no arguments, or with AppKit's own
+`-NS…`/`-psn_…`, it is the menu-bar app. There is no in-app updater: re-running the installer
+is the update.

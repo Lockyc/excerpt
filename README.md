@@ -13,32 +13,82 @@ Around that: area, window, fullscreen and scrolling capture, text capture (OCR),
 preview, an annotation editor, and an export that splits tall captures into tiles Claude can
 read.
 
-## Status
+## Install
 
-| | |
-|---|---|
-| Capture | Area (frozen screen), window, fullscreen, scrolling (auto-scroll or scroll it yourself, stitched with sticky bars kept once) → library + clipboard + thumbnail; text (OCR straight to the clipboard); an all-in-one selector; every hotkey rebindable in Settings; hand checks pending |
-| Editor | Arrow, rectangle, text, highlight, blur, crop and cut over the capture; ⌘S writes the primary and its master; hand checks pending |
-| For Claude | The thumbnail's For Claude or the editor's ⇧⌘C writes 1× tiles and `text.md` (cuts marked) and copies `@` references to them; `excerpt read <image>` does the same for any image file; hand checks pending |
-| Core | Cuts render as torn seams; edits round-trip through the master PNG; frames stitch on row signatures |
-| Next | The v1 release — see [docs/roadmap.md](docs/roadmap.md) |
-
-macOS's own screenshot shortcuts (⌘⇧3 to ⌘⇧6) hold Excerpt's defaults until they are turned off
-in System Settings → Keyboard → Keyboard Shortcuts, or Excerpt's are rebound in its Settings.
-
-## Build
+Needs macOS 15 or later.
 
 ```bash
-just gate     # format check, build, tests
-just run      # build the signed app and launch it
-just deploy   # install to /Applications
+curl -fsSL https://raw.githubusercontent.com/lockyc/excerpt/main/install.sh | bash
+```
 
-swift run Excerpt read shot.png                       # text on stdout, tile paths on stderr
-build/Excerpt.app/Contents/MacOS/Excerpt read shot.png  # the same, from the built app
+The installer downloads the latest release, checks that it is signed by Excerpt's developer and
+notarized by Apple, then installs `/Applications/Excerpt.app`, links the `excerpt` command into
+`/usr/local/bin` and starts the app in the menu bar. It asks for your password only when one of
+those folders isn't writable. In Claude Code, `/excerpt:install` runs the same install and
+checks the command works from a new shell.
+
+**Update** by running the installer again; it quits a running Excerpt, replaces it and starts
+the new one.
+
+**Uninstall** by quitting Excerpt and deleting `/Applications/Excerpt.app` and
+`/usr/local/bin/excerpt`.
+
+## Use
+
+| Default hotkey | Capture |
+|---|---|
+| ⌘⇧3 | Window |
+| ⌘⇧4 | Area (the screen freezes while you select) |
+| ⌘⇧5 | Text — OCR straight to the clipboard, no file |
+| ⌘⇧6 | All-in-one selector: area, window, fullscreen, scrolling or text |
+
+macOS's own screenshot shortcuts hold ⌘⇧3 to ⌘⇧6 until they are turned off in System Settings →
+Keyboard → Keyboard Shortcuts → Screenshots, or Excerpt's are rebound in its Settings. Excerpt's
+menu flags any shortcut macOS still holds.
+
+The first capture asks for **Screen Recording** (System Settings → Privacy & Security → Screen &
+System Audio Recording); reopen Excerpt after granting it. Scrolling capture's auto-scroll also
+asks for **Accessibility**; without it, you scroll the page yourself and Excerpt stitches as you
+go.
+
+Each capture is saved to `~/Documents/Screenshots/` (a setting), copied to the clipboard and
+shown as a thumbnail with **Copy**, **Edit**, **For Claude** and **Close**. The editor has
+arrow, rectangle, text, highlight, blur, crop and **cut** (`C`): drag across the rows or columns
+to remove, and the join becomes a torn seam. Cut and blurred content never reaches the saved
+file; the original and your edits stay in a separate `… original.png`, so reopening a capture
+lets you adjust them.
+
+**For Claude** (⇧⌘C in the editor) writes the capture as tiles sized for Claude to read plus a
+`text.md` of its text with each cut marked, and copies `@` references to paste into Claude
+Code. The same works for any image file from the command line:
+
+```bash
+excerpt read shot.png   # text on stdout, tile paths on stderr
+```
+
+Known limits: tiles split on height only, so a very wide capture reaches Claude downscaled;
+`text.md` reads two-column layouts row by row; scrolling capture stops rather than guess on
+pages with large animations or video.
+
+## Build from source
+
+Needs Xcode or the Command Line Tools with Swift 6, [`just`](https://github.com/casey/just),
+and `shellcheck` for the gate.
+
+```bash
+just gate     # shellcheck, format check, build, tests
+just run      # build the signed app and launch it
+just deploy   # build, install to /Applications and launch
+
+swift run Excerpt read shot.png   # the excerpt command, without building the app
 ```
 
 Signing uses a `Developer ID Application` identity from your keychain; set
-`EXCERPT_SIGN_IDENTITY` when more than one is present.
+`EXCERPT_SIGN_IDENTITY` when more than one is present. `just deploy` doesn't link the `excerpt`
+command; link `/Applications/Excerpt.app/Contents/MacOS/Excerpt` as `excerpt` on your `PATH`
+to get it.
+
+What's planned is in [docs/roadmap.md](docs/roadmap.md).
 
 ## License
 
