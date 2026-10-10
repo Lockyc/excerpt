@@ -125,6 +125,19 @@ enum Alerts {
             ))
     }
 
+    /// Capture Text recognised the selection's text but could not put it on the clipboard.
+    static func textCopyFailed(_ error: Error) {
+        show(
+            "Couldn't copy to the clipboard",
+            sentence(
+                "Excerpt read the text but couldn't copy it: \(error.localizedDescription)"))
+    }
+
+    /// Capture Text could not read the selection's text.
+    static func textUnreadable(_ error: Error) {
+        show("Couldn't read the text", sentence(error.localizedDescription))
+    }
+
     /// The editor's current image could not be put on the clipboard.
     static func copyFailed(_ file: URL, _ error: Error) {
         show(

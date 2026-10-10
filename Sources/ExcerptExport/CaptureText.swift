@@ -147,6 +147,15 @@ public enum CaptureText {
         return compose(runs, map: map, scale: scale)
     }
 
+    /// The text of an image with nothing cut: what Capture Text copies.
+    public static func read(
+        _ image: CGImage, scale: Double, recognizer: any TextRecognizer
+    ) throws -> String {
+        let map = Renderer.map(
+            width: image.width, height: image.height, edits: EditDocument(scale: scale))
+        return try read(image, map: map, scale: scale, recognizer: recognizer)
+    }
+
     /// Bounds a run can be placed by: finite, and near enough the image that its middle is an
     /// `Int`. A recogniser's NaN or infinite box is dropped rather than trapping the conversion.
     static func usable(_ bounds: CGRect) -> Bool {

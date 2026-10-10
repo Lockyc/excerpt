@@ -7,6 +7,7 @@ enum HotKeyAction: UInt32, CaseIterable {
     case window = 2
     case fullscreen = 3
     case scrolling = 4
+    case text = 5
 
     var id: UInt32 { rawValue }
 
@@ -16,6 +17,7 @@ enum HotKeyAction: UInt32, CaseIterable {
         case .window: "Capture Window"
         case .fullscreen: "Capture Fullscreen"
         case .scrolling: "Capture Scrolling Area"
+        case .text: "Capture Text"
         }
     }
 
@@ -25,6 +27,8 @@ enum HotKeyAction: UInt32, CaseIterable {
             HotKeyBinding(keyCode: UInt32(kVK_ANSI_4), modifiers: HotKeyBinding.commandShift)
         case .window:
             HotKeyBinding(keyCode: UInt32(kVK_ANSI_3), modifiers: HotKeyBinding.commandShift)
+        case .text:
+            HotKeyBinding(keyCode: UInt32(kVK_ANSI_5), modifiers: HotKeyBinding.commandShift)
         case .fullscreen, .scrolling: nil
         }
     }

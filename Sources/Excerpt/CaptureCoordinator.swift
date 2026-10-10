@@ -1,6 +1,7 @@
 import AppKit
 import ExcerptCapture
 import ExcerptCore
+import ExcerptExport
 
 /// Runs one capture end to end: permission → frozen stills → selection → image → deliver.
 /// Main-actor: the overlay, alerts and sound are AppKit, and a plain async method would run off
@@ -66,9 +67,44 @@ final class CaptureCoordinator {
                 {
                     try await captureScrolling(still: still, pixelRect: rect)
                 }
+            case .text:
+                if case .area(let still, let rect) = await SelectionOverlay().run(
+                    mode: .area, stills: stills),
+                    let image = still.image.cropping(to: rect)
+                {
+                    await copyText(of: image, scale: still.scale)
+                }
             }
         } catch {
             Alerts.show("Capture failed", error.localizedDescription)
+        }
+    }
+
+    /// Capture Text: reads the selection off the main thread and copies its text, with no file
+    /// and no sound. A selection with no text leaves the clipboard as it was, and says so.
+    private func copyText(of image: CGImage, scale: CGFloat) async {
+        let reading = Toast.show("Reading text…", seconds: nil)
+        let result = await Task.detached(priority: .userInitiated) {
+            Result {
+                try CaptureText.read(
+                    image, scale: Double(scale), recognizer: VisionTextRecognizer())
+            }
+        }.value
+        switch result {
+        case .success(let text) where text.isEmpty:
+            Toast.show("No text found · the clipboard is unchanged")
+        case .success(let text):
+            do {
+                try Pasteboard.copyText(String(text.dropLast()))
+                let lines = text.split(separator: "\n").count
+                Toast.show("Copied \(lines) line\(lines == 1 ? "" : "s") of text")
+            } catch {
+                Toast.dismiss(reading)
+                Alerts.textCopyFailed(error)
+            }
+        case .failure(let error):
+            Toast.dismiss(reading)
+            Alerts.textUnreadable(error)
         }
     }
 

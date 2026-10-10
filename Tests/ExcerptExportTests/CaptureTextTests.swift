@@ -186,6 +186,13 @@ import Testing
                 == "")
     }
 
+    @Test func aPlainImageReadsWhole() throws {
+        let image = ColourWords.page(
+            width: 300, height: 4_000, words: ["alpha": (20, 20), "omega": (200, 3_900)])
+        #expect(
+            try CaptureText.read(image, scale: 2, recognizer: ColourWords()) == "alpha\n\nomega\n")
+    }
+
     @Test func regionsSkipSeamsAndSliceTallSegments() {
         let map = Renderer.render(
             Fixtures.sheet(width: 300, height: 7_000),
