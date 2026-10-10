@@ -1,0 +1,69 @@
+import CoreGraphics
+
+/// How a tall image is cut into tiles for a reader that downscales any image whose long edge
+/// passes `readerLongEdge` (Claude does). Tiles are in points: a Retina capture doubles its
+/// pixels without adding legible text, so pixels past 1× only cost downscaling.
+public enum Tiling {
+    /// The longest edge Claude reads without downscaling.
+    public static let readerLongEdge = 1568
+    /// Every tile of a split capture is this tall.
+    public static let tileLength = 1500
+    /// The least any two neighbouring tiles share. A line of text no taller than this appears
+    /// whole in at least one tile.
+    public static let overlap = 100
+
+    /// The spans of `0..<length` the tiles cover. A length up to `fits` is one span. A longer
+    /// one is cut into spans exactly `tile` long, each starting `tile - overlap` after the one
+    /// before, with the last pulled back to end at `length`, so it shares more than `overlap`
+    /// with its neighbour and never less. Empty for a length of zero or less.
+    public static func spans(
+        length: Int, tile: Int = tileLength, overlap: Int = overlap, fits: Int = readerLongEdge
+    ) -> [Range<Int>] {
+        precondition(tile > overlap && overlap >= 0 && fits >= tile, "tile geometry")
+        guard length > 0 else { return [] }
+        guard length > fits else { return [0..<length] }
+        let stride = tile - overlap
+        let count = (length - overlap + stride - 1) / stride
+        return (0..<count).map { i in
+            let start = i == count - 1 ? length - tile : i * stride
+            return start..<(start + tile)
+        }
+    }
+
+    /// The part of each span that owns what lies there: the spans' common rows split at their
+    /// midpoint, so the bands partition the whole length. Anything no taller than the overlap
+    /// whose middle lies in a span's band lies wholly inside that span.
+    public static func ownedBands(_ spans: [Range<Int>]) -> [Range<Int>] {
+        spans.indices.map { i in
+            let lower =
+                i == 0 ? spans[i].lowerBound : (spans[i].lowerBound + spans[i - 1].upperBound) / 2
+            let upper =
+                i == spans.count - 1
+                ? spans[i].upperBound : (spans[i + 1].lowerBound + spans[i].upperBound) / 2
+            return lower..<upper
+        }
+    }
+
+    /// `image` at 1× (one pixel per point), cut into the tiles `spans` gives for its height.
+    /// The full width stays in every tile.
+    public static func tiles(of image: CGImage, scale: Double) -> [CGImage] {
+        let points = atPoints(image, scale: scale)
+        return spans(length: points.height).map { span in
+            points.cropping(
+                to: CGRect(x: 0, y: span.lowerBound, width: points.width, height: span.count))!
+        }
+    }
+
+    /// `image` resampled to one pixel per point, always as 8-bit sRGB RGBA (Core's pixel layout)
+    /// so a CMYK, 16-bit or indexed source cannot make a later PNG encode fail. Pixel size is
+    /// unchanged at 1× or below.
+    public static func atPoints(_ image: CGImage, scale: Double) -> CGImage {
+        let factor = max(scale, 1)
+        let width = max(1, Int((Double(image.width) / factor).rounded()))
+        let height = max(1, Int((Double(image.height) / factor).rounded()))
+        let context = PixelBuffer.makeContext(width: width, height: height)
+        context.interpolationQuality = .high
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        return context.makeImage()!
+    }
+}
