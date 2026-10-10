@@ -6,19 +6,43 @@ import Testing
 @testable import ExcerptExport
 
 @Suite struct ReadCommandTests {
+    @Test func theCommandLineNameNeverStartsTheApp() {
+        #expect(ReadCommand.parse([], invokedAs: "excerpt") == .usage("name a command"))
+        #expect(ReadCommand.parse(["-x"], invokedAs: "excerpt") == .usage("unknown option '-x'"))
+        #expect(
+            ReadCommand.parse(["--verbose", "a.png"], invokedAs: "excerpt")
+                == .usage("unknown option '--verbose'"))
+        #expect(ReadCommand.parse(["--help"], invokedAs: "excerpt") == .help)
+        #expect(ReadCommand.parse(["read", "a.png"], invokedAs: "excerpt") == .read("a.png"))
+    }
+
+    @Test func theBundleNameKeepsAppKitArguments() {
+        #expect(ReadCommand.parse([], invokedAs: "Excerpt") == .app)
+        #expect(
+            ReadCommand.parse(["-NSDocumentRevisionsDebugMode", "YES"], invokedAs: "Excerpt")
+                == .app)
+        #expect(ReadCommand.parse(["read", "a.png"], invokedAs: "Excerpt") == .read("a.png"))
+    }
+
     @Test func argumentsChooseTheAppOrACommand() {
-        #expect(ReadCommand.parse([]) == .app)
-        #expect(ReadCommand.parse(["-NSDocumentRevisionsDebugMode", "YES"]) == .app)
-        #expect(ReadCommand.parse(["-psn_0_12345"]) == .app)
-        #expect(ReadCommand.parse(["read", "shot.png"]) == .read("shot.png"))
-        #expect(ReadCommand.parse(["read", "-"]) == .read("-"))
-        #expect(ReadCommand.parse(["help"]) == .help)
-        #expect(ReadCommand.parse(["--help"]) == .help)
-        #expect(ReadCommand.parse(["read", "--help"]) == .help)
-        #expect(ReadCommand.parse(["read"]) == .usage("read takes one image"))
-        #expect(ReadCommand.parse(["read", "a.png", "b.png"]) == .usage("read takes one image"))
-        #expect(ReadCommand.parse(["read", ""]) == .usage("read takes one image"))
-        #expect(ReadCommand.parse(["snap"]) == .usage("unknown command 'snap'"))
+        #expect(ReadCommand.parse([], invokedAs: "Excerpt") == .app)
+        #expect(
+            ReadCommand.parse(["-NSDocumentRevisionsDebugMode", "YES"], invokedAs: "Excerpt")
+                == .app)
+        #expect(ReadCommand.parse(["-psn_0_12345"], invokedAs: "Excerpt") == .app)
+        #expect(ReadCommand.parse(["read", "shot.png"], invokedAs: "Excerpt") == .read("shot.png"))
+        #expect(ReadCommand.parse(["read", "-"], invokedAs: "Excerpt") == .read("-"))
+        #expect(ReadCommand.parse(["help"], invokedAs: "Excerpt") == .help)
+        #expect(ReadCommand.parse(["--help"], invokedAs: "Excerpt") == .help)
+        #expect(ReadCommand.parse(["read", "--help"], invokedAs: "Excerpt") == .help)
+        #expect(ReadCommand.parse(["read"], invokedAs: "Excerpt") == .usage("read takes one image"))
+        #expect(
+            ReadCommand.parse(["read", "a.png", "b.png"], invokedAs: "Excerpt")
+                == .usage("read takes one image"))
+        #expect(
+            ReadCommand.parse(["read", ""], invokedAs: "Excerpt") == .usage("read takes one image"))
+        #expect(
+            ReadCommand.parse(["snap"], invokedAs: "Excerpt") == .usage("unknown command 'snap'"))
     }
 
     static func scratch() throws -> (folder: URL, cache: ClaudeCache) {
@@ -149,11 +173,15 @@ import Testing
     }
 
     @Test func dashesAndDashDash() {
-        #expect(ReadCommand.parse(["read", "-x"]) == .read("-x"))
-        #expect(ReadCommand.parse(["read", "--", "-x"]) == .read("-x"))
-        #expect(ReadCommand.parse(["read", "--", "a.png"]) == .read("a.png"))
-        #expect(ReadCommand.parse(["read", "--"]) == .usage("read takes one image"))
-        #expect(ReadCommand.parse(["read", "--", "a", "b"]) == .usage("read takes one image"))
+        #expect(ReadCommand.parse(["read", "-x"], invokedAs: "Excerpt") == .read("-x"))
+        #expect(ReadCommand.parse(["read", "--", "-x"], invokedAs: "Excerpt") == .read("-x"))
+        #expect(ReadCommand.parse(["read", "--", "a.png"], invokedAs: "Excerpt") == .read("a.png"))
+        #expect(
+            ReadCommand.parse(["read", "--"], invokedAs: "Excerpt")
+                == .usage("read takes one image"))
+        #expect(
+            ReadCommand.parse(["read", "--", "a", "b"], invokedAs: "Excerpt")
+                == .usage("read takes one image"))
     }
 
     @Test func aClosedPipeDoesNotCrashTheWriter() throws {

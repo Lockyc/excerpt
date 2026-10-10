@@ -6,8 +6,8 @@ import Foundation
 /// Screen Recording permission because it captures nothing.
 public enum ReadCommand {
     public enum Invocation: Equatable {
-        /// No command: start the menu-bar app. Launch arguments AppKit owns (`-NS…`, `-psn_…`)
-        /// land here too.
+        /// No command: start the menu-bar app. Reached only under the bundle's name, where launch
+        /// arguments AppKit owns (`-NS…`, `-psn_…`) land here too.
         case app
         case read(String)
         case help
@@ -41,9 +41,14 @@ public enum ReadCommand {
 
         """
 
-    /// `arguments` without the program name.
-    public static func parse(_ arguments: [String]) -> Invocation {
-        guard let command = arguments.first else { return .app }
+    /// `arguments` without the program name; `name` is the program name's last path component.
+    /// Invoked as `excerpt` (the `PATH` link) it is always a command, so a mistyped option prints
+    /// usage instead of starting the menu-bar app.
+    public static func parse(_ arguments: [String], invokedAs name: String) -> Invocation {
+        let commandLine = name == "excerpt"
+        guard let command = arguments.first else {
+            return commandLine ? .usage("name a command") : .app
+        }
         switch command {
         case "-h", "--help", "help": return .help
         case "read":
@@ -55,7 +60,10 @@ public enum ReadCommand {
             }
             return .read(path)
         default:
-            return command.hasPrefix("-") ? .app : .usage("unknown command '\(command)'")
+            if command.hasPrefix("-") {
+                return commandLine ? .usage("unknown option '\(command)'") : .app
+            }
+            return .usage("unknown command '\(command)'")
         }
     }
 
@@ -127,10 +135,10 @@ public enum ReadCommand {
     }
 
     /// Runs a command named in `arguments` (without the program name), printing its output;
-    /// nil when there is none and the app should start.
-    public static func main(_ arguments: [String]) -> Int32? {
+    /// nil when there is none and the app should start. `name` is as for `parse`.
+    public static func main(_ arguments: [String], invokedAs name: String) -> Int32? {
         let output: Output
-        let invocation = parse(arguments)
+        let invocation = parse(arguments, invokedAs: name)
         if invocation != .app { signal(SIGPIPE, SIG_DFL) }
         switch invocation {
         case .app: return nil

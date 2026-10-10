@@ -2,7 +2,9 @@ import AppKit
 import ExcerptExport
 
 // `excerpt read <image>` and `excerpt help` run headless, before any NSApplication exists.
-if let status = ReadCommand.main(Array(CommandLine.arguments.dropFirst())) { exit(status) }
+let arguments = CommandLine.arguments
+let name = URL(fileURLWithPath: arguments.first ?? "").lastPathComponent
+if let status = ReadCommand.main(Array(arguments.dropFirst()), invokedAs: name) { exit(status) }
 
 MainActor.assumeIsolated {
     let app = NSApplication.shared
