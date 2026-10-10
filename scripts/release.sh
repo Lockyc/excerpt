@@ -69,7 +69,7 @@ publish() {
     if ! git diff --quiet || ! git diff --cached --quiet; then
         fail "the tree has uncommitted changes."
     fi
-    git fetch --quiet origin
+    git fetch --quiet --tags origin
     if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/dev)" ]; then
         fail "dev isn't pushed."
     fi
@@ -82,9 +82,17 @@ publish() {
     just gate
     notarize
     git tag -a "v$version" -m "excerpt v$version"
-    git push origin "v$version"
+    # From here a failure strands a local tag or a pushed main; the trap prints the way to finish.
+    local release_cmd
+    release_cmd="gh release create v$version $zip --verify-tag --title 'excerpt v$version' --notes-file '$notes'"
+    trap 'echo "release: failed after tagging v'"$version"'; finish by hand: ${next:-}" >&2' EXIT
+    next="git push origin HEAD:main && git push origin v$version && $release_cmd"
     git push origin HEAD:main
+    next="git push origin v$version && $release_cmd"
+    git push origin "v$version"
+    next=$release_cmd
     gh release create "v$version" "$zip" --verify-tag --title "excerpt v$version" --notes-file "$notes"
+    trap - EXIT
 }
 
 case "${1:-}" in

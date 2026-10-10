@@ -63,4 +63,4 @@ notarize:
 [group("release")]
 [doc("Release VERSION: notarize, tag, fast-forward main, publish with NOTES")]
 release notes:
-    scripts/release.sh publish {{notes}}
+    scripts/release.sh publish "{{notes}}"
