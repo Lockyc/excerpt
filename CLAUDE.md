@@ -9,7 +9,9 @@ A macOS menu-bar screenshot tool in Swift (SwiftPM, macOS 15+). The architecture
 [docs/design.md](docs/design.md); what's next is [docs/roadmap.md](docs/roadmap.md) — start
 there before planning work.
 
-**State:** design only — no code yet. Phase 0 (Core) is the first slice.
+**State:** Phases 0–1 shipped (Core, capture shell). Next: Phase 2, the editor.
+
+`just gate` per change; `just run` launches a signed build.
 
 ## Conventions
 
@@ -22,7 +24,8 @@ there before planning work.
   original — may be embedded in the dated primary PNG. The original and the edits live only in
   `… original.png`.
 - **Golden images** pin the renderer; a deliberate visual change regenerates them in the same
-  commit.
+  commit. `EXCERPT_RECORD_GOLDENS=1 swift test` re-records goldens; inspect every recorded PNG
+  before committing it.
 
 ## Branch and release model
 

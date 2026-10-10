@@ -17,8 +17,23 @@ read.
 
 | | |
 |---|---|
-| Design | Done — [docs/design.md](docs/design.md) |
-| Build | Not started — see [docs/roadmap.md](docs/roadmap.md) |
+| Capture | Area (frozen screen), window, fullscreen → library + clipboard + thumbnail |
+| Core | Cuts render as torn seams; edits round-trip through the master PNG |
+| Next | The editor and cut tool — see [docs/roadmap.md](docs/roadmap.md) |
+
+macOS's own Screenshots shortcuts (⌘⇧3 / ⌘⇧4) must be turned off for Excerpt's defaults to fire;
+Excerpt flags it in the menu and Settings.
+
+## Build
+
+```bash
+just gate     # format check, build, tests
+just run      # build the signed app and launch it
+just deploy   # install to /Applications
+```
+
+Signing uses a `Developer ID Application` identity from your keychain; set
+`EXCERPT_SIGN_IDENTITY` when more than one is present.
 
 ## License
 

@@ -79,7 +79,7 @@ The tear's shape is seeded from the cut's position, so identical edits render id
 | ⌘⇧6 | All-in-one selector (area / window / fullscreen / scrolling / text) |
 
 Hotkeys use Carbon `RegisterEventHotKey` (no permission, no dependency) and are all rebindable.
-A binding another app already holds is shown as in use in Settings, never failed silently.
+A binding that collides with another registration or an enabled macOS shortcut is flagged in the menu and Settings, never failed silently.
 
 - **Area:** the screen freezes when selection starts (a still of every display is taken first,
   and the selection is cut from it), so hover states and open menus survive. Crosshair, loupe,
@@ -88,7 +88,7 @@ A binding another app already holds is shown as in use in Settings, never failed
 - **Fullscreen:** the display under the cursor.
 - Desktop icons and excerpt's own windows are excluded through the `SCContentFilter`.
 - **After every capture** the file is saved, copied to the clipboard, and shown as a large
-  thumbnail (Copy · Edit · For Claude · Close, draggable) that closes after 15s, or on drag-out.
+  thumbnail (Copy · Edit · For Claude · Close, draggable) that closes after 15s (paused while hovered), or on drag-out.
   Shutter sound on.
 
 ### Scrolling capture (vertical)
