@@ -199,6 +199,28 @@ import Testing
         #expect(StitchMatcher.match(a, b, ignoringRightColumns: 0) == .uncertain)
     }
 
+    @Test func knownLimitContentDifferingOnlyInASmallPatchReadsAsAMove() {
+        // Pinned limitation. A blank page repeats a 100-row block every 250 rows, with a label
+        // that differs between blocks only in a 5-column patch. The pair a frame-plus-30
+        // apart is indistinguishable by pixels from an honest small move with a local
+        // animation, so it reads moved(30). Auto mode closes this with an expected-travel
+        // check (Task 7).
+        let base = ScrollFixtures.page(width: 90, height: 1500, seed: 3)
+        let long = ScrollFixtures.paint(width: 90, height: 1500) { x, y in
+            let row = y % 250
+            switch row {
+            case 100..<200: return base[x: x, y: row]
+            case 60..<63:
+                let patch = (40..<45).contains(x)
+                return base[x: x, y: patch ? y : row]
+            default: return ScrollFixtures.paper
+            }
+        }
+        let a = ScrollFixtures.frame(long, offset: 0, viewport: 200)
+        let b = ScrollFixtures.frame(long, offset: 280, viewport: 200)
+        #expect(offset(StitchMatcher.match(a, b, ignoringRightColumns: 0)) == 30)
+    }
+
     @Test func anHonestMoveWithALocalAnimationIsStillFound() {
         let a = ScrollFixtures.animated(frame(0), x: 30, y: 100, width: 10, height: 10, phase: 1)
         let b = ScrollFixtures.animated(frame(150), x: 30, y: 60, width: 10, height: 10, phase: 2)

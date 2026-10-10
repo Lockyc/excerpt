@@ -14,8 +14,10 @@ public enum FrameMatch: Equatable, Sendable {
 public enum StitchMatcher {
     /// The share of evidence rows that must match for an offset to be believed.
     public static let confidenceThreshold = 0.8
-    /// An offset with more than this many full-width mismatching rows is different content, not
-    /// animation, however high its share.
+    /// An offset with more than this many mismatching rows whose differing pixels span more than
+    /// a quarter of the changed columns is different content, not animation, however high its
+    /// share. It also halts an honest move with an animation wider than that, or several
+    /// animations on the same rows: that fails safe as uncertain, never a wrong seam.
     public static let maximumContradictions = 2
     /// An offset is believed only if every other offset scores at least this much lower.
     public static let ambiguityMargin = 0.02
