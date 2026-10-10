@@ -32,17 +32,20 @@ final class CaptureCoordinator {
         guard !running else { return }  // a second hotkey press mid-capture is ignored
         running = true
         defer { running = false }
-        var action = requested
-        if action == .selector {
-            let preferences = preferences
-            guard let mode = selector.choose(binding: { preferences.binding(for: $0) })
-            else { return }
-            action = mode
-        }
         guard ensurePermission() else { return }
-        if action == .scrolling && !scrollingMayStart() { return }
+        if requested == .scrolling && !scrollingMayStart() { return }
         do {
             let stills = try await capturer.stills()
+            var action = requested
+            // The selector shows over the stills already taken, so the screen it opened over is
+            // the one captured; Esc or a click outside discards them.
+            if action == .selector {
+                let preferences = preferences
+                guard let mode = selector.choose(binding: { preferences.binding(for: $0) })
+                else { return }
+                if mode == .scrolling && !scrollingMayStart() { return }
+                action = mode
+            }
             switch action {
             case .area:
                 if case .area(let still, let rect) = await SelectionOverlay().run(
@@ -198,10 +201,11 @@ final class CaptureCoordinator {
         if scrollEnd == nil { scrollEnd = end }
     }
 
-    /// Without Accessibility, asks how to go on before any still is taken, so neither the alert
-    /// nor the system prompt lands in a frame. The system prompt is requested once per launch;
-    /// after an earlier denial macOS may not show it again, so the alert always does. True when
-    /// the capture should start: with access, or with the user scrolling.
+    /// Without Accessibility, asks how to go on before the stills are taken, or after a pick from
+    /// the selector, so neither the alert nor the system prompt lands in a still. The system
+    /// prompt is requested once per launch; after an earlier denial macOS may not show it again,
+    /// so the alert always does. True when the capture should start: with access, or with the
+    /// user scrolling.
     private func scrollingMayStart() -> Bool {
         guard !EventScroller.isTrusted else { return true }
         if !askedForAccessibility {
