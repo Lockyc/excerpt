@@ -35,9 +35,9 @@ extension HotKeyAction {
     /// take: a global hotkey gets the press before the editor sees it. Rebinding judges a
     /// candidate against these alongside the other actions' bindings.
     static let editorShortcuts: [String: HotKeyBinding] = Dictionary(
-        uniqueKeysWithValues: EditorShortcut.allCases.compactMap { shortcut in
+        EditorShortcut.allCases.compactMap { shortcut in
             HotKeyBinding(character: shortcut.key, flags: shortcut.modifiers).map {
                 ("\(shortcut.name) in the editor", $0)
             }
-        })
+        }, uniquingKeysWith: { first, _ in first })
 }

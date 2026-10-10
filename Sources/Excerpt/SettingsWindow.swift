@@ -1,38 +1,155 @@
 import AppKit
+import Carbon.HIToolbox
+import ExcerptCapture
 import ExcerptCore
 import SwiftUI
 
+/// What Settings can do to the hotkeys, which the app delegate owns.
+struct HotKeyControls {
+    let states: () -> [HotKeyAction: HotKeyState]
+    /// Sets an action's hotkey (nil clears it) and registers the result.
+    let set: (HotKeyAction, HotKeyBinding?) -> Void
+    /// Returns an action to its default hotkey and registers the result.
+    let reset: (HotKeyAction) -> Void
+    /// Unregisters every hotkey while one is recorded.
+    let suspend: () -> Void
+    /// Registers every hotkey again.
+    let resume: () -> Void
+}
+
 @MainActor
 final class SettingsWindowController {
-    private let hotKeyStates: () -> [HotKeyAction: HotKeyState]
     private let model: SettingsModel
+    private let hotKeys: HotKeyModel
     private var window: NSWindow?
     private var hosting: NSHostingController<SettingsView>?
+    private var keyObserver: NSObjectProtocol?
 
-    init(
-        preferences: Preferences,
-        hotKeyStates: @escaping () -> [HotKeyAction: HotKeyState]
-    ) {
-        self.hotKeyStates = hotKeyStates
+    init(preferences: Preferences, hotKeys controls: HotKeyControls) {
         self.model = SettingsModel(preferences: preferences)
+        self.hotKeys = HotKeyModel(controls: controls)
     }
 
     func show() {
-        let view = SettingsView(model: model, hotKeys: hotKeyStates())
-        if let hosting {
-            hosting.rootView = view
-        } else {
-            let hosting = NSHostingController(rootView: view)
+        hotKeys.refresh()
+        if hosting == nil {
+            let hosting = NSHostingController(
+                rootView: SettingsView(model: model, hotKeys: hotKeys))
             self.hosting = hosting
             let window = NSWindow(contentViewController: hosting)
             window.title = "Excerpt Settings"
             window.styleMask = [.titled, .closable]
             window.isReleasedWhenClosed = false
             self.window = window
+            // A macOS shortcut turned on or off elsewhere shows as soon as Settings is back.
+            keyObserver = NotificationCenter.default.addObserver(
+                forName: NSWindow.didBecomeKeyNotification, object: window, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.hotKeys.refresh() }
+            }
         }
         NSApp.activate(ignoringOtherApps: true)
         window?.center()
         window?.makeKeyAndOrderFront(nil)
+    }
+}
+
+/// The Hotkeys section's state: each action's hotkey, the one being recorded, and why a
+/// recorded combination was refused.
+@MainActor
+final class HotKeyModel: ObservableObject {
+    private let controls: HotKeyControls
+    @Published private(set) var states: [HotKeyAction: HotKeyState] = [:]
+    @Published private(set) var recording: HotKeyAction?
+    @Published private(set) var refusals: [HotKeyAction: String] = [:]
+    private var monitor: Any?
+    private var resignObserver: NSObjectProtocol?
+
+    init(controls: HotKeyControls) {
+        self.controls = controls
+    }
+
+    /// Reads every hotkey's state. Skipped while recording: every hotkey is unregistered then,
+    /// so the states would read as registered whatever happens once they are back.
+    func refresh() {
+        guard recording == nil else { return }
+        states = controls.states()
+    }
+
+    /// Records the next key press as `action`'s hotkey. Every hotkey is unregistered meanwhile,
+    /// so the press reaches here instead of starting a capture. Esc, Cancel, or any window
+    /// losing focus stops recording and registers them again.
+    func record(_ action: HotKeyAction) {
+        stopRecording()
+        controls.suspend()
+        recording = action
+        refusals[action] = nil
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self else { return event }
+            MainActor.assumeIsolated { self.recorded(event) }
+            return nil
+        }
+        resignObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didResignKeyNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.stopRecording() }
+        }
+    }
+
+    func stopRecording() {
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        monitor = nil
+        if let resignObserver { NotificationCenter.default.removeObserver(resignObserver) }
+        resignObserver = nil
+        if recording != nil {
+            recording = nil
+            controls.resume()
+        }
+        refresh()
+    }
+
+    private func recorded(_ event: NSEvent) {
+        guard let action = recording else { return }
+        stopRecording()
+        guard Int(event.keyCode) != kVK_Escape else { return }
+        apply(HotKeyBinding(keyCode: event.keyCode, flags: event.modifierFlags), to: action)
+    }
+
+    func clear(_ action: HotKeyAction) {
+        stopRecording()
+        apply(nil, to: action)
+    }
+
+    func reset(_ action: HotKeyAction) {
+        stopRecording()
+        apply(action.defaultBinding, to: action)
+    }
+
+    /// Makes `candidate` `action`'s hotkey if the rules keep it, else leaves the binding and
+    /// says why under the row. The default is stored as no override.
+    private func apply(_ candidate: HotKeyBinding?, to action: HotKeyAction) {
+        let bindings = Dictionary(
+            states.map { ($0.key.title, $0.value.binding) }, uniquingKeysWith: { first, _ in first }
+        )
+        let verdict = HotKeyRules.judge(
+            candidate, for: action.title, bindings: bindings,
+            reserved: HotKeyAction.editorShortcuts, system: HotKeyCenter.symbolicHotKeys())
+        guard verdict.keeps else {
+            refusals[action] = candidate.flatMap { verdict.message(for: $0) }
+            return
+        }
+        refusals[action] = nil
+        if candidate == action.defaultBinding {
+            controls.reset(action)
+        } else {
+            controls.set(action, candidate)
+        }
+        refresh()
+    }
+
+    /// Whether `action` has its default hotkey (or, with no default, none).
+    func isDefault(_ action: HotKeyAction) -> Bool {
+        states[action]?.binding == action.defaultBinding
     }
 }
 
@@ -83,7 +200,7 @@ final class SettingsModel: ObservableObject {
 
 struct SettingsView: View {
     @ObservedObject var model: SettingsModel
-    let hotKeys: [HotKeyAction: HotKeyState]
+    @ObservedObject var hotKeys: HotKeyModel
 
     var body: some View {
         Form {
@@ -112,24 +229,52 @@ struct SettingsView: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
-            Section("Hotkeys") {
+            Section {
                 ForEach(HotKeyAction.allCases, id: \.self) { action in
-                    LabeledContent(action.title) {
-                        Text(hotKeys[action]?.binding.display ?? "None")
-                            .foregroundStyle(hotKeyColor(action))
-                    }
-                    if let note = hotKeys[action]?.note {
-                        Text(note).font(.caption).foregroundStyle(.orange)
-                    }
+                    hotKeyRow(action)
                 }
+            } header: {
+                Text("Hotkeys")
+            } footer: {
+                Text(
+                    "Record, then press the new shortcut; Esc cancels. A hotkey needs ⌘, ⌃ or ⌥ unless it's an F-key."
+                )
+                .font(.caption).foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
-        .frame(width: 460)
+        .frame(width: 560)
     }
 
-    private func hotKeyColor(_ action: HotKeyAction) -> Color {
-        guard let state = hotKeys[action] else { return .secondary }
+    @ViewBuilder private func hotKeyRow(_ action: HotKeyAction) -> some View {
+        let state = hotKeys.states[action]
+        let recording = hotKeys.recording == action
+        LabeledContent(action.title) {
+            HStack {
+                Text(recording ? "Press a shortcut…" : state?.binding.display ?? "None")
+                    .foregroundStyle(Self.color(state, recording: recording))
+                Button(recording ? "Cancel" : "Record") {
+                    recording ? hotKeys.stopRecording() : hotKeys.record(action)
+                }
+                Button("Clear") { hotKeys.clear(action) }
+                    .disabled(state == nil)
+                    .help(state == nil ? "No hotkey to clear" : "Remove this hotkey")
+                Button("Default") { hotKeys.reset(action) }
+                    .disabled(hotKeys.isDefault(action))
+                    .help(
+                        hotKeys.isDefault(action)
+                            ? "Already the default"
+                            : "Use \(action.defaultBinding?.display ?? "no hotkey")")
+            }
+        }
+        if let message = hotKeys.refusals[action] ?? state?.note {
+            Text(message).font(.caption).foregroundStyle(.orange)
+        }
+    }
+
+    private static func color(_ state: HotKeyState?, recording: Bool) -> Color {
+        if recording { return .accentColor }
+        guard let state else { return .secondary }
         return state.note == nil ? .primary : .orange
     }
 }

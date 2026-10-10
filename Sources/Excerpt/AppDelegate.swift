@@ -169,7 +169,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private lazy var settings = SettingsWindowController(
-        preferences: preferences, hotKeyStates: { [weak self] in self?.hotKeyStates() ?? [:] })
+        preferences: preferences,
+        hotKeys: HotKeyControls(
+            states: { [weak self] in self?.hotKeyStates() ?? [:] },
+            set: { [weak self] action, binding in
+                self?.preferences.setBinding(binding, for: action)
+                self?.applyHotKeys()
+            },
+            reset: { [weak self] action in
+                self?.preferences.resetBinding(for: action)
+                self?.applyHotKeys()
+            },
+            suspend: { [weak self] in self?.suspendHotKeys() },
+            resume: { [weak self] in self?.applyHotKeys() }))
 
     func openSettings() { settings.show() }
 }
