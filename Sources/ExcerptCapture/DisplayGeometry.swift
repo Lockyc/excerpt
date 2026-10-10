@@ -1,4 +1,25 @@
 import CoreGraphics
 
-/// Placeholder until Task 11.
-public enum DisplayGeometry {}
+/// AppKit's global space has its origin at the bottom-left of the primary screen; Quartz (and
+/// ScreenCaptureKit / CGWindowList) at the top-left. The conversion is its own inverse.
+public enum DisplayGeometry {
+    public static func quartzRect(fromAppKit rect: CGRect, primaryHeight: CGFloat) -> CGRect {
+        CGRect(x: rect.minX, y: primaryHeight - rect.maxY, width: rect.width, height: rect.height)
+    }
+
+    public static func appKitRect(fromQuartz rect: CGRect, primaryHeight: CGFloat) -> CGRect {
+        quartzRect(fromAppKit: rect, primaryHeight: primaryHeight)
+    }
+
+    /// A selection in display-local, top-left points → the pixel rect to crop from that
+    /// display's still, rounded outward and clamped to the image.
+    public static func pixelRect(forLocalPoints rect: CGRect, scale: CGFloat, imageSize: CGSize)
+        -> CGRect
+    {
+        let scaled = CGRect(
+            x: rect.minX * scale, y: rect.minY * scale, width: rect.width * scale,
+            height: rect.height * scale
+        ).integral
+        return scaled.intersection(CGRect(origin: .zero, size: imageSize))
+    }
+}
