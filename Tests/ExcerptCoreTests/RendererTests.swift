@@ -48,3 +48,30 @@ import Testing
         try Golden.check(Renderer.render(image, edits: edits).image, named: "render-both-axes")
     }
 }
+
+@Suite struct SeamLabelPlacementTests {
+    @Test func pillStaysInsideANarrowCanvas() {
+        let pill = SeamLabel.pillSize(text: SeamLabel.text(removedPixels: 240, scale: 2), scale: 2)
+        let canvas = 300.0
+        for desired in [0.0, 150, 300] {
+            let c = SeamLabel.clampedCentre(
+                desired: desired, length: Double(pill.width), segment: 0..<100, canvas: canvas,
+                margin: 8)
+            #expect(c - Double(pill.width) / 2 >= 0)
+            #expect(c + Double(pill.width) / 2 <= canvas)
+        }
+    }
+
+    @Test func pillStaysInsideItsSegmentWhenItFits() {
+        let c = SeamLabel.clampedCentre(
+            desired: 90, length: 100, segment: 0..<181, canvas: 400, margin: 8)
+        #expect(c - 50 >= 8 && c + 50 <= 181 - 8)
+    }
+
+    @Test func labelsCentreOnTheLargestKeptSegmentOfTheOtherAxis() {
+        let map = AxisMap(extent: 600, bands: [200..<300], gap: 20)
+        #expect(Renderer.largestSegment(of: map) == 220.0..<520.0)
+        #expect(
+            Renderer.largestSegment(of: AxisMap(extent: 100, bands: [], gap: 20)) == 0.0..<100.0)
+    }
+}

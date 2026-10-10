@@ -21,3 +21,20 @@ import Testing
         #expect(throws: EditDocumentError.unsupportedVersion(2)) { try EditDocument.decode(json) }
     }
 }
+
+@Suite struct EditDocumentValidationTests {
+    @Test func rejectsVersionZero() {
+        let json = Data(#"{"version":0,"scale":2,"cuts":[]}"#.utf8)
+        #expect(throws: EditDocumentError.unsupportedVersion(0)) { try EditDocument.decode(json) }
+    }
+
+    @Test func rejectsNonPositiveScale() {
+        let json = Data(#"{"version":1,"scale":0,"cuts":[]}"#.utf8)
+        #expect(throws: EditDocumentError.invalidScale(0)) { try EditDocument.decode(json) }
+    }
+
+    @Test func rejectsNonFiniteScale() {
+        let json = Data(#"{"version":1,"scale":1e999,"cuts":[]}"#.utf8)
+        #expect(throws: (any Error).self) { try EditDocument.decode(json) }
+    }
+}

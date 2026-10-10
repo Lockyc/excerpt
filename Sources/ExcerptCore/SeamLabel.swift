@@ -12,10 +12,8 @@ public enum SeamLabel {
         return "⋯ \(formatter.string(from: NSNumber(value: points))!) px hidden"
     }
 
-    /// Draws the pill centred on `center` (top-left coordinates), turned 90° for vertical seams.
-    static func draw(
-        _ text: String, center: CGPoint, vertical: Bool, in context: CGContext, canvasHeight: Int,
-        scale: Double
+    static func attributedLine(_ text: String, scale: Double) -> (
+        line: CTLine, ascent: CGFloat, descent: CGFloat, width: CGFloat
     ) {
         let font = CTFontCreateUIFontForLanguage(.emphasizedSystem, CGFloat(10 * scale), nil)!
         let attributes: [NSAttributedString.Key: Any] = [
@@ -27,10 +25,38 @@ public enum SeamLabel {
             NSAttributedString(string: text, attributes: attributes))
         var ascent: CGFloat = 0
         var descent: CGFloat = 0
-        let textWidth = CGFloat(CTLineGetTypographicBounds(line, &ascent, &descent, nil))
-        let padX = CGFloat(7 * scale)
+        let width = CGFloat(CTLineGetTypographicBounds(line, &ascent, &descent, nil))
+        return (line, ascent, descent, width)
+    }
+
+    /// The pill's size before any rotation: text plus padding.
+    static func pillSize(text: String, scale: Double) -> CGSize {
+        let m = attributedLine(text, scale: scale)
+        return CGSize(
+            width: m.width + 2 * CGFloat(7 * scale),
+            height: m.ascent + m.descent + 2 * CGFloat(2 * scale))
+    }
+
+    /// The centre along a seam for a pill `length` long: `desired` moved the least needed to
+    /// keep the pill, with `margin` spare, inside `segment` when it fits there, else inside `0..<canvas`.
+    static func clampedCentre(
+        desired: Double, length: Double, segment: Range<Double>, canvas: Double, margin: Double
+    ) -> Double {
+        let room = length + 2 * margin
+        let bounds = room <= segment.upperBound - segment.lowerBound ? segment : 0..<canvas
+        let lo = bounds.lowerBound + room / 2
+        let hi = bounds.upperBound - room / 2
+        return lo <= hi ? min(max(desired, lo), hi) : canvas / 2
+    }
+
+    /// Draws the pill centred on `center` (top-left coordinates), turned 90° for vertical seams.
+    static func draw(
+        _ text: String, center: CGPoint, vertical: Bool, in context: CGContext, canvasHeight: Int,
+        scale: Double
+    ) {
+        let m = attributedLine(text, scale: scale)
+        let pill = pillSize(text: text, scale: scale)
         let padY = CGFloat(2 * scale)
-        let pill = CGSize(width: textWidth + 2 * padX, height: ascent + descent + 2 * padY)
 
         context.saveGState()
         let origin = CanvasFlip(height: canvasHeight).point(center)
@@ -44,8 +70,8 @@ public enum SeamLabel {
                 transform: nil))
         context.setFillColor(CGColor(gray: 0, alpha: 0.62))
         context.fillPath()
-        context.textPosition = CGPoint(x: -textWidth / 2, y: rect.minY + padY + descent)
-        CTLineDraw(line, context)
+        context.textPosition = CGPoint(x: -m.width / 2, y: rect.minY + padY + m.descent)
+        CTLineDraw(m.line, context)
         context.restoreGState()
     }
 }
