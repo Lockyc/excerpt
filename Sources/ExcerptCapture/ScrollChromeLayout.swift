@@ -43,4 +43,11 @@ public enum ScrollChromeLayout {
     private static func clamp(_ value: CGFloat, _ low: CGFloat, _ high: CGFloat) -> CGFloat {
         max(low, min(value, high))
     }
+
+    /// How many rows of a stitch `stitchWidth` pixels wide fill a preview image area of `size`
+    /// points at that width; at least one.
+    public static func previewRows(stitchWidth: Int, size: CGSize) -> Int {
+        guard size.width > 0, size.height > 0 else { return 1 }
+        return max(1, Int((Double(stitchWidth) * Double(size.height / size.width)).rounded(.down)))
+    }
 }

@@ -6,7 +6,7 @@ import ExcerptCore
 /// capture never depends on where keyboard focus went.
 @MainActor
 public final class ScrollWindows {
-    static let hudSize = CGSize(width: 520, height: 104)
+    static let hudSize = CGSize(width: 520, height: 128)
 
     private let hud: NSPanel
     private let preview: NSPanel
@@ -17,6 +17,7 @@ public final class ScrollWindows {
     private let heightLabel = NSTextField(labelWithString: "")
     private let actions: Actions
     private var shownHeight = -1
+    private var activeObserver: NSObjectProtocol?
 
     /// `region` and `visible` (its screen's visible frame) in AppKit points.
     public init(
@@ -25,8 +26,10 @@ public final class ScrollWindows {
     ) {
         actions = Actions(done: onDone, cancel: onCancel, accessibility: onOpenAccessibility)
         hud = Self.panel(
-            frame: ScrollChromeLayout.hud(size: Self.hudSize, region: region, visible: visible))
-        preview = Self.panel(frame: ScrollChromeLayout.preview(region: region, visible: visible))
+            frame: ScrollChromeLayout.hud(size: Self.hudSize, region: region, visible: visible),
+            keyable: true)
+        preview = Self.panel(
+            frame: ScrollChromeLayout.preview(region: region, visible: visible), keyable: false)
         preview.ignoresMouseEvents = true
         accessibilityButton = FirstMouseButton(
             title: "Open Accessibility Settings", target: actions,
@@ -35,6 +38,12 @@ public final class ScrollWindows {
         buildPreview()
         show(ScrollHUDText.scrolling)
         updateAccessibilityButton()
+        heightLabel.stringValue = LengthText.points(0, scale: 1)
+        activeObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.updateAccessibilityButton() }
+        }
         preview.orderFrontRegardless()
         hud.makeKeyAndOrderFront(nil)
     }
@@ -46,13 +55,15 @@ public final class ScrollWindows {
         guard session.stitcher.height != shownHeight else { return }
         shownHeight = session.stitcher.height
         // The newest rows, as many as fill the preview at the stitch's width.
-        let size = imageView.bounds.size
-        let rows = Int(Double(session.stitcher.width) * Double(size.height / max(1, size.width)))
+        let rows = ScrollChromeLayout.previewRows(
+            stitchWidth: session.stitcher.width, size: imageView.bounds.size)
         imageView.image = NSImage(
             cgImage: session.stitcher.bottom(rows: rows).makeImage(), size: .zero)
     }
 
     public func close() {
+        if let activeObserver { NotificationCenter.default.removeObserver(activeObserver) }
+        activeObserver = nil
         hud.orderOut(nil)
         preview.orderOut(nil)
     }
@@ -69,10 +80,17 @@ public final class ScrollWindows {
         accessibilityButton.toolTip = trusted ? "Excerpt has Accessibility access" : nil
     }
 
-    private static func panel(frame: CGRect) -> NSPanel {
-        let panel = KeyablePanel(
-            contentRect: frame, styleMask: [.nonactivatingPanel, .borderless], backing: .buffered,
-            defer: false)
+    private static func panel(frame: CGRect, keyable: Bool) -> NSPanel {
+        let panel =
+            keyable
+            ? KeyablePanel(
+                contentRect: frame, styleMask: [.nonactivatingPanel, .borderless],
+                backing: .buffered,
+                defer: false)
+            : NSPanel(
+                contentRect: frame, styleMask: [.nonactivatingPanel, .borderless],
+                backing: .buffered,
+                defer: false)
         panel.isReleasedWhenClosed = false
         panel.level = .floating
         panel.isOpaque = false
@@ -96,7 +114,9 @@ public final class ScrollWindows {
         detailLabel.font = .systemFont(ofSize: 11)
         detailLabel.textColor = .secondaryLabelColor
         for label in [titleLabel, detailLabel] {
-            label.lineBreakMode = .byTruncatingTail
+            label.lineBreakMode = .byWordWrapping
+            label.maximumNumberOfLines = 2
+            label.preferredMaxLayoutWidth = Self.hudSize.width - 28
         }
         let text = NSStackView(views: [titleLabel, detailLabel])
         text.orientation = .vertical
