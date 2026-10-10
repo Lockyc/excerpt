@@ -203,7 +203,8 @@ cut by `just release NOTES.md` (`scripts/release.sh`) from a clean, pushed `dev`
 directories changes, unless its signature verifies, its Team ID is `G9V8U6ZU5E` and Gatekeeper
 accepts it as notarized. It then quits the user's running Excerpt, replaces
 `/Applications/Excerpt.app`, links `/usr/local/bin/excerpt` to the app's binary and relaunches.
-The binary reads its invoked name: as `excerpt` it is always a command, so a bare or mistyped
-call prints usage and exits 64; as `Excerpt` with no arguments, or with AppKit's own
-`-NS…`/`-psn_…`, it is the menu-bar app. There is no in-app updater: re-running the installer
-is the update.
+The binary reads its invoked path: only from inside an app bundle (`.app/Contents/MacOS/`), with
+no arguments or with AppKit's own `-NS…`/`-psn_…`, is it the menu-bar app. Anywhere else — the
+`excerpt` link under any spelling, `swift run` — it is always a command, so a bare or mistyped
+call prints usage and exits 64. There is no in-app updater: re-running the installer is the
+update.

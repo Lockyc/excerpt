@@ -6,43 +6,53 @@ import Testing
 @testable import ExcerptExport
 
 @Suite struct ReadCommandTests {
-    @Test func theCommandLineNameNeverStartsTheApp() {
-        #expect(ReadCommand.parse([], invokedAs: "excerpt") == .usage("name a command"))
-        #expect(ReadCommand.parse(["-x"], invokedAs: "excerpt") == .usage("unknown option '-x'"))
-        #expect(
-            ReadCommand.parse(["--verbose", "a.png"], invokedAs: "excerpt")
-                == .usage("unknown option '--verbose'"))
-        #expect(ReadCommand.parse(["--help"], invokedAs: "excerpt") == .help)
-        #expect(ReadCommand.parse(["read", "a.png"], invokedAs: "excerpt") == .read("a.png"))
+    let bundle = "/Applications/Excerpt.app/Contents/MacOS/Excerpt"
+    let link = "/usr/local/bin/excerpt"
+
+    @Test func everyPathOutsideABundleIsTheCommandLine() {
+        for path in [
+            link, "/usr/local/bin/Excerpt", "excerpt", "Excerpt", ".build/debug/Excerpt",
+            "/Users/me/excerpt/.build/release/Excerpt",
+        ] {
+            #expect(ReadCommand.parse([], invokedAt: path) == .usage("name a command"))
+            #expect(ReadCommand.parse(["-x"], invokedAt: path) == .usage("unknown option '-x'"))
+            #expect(
+                ReadCommand.parse(["--verbose", "a.png"], invokedAt: path)
+                    == .usage("unknown option '--verbose'"))
+            #expect(ReadCommand.parse(["--help"], invokedAt: path) == .help)
+            #expect(ReadCommand.parse(["read", "a.png"], invokedAt: path) == .read("a.png"))
+        }
     }
 
-    @Test func theBundleNameKeepsAppKitArguments() {
-        #expect(ReadCommand.parse([], invokedAs: "Excerpt") == .app)
-        #expect(
-            ReadCommand.parse(["-NSDocumentRevisionsDebugMode", "YES"], invokedAs: "Excerpt")
-                == .app)
-        #expect(ReadCommand.parse(["read", "a.png"], invokedAs: "Excerpt") == .read("a.png"))
+    @Test func aBundlePathStartsTheAppAndKeepsAppKitArguments() {
+        for path in [bundle, "/Users/me/excerpt/build/Excerpt.app/Contents/MacOS/Excerpt"] {
+            #expect(ReadCommand.parse([], invokedAt: path) == .app)
+            #expect(
+                ReadCommand.parse(["-NSDocumentRevisionsDebugMode", "YES"], invokedAt: path)
+                    == .app)
+            #expect(ReadCommand.parse(["read", "a.png"], invokedAt: path) == .read("a.png"))
+        }
     }
 
     @Test func argumentsChooseTheAppOrACommand() {
-        #expect(ReadCommand.parse([], invokedAs: "Excerpt") == .app)
+        #expect(ReadCommand.parse([], invokedAt: bundle) == .app)
         #expect(
-            ReadCommand.parse(["-NSDocumentRevisionsDebugMode", "YES"], invokedAs: "Excerpt")
+            ReadCommand.parse(["-NSDocumentRevisionsDebugMode", "YES"], invokedAt: bundle)
                 == .app)
-        #expect(ReadCommand.parse(["-psn_0_12345"], invokedAs: "Excerpt") == .app)
-        #expect(ReadCommand.parse(["read", "shot.png"], invokedAs: "Excerpt") == .read("shot.png"))
-        #expect(ReadCommand.parse(["read", "-"], invokedAs: "Excerpt") == .read("-"))
-        #expect(ReadCommand.parse(["help"], invokedAs: "Excerpt") == .help)
-        #expect(ReadCommand.parse(["--help"], invokedAs: "Excerpt") == .help)
-        #expect(ReadCommand.parse(["read", "--help"], invokedAs: "Excerpt") == .help)
-        #expect(ReadCommand.parse(["read"], invokedAs: "Excerpt") == .usage("read takes one image"))
+        #expect(ReadCommand.parse(["-psn_0_12345"], invokedAt: bundle) == .app)
+        #expect(ReadCommand.parse(["read", "shot.png"], invokedAt: bundle) == .read("shot.png"))
+        #expect(ReadCommand.parse(["read", "-"], invokedAt: bundle) == .read("-"))
+        #expect(ReadCommand.parse(["help"], invokedAt: bundle) == .help)
+        #expect(ReadCommand.parse(["--help"], invokedAt: bundle) == .help)
+        #expect(ReadCommand.parse(["read", "--help"], invokedAt: bundle) == .help)
+        #expect(ReadCommand.parse(["read"], invokedAt: bundle) == .usage("read takes one image"))
         #expect(
-            ReadCommand.parse(["read", "a.png", "b.png"], invokedAs: "Excerpt")
+            ReadCommand.parse(["read", "a.png", "b.png"], invokedAt: bundle)
                 == .usage("read takes one image"))
         #expect(
-            ReadCommand.parse(["read", ""], invokedAs: "Excerpt") == .usage("read takes one image"))
+            ReadCommand.parse(["read", ""], invokedAt: bundle) == .usage("read takes one image"))
         #expect(
-            ReadCommand.parse(["snap"], invokedAs: "Excerpt") == .usage("unknown command 'snap'"))
+            ReadCommand.parse(["snap"], invokedAt: bundle) == .usage("unknown command 'snap'"))
     }
 
     static func scratch() throws -> (folder: URL, cache: ClaudeCache) {
@@ -173,14 +183,14 @@ import Testing
     }
 
     @Test func dashesAndDashDash() {
-        #expect(ReadCommand.parse(["read", "-x"], invokedAs: "Excerpt") == .read("-x"))
-        #expect(ReadCommand.parse(["read", "--", "-x"], invokedAs: "Excerpt") == .read("-x"))
-        #expect(ReadCommand.parse(["read", "--", "a.png"], invokedAs: "Excerpt") == .read("a.png"))
+        #expect(ReadCommand.parse(["read", "-x"], invokedAt: bundle) == .read("-x"))
+        #expect(ReadCommand.parse(["read", "--", "-x"], invokedAt: bundle) == .read("-x"))
+        #expect(ReadCommand.parse(["read", "--", "a.png"], invokedAt: bundle) == .read("a.png"))
         #expect(
-            ReadCommand.parse(["read", "--"], invokedAs: "Excerpt")
+            ReadCommand.parse(["read", "--"], invokedAt: bundle)
                 == .usage("read takes one image"))
         #expect(
-            ReadCommand.parse(["read", "--", "a", "b"], invokedAs: "Excerpt")
+            ReadCommand.parse(["read", "--", "a", "b"], invokedAt: bundle)
                 == .usage("read takes one image"))
     }
 
