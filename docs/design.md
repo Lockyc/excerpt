@@ -87,7 +87,7 @@ menu and Settings, never failed silently.
   W×H readout; `Space` moves the selection, `Esc` cancels.
 - **Window:** hover-highlight, click; placed on a plain backdrop with padding (both settings).
 - **Fullscreen:** the display under the cursor.
-- Desktop icons and excerpt's own windows are excluded through the `SCContentFilter`.
+- Stills exclude desktop icons and excerpt's own windows through the `SCContentFilter`.
 - **After every capture** the file is saved, copied to the clipboard, and shown as a large
   thumbnail (Copy · Edit · For Claude · Close, draggable) that closes after 15s (paused while
   the pointer is over it), or on drag-out. Shutter sound on.
@@ -101,8 +101,8 @@ menu and Settings, never failed silently.
    the one with the highest share of matching evidence rows (unique, non-uniform) in the overlap,
    clearly ahead of the others. **Sticky regions** — top/bottom rows unchanged while the rows
    between them move — are kept once: the header from the first frame, the footer from the last.
-4. Stops on two consecutive no-movement steps, on `Return`, or at a maximum height (default
-   30,000 image pixels; the stitch is truncated contiguously there).
+4. Stops on two consecutive no-movement steps, on `Return`, or at a maximum height (30,000
+   image pixels; the stitch is truncated contiguously there).
 5. **Manual fallback** when steps produce no movement before the page has moved, Accessibility is
    not granted, the pointer moved, the wheel event failed, or the page scrolled a different
    distance than asked: the HUD reads "Scroll the page yourself · Return when done" and frames
@@ -111,14 +111,18 @@ menu and Settings, never failed silently.
 7. An **uncertain stitch** (no offset clears the confidence threshold — video, animation) stops,
    keeping the stitch for `Return`; it never fabricates a seam. The HUD says where it stopped.
    In manual mode a mismatched frame is skipped and the HUD asks to scroll back. In auto mode an
-   uncertain stitch, or the cap, halts: `Return` saves what is stitched, `Esc` discards. A
-   stream failure or display change saves what is stitched and says so.
+   uncertain stitch halts, and in either mode the cap does: `Return` saves what is stitched,
+   `Esc` discards. A stream failure or display change saves what is stitched and says so.
 
 Known limits: a run of content identical except a narrow patch, flung past in manual mode, can
 stitch at a wrong offset (auto mode checks each step's travel); a final short step that aliases
 can be believed when the page ends next; any animation wider than a quarter of the scrolled
 span, or several on the same rows, halts the capture; a sticky header with a changing top edge
-(progress bar, clock) reads as content and halts.
+(progress bar, clock) reads as content and halts, as can a sticky footer that unsticks into
+the page's flow; the stream excludes only excerpt's windows, so desktop icons under the region
+appear in it; the matcher ignores the right-edge scroll-bar strip but the stitch copies whole
+rows, so an overlay scroll bar's thumb can appear along the right edge (select the region
+without the scroll bar to avoid it).
 
 Permissions are requested on first use, per feature: Screen Recording for any capture,
 Accessibility for auto-scroll only.

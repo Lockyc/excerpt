@@ -16,7 +16,8 @@ public struct ScrollRegion: Equatable, Sendable {
     /// The region's centre in Quartz global points.
     public let quartzCentre: CGPoint
 
-    /// `displayFrame` is the display's AppKit frame; `pixelRect` a rect of its still.
+    /// `displayFrame` is the display's AppKit frame; `pixelRect` a rect of its still;
+    /// `primaryHeight` the primary display's full frame height, which flips AppKit to Quartz.
     public init(
         displayID: CGDirectDisplayID, displayFrame: CGRect, scale: CGFloat, pixelRect: CGRect,
         primaryHeight: CGFloat
