@@ -22,14 +22,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             hotKeyStatus: hotKeyStatus)
     }
 
+    private lazy var coordinator = CaptureCoordinator(preferences: preferences) { url, _ in
+        NSLog("captured \(url.lastPathComponent)")  // the thumbnail replaces this in Task 14
+    }
+
     func perform(_ action: HotKeyAction) {
-        NSLog("capture: \(action)")  // replaced in Task 13
+        Task { @MainActor in await coordinator.run(action) }
     }
 
     func openLibrary() {
-        try? FileManager.default.createDirectory(
-            at: preferences.libraryFolder, withIntermediateDirectories: true)
-        NSWorkspace.shared.open(preferences.libraryFolder)
+        let folder = preferences.libraryFolder
+        do {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        } catch {
+            Alerts.libraryUnwritable(folder, error)
+            return
+        }
+        NSWorkspace.shared.open(folder)
     }
 
     func openSettings() {}  // Task 15
