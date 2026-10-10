@@ -18,11 +18,22 @@ final class EditorModel {
     private var history = UndoStack<EditDocument>()
 
     var tool: Tool = .select {
-        didSet { selection = nil }
+        didSet {
+            cancelDrag()
+            selection = nil
+        }
     }
     private(set) var color: Palette = .initial
     private(set) var width: StrokeWidth = .initial
     var selection: Selection?
+    /// View points per rendered pixel, so hit slop and minimum drags stay the same size on screen.
+    var viewScale: Double = 1
+    /// The overlay for a drag in progress.
+    var pending: Pending?
+    /// The drag in progress; undo and redo wait for it to end.
+    var drag: Drag?
+    /// The original's pixels, for snapping; read on first use.
+    private(set) lazy var pixels = PixelBuffer(original)
 
     init(original: CGImage, document: EditDocument) {
         self.original = original
@@ -72,16 +83,32 @@ final class EditorModel {
         history.record(before)
     }
 
+    /// Does nothing while a drag is in flight, so history can't interleave with a preview.
     func undo() {
-        guard let previous = history.undo(from: document) else { return }
+        guard drag == nil, let previous = history.undo(from: document) else { return }
         document = previous
-        selection = nil
+        keepSelectionIfPresent()
     }
 
+    /// Does nothing while a drag is in flight.
     func redo() {
-        guard let next = history.redo(from: document) else { return }
+        guard drag == nil, let next = history.redo(from: document) else { return }
         document = next
-        selection = nil
+        keepSelectionIfPresent()
+    }
+
+    /// After a history step the selection stays when its annotation or seam is still there.
+    private func keepSelectionIfPresent() {
+        switch selection {
+        case .annotation(let id)?:
+            if !document.annotations.contains(where: { $0.id == id }) { selection = nil }
+        case .seam(let axis, let band)?:
+            let extent = axis == .horizontal ? original.height : original.width
+            let bands = CutSet.normalized(document.cuts, axis: axis, extent: extent)
+            if !bands.contains(band) { selection = nil }
+        case nil:
+            break
+        }
     }
 
     /// The document now matches what ⌘S wrote.
