@@ -26,6 +26,7 @@ fmt:
 [group("dev")]
 [doc("Pre-merge gate: format check, build, tests")]
 gate:
+    shellcheck scripts/*.sh
     swift format lint --strict --recursive Package.swift Sources Tests
     swift build
     swift test
@@ -53,3 +54,13 @@ deploy: app
     rm -rf /Applications/Excerpt.app
     ditto {{app_dir}} /Applications/Excerpt.app
     open /Applications/Excerpt.app
+
+[group("release")]
+[doc("Build, notarize and staple the app; zip it to build/Excerpt.zip")]
+notarize:
+    scripts/release.sh notarize
+
+[group("release")]
+[doc("Release VERSION: notarize, tag, fast-forward main, publish with NOTES")]
+release notes:
+    scripts/release.sh publish {{notes}}
