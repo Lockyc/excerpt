@@ -16,24 +16,38 @@ public enum ImageInputError: Error, Equatable, LocalizedError {
     case rendersTooLarge(String, width: Int, height: Int)
     case damagedEdits(String, String)
 
-    public var errorDescription: String? {
+    /// The file the error is about.
+    public var path: String {
         switch self {
-        case .missing(let path): "\(path): no such file"
-        case .folder(let path): "\(path) is a folder, not an image"
-        case .unreadable(let path, let reason): "\(path) can't be read: \(reason)"
-        case .notAnImage(let path): "\(path) isn't an image excerpt can read"
-        case .fileTooLarge(let path, let bytes):
-            "\(path) is \(bytes / 1_048_576) MB; excerpt reads images up to \(ImageInput.maximumBytes / 1_048_576) MB"
-        case .tooManyPixels(let path, let width, let height):
-            "\(path) is \(width)×\(height) pixels; \(Self.pixelLimits)"
-        case .rendersTooLarge(let path, let width, let height):
-            "\(path) renders at \(width)×\(height) pixels with its edits; \(Self.pixelLimits)"
-        case .damagedEdits(let path, let reason): "\(path): \(reason)"
+        case .missing(let path), .folder(let path), .unreadable(let path, _),
+            .notAnImage(let path), .fileTooLarge(let path, _), .tooManyPixels(let path, _, _),
+            .rendersTooLarge(let path, _, _), .damagedEdits(let path, _):
+            path
         }
     }
 
-    private static let pixelLimits =
-        "excerpt reads images up to \(ImageInput.maximumPixels / 1_000_000) megapixels and \(ImageInput.maximumSide) pixels a side"
+    /// Why the file can't be read, as a sentence that doesn't name it, with `product` for the
+    /// program: `excerpt` on the command line, `Excerpt` in the app.
+    public func reason(product: String) -> String {
+        let limits =
+            "\(product) reads images up to \(ImageInput.maximumPixels / 1_000_000) megapixels and \(ImageInput.maximumSide) pixels a side."
+        return switch self {
+        case .missing: "No such file."
+        case .folder: "It's a folder, not an image."
+        case .unreadable(_, let reason):
+            "It can't be read: \(reason)" + (reason.hasSuffix(".") ? "" : ".")
+        case .notAnImage: "It isn't an image \(product) can read."
+        case .fileTooLarge(_, let bytes):
+            "It's \(bytes / 1_048_576) MB; \(product) reads images up to \(ImageInput.maximumBytes / 1_048_576) MB."
+        case .tooManyPixels(_, let width, let height): "It's \(width)×\(height) pixels; \(limits)"
+        case .rendersTooLarge(_, let width, let height):
+            "With its edits it renders at \(width)×\(height) pixels; \(limits)"
+        case .damagedEdits(_, let reason): reason
+        }
+    }
+
+    /// The command line's wording: the path, then the reason.
+    public var errorDescription: String? { "\(path): \(reason(product: "excerpt"))" }
 }
 
 /// An image file as `excerpt read` takes it: any format ImageIO decodes, upright. A master

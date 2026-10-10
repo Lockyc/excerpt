@@ -125,6 +125,34 @@ import UniformTypeIdentifiers
         #expect(input.original.height != 300)
     }
 
+    /// One reason per error, in each surface's voice: the command line names the path then the
+    /// reason, with `excerpt` lowercase; the app names the file in its title and gives the
+    /// reason alone, with `Excerpt` capitalised.
+    @Test func reasonsSpeakInEachSurfacesVoice() {
+        let path = "/tmp/shot.png"
+        let errors: [ImageInputError] = [
+            .missing(path), .folder(path), .unreadable(path, "permission denied"),
+            .notAnImage(path), .fileTooLarge(path, bytes: 600 * 1_048_576),
+            .tooManyPixels(path, width: 200, height: 300),
+            .rendersTooLarge(path, width: 113_000, height: 2),
+            .damagedEdits(path, EditDocumentError.damaged.errorDescription!),
+        ]
+        for error in errors {
+            #expect(error.path == path)
+            #expect(error.errorDescription == "\(path): \(error.reason(product: "excerpt"))")
+            let app = error.reason(product: "Excerpt")
+            #expect(!app.contains(path), "\(app)")
+            #expect(!app.contains("excerpt"), "\(app)")
+            #expect(app.first!.isUppercase && app.hasSuffix("."), "\(app)")
+        }
+        #expect(
+            ImageInputError.notAnImage(path).reason(product: "Excerpt")
+                == "It isn't an image Excerpt can read.")
+        #expect(
+            ImageInputError.notAnImage(path).errorDescription
+                == "/tmp/shot.png: It isn't an image excerpt can read.")
+    }
+
     /// Review focus: a file that isn't an image fails with a message, never a trap.
     @Test func whatIsNotAnImageFailsWithItsPath() throws {
         let folder = try Self.folder()

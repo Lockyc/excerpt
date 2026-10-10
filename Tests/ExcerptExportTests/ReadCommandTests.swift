@@ -61,7 +61,10 @@ import Testing
             path: "notes.txt", directory: folder, cache: cache, recognizer: ColourWords())
         #expect(notImage.status == ReadCommand.Status.dataError)
         #expect(notImage.stderr.hasPrefix("excerpt: "))
-        #expect(notImage.stderr.contains("notes.txt isn't an image"))
+        #expect(
+            notImage.stderr
+                == "excerpt: \(folder.appendingPathComponent("notes.txt").standardizedFileURL.path): It isn't an image excerpt can read.\n"
+        )
         #expect(notImage.stdout.isEmpty)
         let missing = ReadCommand.run(
             path: "gone.png", directory: folder, cache: cache, recognizer: ColourWords())

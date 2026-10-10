@@ -133,16 +133,22 @@ enum Alerts {
                 "Excerpt couldn't copy \(file.lastPathComponent): \(error.localizedDescription)"))
     }
 
-    /// A file the editor can't open: not a PNG, unreadable, damaged, or edited by a newer Excerpt.
+    /// A file the editor or a thumbnail's For Claude can't open: not an image, unreadable, too
+    /// large, damaged, or edited by a newer Excerpt. The title names the file at fault.
     static func openFailed(_ opened: URL, _ error: Error) {
         var file = opened
         var error = error
         if let unreadable = error as? MasterUnreadable {
             (file, error) = (unreadable.file, unreadable.underlying)
         }
-        let reason =
-            error is PNGError
-            ? "It isn't a PNG Excerpt can read." : sentence(error.localizedDescription)
+        let reason: String
+        switch error {
+        case let input as ImageInputError:
+            file = URL(fileURLWithPath: input.path)
+            reason = input.reason(product: "Excerpt")
+        case is PNGError: reason = "It isn't a PNG Excerpt can read."
+        default: reason = sentence(error.localizedDescription)
+        }
         show("Couldn't open \(file.lastPathComponent)", reason)
     }
 }
