@@ -145,8 +145,17 @@ final class EditorModel {
         restyleSelection { $0.width = width }
     }
 
+    /// Whether colour and size apply to the selection: an annotation other than a blur, which
+    /// has neither.
+    var selectionTakesStyle: Bool {
+        guard case .annotation(let id) = selection,
+            let annotation = document.annotations.first(where: { $0.id == id })
+        else { return false }
+        return !annotation.shape.isBlur
+    }
+
     private func restyleSelection(_ change: (inout Annotation) -> Void) {
-        guard case .annotation(let id) = selection else { return }
+        guard case .annotation(let id) = selection, selectionTakesStyle else { return }
         apply { doc in
             if let i = doc.annotations.firstIndex(where: { $0.id == id }) {
                 change(&doc.annotations[i])

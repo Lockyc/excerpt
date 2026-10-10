@@ -80,12 +80,31 @@ import Testing
         let m = model()
         m.apply { $0.annotations.append(note(1, CGRect(x: 0, y: 0, width: 10, height: 10))) }
         m.selection = .annotation(1)
+        #expect(m.selectionTakesStyle)
         m.setColor(.blue)
         m.setWidth(.thick)
         #expect(m.document.annotations[0].color == .blue)
         #expect(m.document.annotations[0].width == .thick)
         m.undo()
         #expect(m.document.annotations[0].width == .medium)
+    }
+
+    @Test func aSelectedBlurIsNotRestyled() {
+        let m = model()
+        m.apply {
+            $0.annotations.append(
+                Annotation(id: 1, shape: .blur(rect: CGRect(x: 0, y: 0, width: 40, height: 40))))
+        }
+        m.selection = .annotation(1)
+        #expect(!m.selectionTakesStyle)
+        let before = m.document
+        m.setColor(.blue)
+        m.setWidth(.thick)
+        #expect(m.document == before)
+        m.undo()
+        #expect(m.document.annotations.isEmpty)  // the only step is the blur's own
+        #expect(!m.canUndo)
+        #expect(m.color == .blue && m.width == .thick)  // new annotations still get the style
     }
 
     @Test func newAnnotationsStartWithTheInitialStyle() {

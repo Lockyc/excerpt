@@ -114,7 +114,6 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         colors.trackingMode = .selectOne
         for (i, color) in Palette.allCases.enumerated() {
             colors.setImage(Self.swatch(color), forSegment: i)
-            colors.setToolTip(color.rawValue.capitalized, forSegment: i)
             colors.setWidth(26, forSegment: i)
         }
         colors.target = self
@@ -124,8 +123,6 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         widths.trackingMode = .selectOne
         for (i, width) in StrokeWidth.allCases.enumerated() {
             widths.setLabel(width.label, forSegment: i)
-            widths.setToolTip(
-                "\(Int(width.points))pt stroke · \(Int(width.textPoints))pt text", forSegment: i)
             widths.setWidth(28, forSegment: i)
         }
         widths.target = self
@@ -218,6 +215,10 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         button.setAccessibilityLabel(label)
     }
 
+    private static func widthTip(_ width: StrokeWidth) -> String {
+        "\(Int(width.points))pt stroke · \(Int(width.textPoints))pt text"
+    }
+
     private static func swatch(_ color: Palette) -> NSImage {
         NSImage(size: CGSize(width: 14, height: 14), flipped: false) { rect in
             NSColor(cgColor: color.rgba.cgColor)?.setFill()
@@ -269,6 +270,25 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         widths.selectedSegment = StrokeWidth.allCases.firstIndex(of: model.width) ?? 0
         hiddenNote.stringValue = model.hiddenNote(map: canvas.base.map)
         snapHint.stringValue = model.tool == .cut || model.tool == .crop ? Self.snapHint : ""
+
+        let blurSelected = model.selection != nil && !model.selectionTakesStyle
+        colors.isEnabled = !blurSelected
+        widths.isEnabled = !blurSelected
+        if blurSelected {
+            for i in 0..<colors.segmentCount {
+                colors.setToolTip("A blur has no colour", forSegment: i)
+            }
+            for i in 0..<widths.segmentCount {
+                widths.setToolTip("A blur has no size", forSegment: i)
+            }
+        } else {
+            for (i, color) in Palette.allCases.enumerated() {
+                colors.setToolTip(color.rawValue.capitalized, forSegment: i)
+            }
+            for (i, width) in StrokeWidth.allCases.enumerated() {
+                widths.setToolTip(Self.widthTip(width), forSegment: i)
+            }
+        }
 
         undoButton.isEnabled = model.canUndo
         undoButton.toolTip = model.canUndo ? "Undo (⌘Z)" : "Nothing to undo"
