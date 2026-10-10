@@ -138,7 +138,7 @@ import Testing
         #expect(m.document.crop != nil)
     }
 
-    @Test func movingAnArrowKeepsTheBaseButMovingABlurDoesNot() {
+    @Test func movingAnArrowKeepsTheBaseButMovingABlurDoesOnlyOnRelease() {
         let m = model()
         let arrow = Annotation(
             id: 1, shape: .arrow(tail: CGPoint(x: 0, y: 0), head: CGPoint(x: 50, y: 50)))
@@ -147,8 +147,25 @@ import Testing
         let base = m.baseDocument
         m.apply { $0.annotations[0].shape = arrow.shape.offset(dx: 5, dy: 5) }
         #expect(m.baseDocument == base)
-        m.apply { $0.annotations[1].shape = blur.shape.offset(dx: 5, dy: 5) }
-        #expect(m.baseDocument != base)
+
+        // Mid-drag the base still shows the blur where it started, and the moving rect is an
+        // outline; the release re-renders once.
+        let map = Renderer.renderBase(m.original, edits: m.baseDocument).map
+        func at(_ x: Double, _ y: Double) -> Pointer {
+            Pointer(rendered: CGPoint(x: x, y: y), map: map)
+        }
+        let before = m.baseDocument
+        m.tool = .select
+        m.mouseDown(at(30, 30), map: map)
+        m.mouseDragged(at(40, 45), map: map, snap: false)
+        #expect(m.baseDocument == before)
+        #expect(m.pending == .region(CGRect(x: 10, y: 15, width: 40, height: 40)))
+        m.mouseUp(at(40, 45), map: map, snap: false)
+        #expect(m.baseDocument != before)
+        #expect(m.pending == nil)
+        #expect(
+            m.document.annotations[1].shape
+                == .blur(rect: CGRect(x: 10, y: 15, width: 40, height: 40)))
     }
 
     @Test func reportsAnnotationsHiddenByCuts() {

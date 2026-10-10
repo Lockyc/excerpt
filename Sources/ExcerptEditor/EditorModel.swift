@@ -64,9 +64,16 @@ final class EditorModel {
 
     /// The part of `displayDocument` the canvas's cached base depends on: everything except the
     /// annotations drawn over it (blurs stay, they change the base's pixels). When this is
-    /// unchanged, a repaint redraws only annotations.
+    /// unchanged, a repaint redraws only annotations. A blur being moved stays where the drag
+    /// began, so the base renders once, on release.
     var baseDocument: EditDocument {
         var base = displayDocument
+        if case .move(let id, _, let before)? = drag,
+            let start = before.annotations.first(where: { $0.id == id }), start.shape.isBlur,
+            let i = base.annotations.firstIndex(where: { $0.id == id })
+        {
+            base.annotations[i] = start
+        }
         base.annotations = base.annotations.filter(\.shape.isBlur)
         return base
     }

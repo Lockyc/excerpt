@@ -110,6 +110,8 @@ extension EditorModel {
                 next.annotations[i].shape = next.annotations[i].shape.offset(
                     dx: Double(p.original.x - last.x), dy: Double(p.original.y - last.y))
                 preview(next)
+                // A moving blur isn't re-rendered until release; its rect is outlined instead.
+                if case .blur(let rect) = next.annotations[i].shape { setPending(.region(rect)) }
             }
             setDrag(.move(id: id, last: p.original, before: before))
         case .edge(let seam, let edge, let start):
