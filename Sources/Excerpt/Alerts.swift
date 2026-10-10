@@ -47,12 +47,15 @@ enum Alerts {
         )
     }
 
+    /// A capture ended because the displays were added, removed or moved under it.
+    static let displaysChanged = "The displays changed, so the capture ended."
+
     /// A scrolling capture ended part-way, because its stream stopped or the displays changed;
     /// says whether what was stitched is saved.
     static func scrollingStopped(_ error: Error, savedPartial: Bool) {
         let cause =
             error as? ScrollCaptureError == .displayChanged
-            ? "The displays changed, so the capture ended."
+            ? displaysChanged
             : sentence("Excerpt lost the picture of the region: \(error.localizedDescription)")
         show(
             "Scrolling capture stopped",

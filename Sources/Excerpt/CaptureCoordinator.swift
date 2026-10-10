@@ -38,11 +38,21 @@ final class CaptureCoordinator {
             let stills = try await capturer.stills()
             var action = requested
             // The selector shows over the stills already taken, so the screen it opened over is
-            // the one captured; Esc or a click outside discards them.
+            // the one captured; Esc or a click outside discards them, as does a display added,
+            // removed or moved while it was open.
             if action == .selector {
                 let preferences = preferences
                 guard let mode = selector.choose(binding: { preferences.binding(for: $0) })
                 else { return }
+                let current = NSScreen.screens.compactMap { screen in
+                    screen.displayID.map { ($0, screen.frame) }
+                }
+                if DisplayGeometry.arrangementChanged(
+                    from: stills.map { ($0.displayID, $0.frame) }, to: current)
+                {
+                    Toast.show(Alerts.displaysChanged)
+                    return
+                }
                 if mode == .scrolling && !scrollingMayStart() { return }
                 action = mode
             }

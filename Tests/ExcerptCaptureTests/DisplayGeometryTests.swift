@@ -29,4 +29,20 @@ import Testing
         #expect(appKit == CGRect(x: 1470, y: 510, width: 100, height: 50))
         #expect(DisplayGeometry.localPoints(forAppKitRect: appKit, displayFrame: display) == local)
     }
+
+    /// Stills taken before the selector are stale once a display is added, removed or moved;
+    /// the order the displays are listed in doesn't matter.
+    @Test func anArrangementChangesWhenADisplayIsAddedRemovedOrMoved() {
+        let main = (CGDirectDisplayID(1), CGRect(x: 0, y: 0, width: 1440, height: 900))
+        let side = (CGDirectDisplayID(2), CGRect(x: 1440, y: 0, width: 1920, height: 1080))
+        let moved = (CGDirectDisplayID(2), CGRect(x: -1920, y: 0, width: 1920, height: 1080))
+        func changed(_ a: [(CGDirectDisplayID, CGRect)], _ b: [(CGDirectDisplayID, CGRect)]) -> Bool
+        {
+            DisplayGeometry.arrangementChanged(from: a, to: b)
+        }
+        #expect(!changed([main, side], [side, main]))
+        #expect(changed([main, side], [main]))
+        #expect(changed([main], [main, side]))
+        #expect(changed([main, side], [main, moved]))
+    }
 }
