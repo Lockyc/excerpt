@@ -20,6 +20,41 @@ import Testing
         #expect(BlurRenderer.boundaries(length: 10, block: 24) == [0, 10])
     }
 
+    @Test func blocksGrowToHalfTheShorterSide() {
+        // Small rects keep the 12-point floor, at the scale.
+        #expect(
+            BlurRenderer.blockPixels(for: PixelRect(x: 0, y: 0, width: 300, height: 20), scale: 1)
+                == 12)
+        #expect(
+            BlurRenderer.blockPixels(for: PixelRect(x: 0, y: 0, width: 300, height: 40), scale: 2)
+                == 24)
+        // Larger ones take half the shorter side, rounded up, whichever side that is.
+        #expect(
+            BlurRenderer.blockPixels(for: PixelRect(x: 0, y: 0, width: 1000, height: 126), scale: 1)
+                == 63)
+        #expect(
+            BlurRenderer.blockPixels(for: PixelRect(x: 0, y: 0, width: 251, height: 900), scale: 2)
+                == 126)
+        #expect(
+            BlurRenderer.blockPixels(for: PixelRect(x: 0, y: 0, width: 50, height: 50), scale: 3)
+                == 36)
+    }
+
+    @Test func aTallLineIsAtMostTwoBlocksHigh() {
+        let image = Self.grey(width: 600, height: 300)
+        let out = PixelBuffer(
+            BlurRenderer.apply(
+                [CGRect(x: 0, y: 20, width: 600, height: 240)], to: image, scale: 2, salt: 7))
+        // 240 pixels high → 120-pixel blocks: rows 20..<140 and 140..<260, five blocks across.
+        for y in stride(from: 20, to: 140, by: 7) {
+            for x in stride(from: 0, to: 120, by: 7) {
+                #expect(out[x: x, y: y] == out[x: 0, y: 20])
+            }
+        }
+        #expect(out[x: 0, y: 140] != out[x: 0, y: 20])
+        #expect(out[x: 120, y: 20] != out[x: 0, y: 20])
+    }
+
     @Test func everyBlockIsOneColourAndOutsideIsUntouched() {
         let image = Self.grey(width: 120, height: 120)
         let out = PixelBuffer(

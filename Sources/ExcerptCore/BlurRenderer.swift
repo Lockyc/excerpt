@@ -1,10 +1,12 @@
 import CoreGraphics
 
-/// The destructive blur. Each rect is pixelated into blocks at least `blockPoints` on a side, and
-/// every block takes its average colour shifted by seeded noise, so the covered content cannot be
-/// read from the output; pixelation defeats reading, not candidate-matching of short known
-/// strings. Blocks are read from the original pixels and seeded from the document salt and the
-/// rect, so identical edits render identical pixels.
+/// The destructive blur. Each rect is pixelated into blocks sized by `blockPixels`: at least
+/// `blockPoints` on a side and at least half the rect's shorter side, so any text the rect
+/// covers spans at most about two blocks across its height, however large it is drawn. Every
+/// block takes its average colour shifted by seeded noise, so the covered content cannot be read
+/// from the output; pixelation defeats reading, not candidate-matching of short known strings.
+/// Blocks are read from the original pixels and seeded from the document salt and the rect, so
+/// identical edits render identical pixels.
 public enum BlurRenderer {
     public static let blockPoints = 12.0
     /// The most a block's channel moves from its average, either way.
@@ -33,8 +35,8 @@ public enum BlurRenderer {
         context.draw(image, in: bounds)
         // Copy, not source-over: a translucent block would otherwise show the detail beneath it.
         context.setBlendMode(.copy)
-        let block = max(minimumBlockPixels, Int((blockPoints * scale).rounded(.up)))
         for region in regions {
+            let block = blockPixels(for: region, scale: scale)
             guard let piece = image.cropping(to: region.cgRect) else {
                 preconditionFailure("clamped blur region lies inside the image")
             }
@@ -43,6 +45,14 @@ public enum BlurRenderer {
                 blocks.makeImage(), in: CanvasFlip(height: image.height).rect(region.cgRect))
         }
         return context.makeImage()!
+    }
+
+    /// The side of `region`'s blocks, in pixels: `blockPoints` at `scale` (never under
+    /// `minimumBlockPixels`), or half the region's shorter side when that is larger.
+    static func blockPixels(for region: PixelRect, scale: Double) -> Int {
+        let floor = max(minimumBlockPixels, Int((blockPoints * scale).rounded(.up)))
+        let half = (min(region.width, region.height) + 1) / 2
+        return max(floor, half)
     }
 
     /// Splits `length` into blocks no shorter than `block` (one block when `length` is shorter):

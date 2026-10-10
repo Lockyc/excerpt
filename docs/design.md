@@ -138,8 +138,9 @@ Tools: `V` select · `A` arrow · `R` rectangle · `T` text · `H` highlight · 
 `C` cut. Six colours, three sizes (one control sets stroke and text). The arrow drag
 **starts at the head**. Crop snaps using the same gap detection as cuts.
 
-**Blur is destructive**: pixelation in ≥12pt blocks over noise, so the covered content cannot be
-read from the primary; pixelation defeats reading, not candidate-matching of short known
+**Blur is destructive**: pixelation over noise, in blocks at least 12pt and at least half the
+blurred rect's shorter side, so text of any size spans at most about two blocks across its
+height and the covered content cannot be read from the primary; pixelation defeats reading, not candidate-matching of short known
 strings. The noise is seeded from a per-document salt stored in the master. The editor shows the
 true result.
 
