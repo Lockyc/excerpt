@@ -96,10 +96,18 @@ final class StreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
         _ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer,
         of type: SCStreamOutputType
     ) {
-        guard type == .screen, let frame = FrameConversion.completeFrame(sampleBuffer) else {
+        guard type == .screen, let status = FrameConversion.status(sampleBuffer) else { return }
+        switch FrameConversion.content(status) {
+        case .picture:
+            guard let frame = FrameConversion.pixels(sampleBuffer) else { return }
+            DispatchQueue.main.async { MainActor.assumeIsolated { self.onFrame(frame) } }
+        case .unchanged:
             return
+        case .stalled:
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated { self.onError(ScrollCaptureError.streamStalled) }
+            }
         }
-        DispatchQueue.main.async { MainActor.assumeIsolated { self.onFrame(frame) } }
     }
 
     func stream(_ stream: SCStream, didStopWithError error: Error) {
@@ -108,15 +116,42 @@ final class StreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
 }
 
 enum FrameConversion {
-    /// The pixels of a frame that carries a picture; nil for the stream's status-only samples.
-    static func completeFrame(_ sample: CMSampleBuffer) -> PixelBuffer? {
+    /// What a stream sample says about the region.
+    enum SampleContent: Equatable {
+        /// A new picture of the region.
+        case picture
+        /// The region hasn't changed since the last picture.
+        case unchanged
+        /// The stream stopped sending pictures (the display slept or locked): never "unchanged",
+        /// which would read as the page's end.
+        case stalled
+    }
+
+    /// The first frame after the stream starts is `.started`, every later new picture
+    /// `.complete`; idle and blank samples mean nothing changed; a suspended or stopped stream
+    /// has stalled.
+    static func content(_ status: SCFrameStatus) -> SampleContent {
+        switch status {
+        case .complete, .started: .picture
+        case .suspended, .stopped: .stalled
+        case .idle, .blank: .unchanged
+        @unknown default: .unchanged
+        }
+    }
+
+    /// The sample's frame status; nil for a sample without one.
+    static func status(_ sample: CMSampleBuffer) -> SCFrameStatus? {
         guard sample.isValid,
             let attachments = CMSampleBufferGetSampleAttachmentsArray(
                 sample, createIfNecessary: false) as? [[SCStreamFrameInfo: Any]],
-            let raw = attachments.first?[.status] as? Int,
-            let status = SCFrameStatus(rawValue: raw), carriesPicture(status),
-            let image = sample.imageBuffer
+            let raw = attachments.first?[.status] as? Int
         else { return nil }
+        return SCFrameStatus(rawValue: raw)
+    }
+
+    /// The pixels of a sample that carries a picture.
+    static func pixels(_ sample: CMSampleBuffer) -> PixelBuffer? {
+        guard let image = sample.imageBuffer else { return nil }
         CVPixelBufferLockBaseAddress(image, .readOnly)
         defer { CVPixelBufferUnlockBaseAddress(image, .readOnly) }
         guard let base = CVPixelBufferGetBaseAddress(image) else { return nil }
@@ -125,12 +160,6 @@ enum FrameConversion {
         return pixelBuffer(
             bgra: UnsafeRawBufferPointer(start: base, count: bytesPerRow * height),
             width: CVPixelBufferGetWidth(image), height: height, bytesPerRow: bytesPerRow)
-    }
-
-    /// The first frame after the stream starts is `.started`, every later new picture
-    /// `.complete`; idle, blank, suspended and stopped samples have none.
-    static func carriesPicture(_ status: SCFrameStatus) -> Bool {
-        status == .complete || status == .started
     }
 
     /// Premultiplied BGRA rows, possibly padded past `width`, in Core's RGBA layout: the same

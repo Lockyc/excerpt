@@ -5,12 +5,20 @@ import Testing
 @testable import ExcerptCapture
 
 @Suite struct FrameConversionTests {
-    @Test func theFirstAndEveryNewFrameCarryAPictureAndStatusSamplesDoNot() {
-        #expect(FrameConversion.carriesPicture(.started))
-        #expect(FrameConversion.carriesPicture(.complete))
-        for status in [SCFrameStatus.idle, .blank, .suspended, .stopped] {
-            #expect(!FrameConversion.carriesPicture(status))
-        }
+    @Test func theFirstAndEveryNewFrameCarryAPicture() {
+        #expect(FrameConversion.content(.started) == .picture)
+        #expect(FrameConversion.content(.complete) == .picture)
+    }
+
+    @Test func idleAndBlankSamplesMeanNothingChanged() {
+        #expect(FrameConversion.content(.idle) == .unchanged)
+        #expect(FrameConversion.content(.blank) == .unchanged)
+    }
+
+    @Test func aSuspendedOrStoppedStreamHasStalledNeverUnchanged() {
+        // The display slept or locked: read as "nothing changed", it would end the page.
+        #expect(FrameConversion.content(.suspended) == .stalled)
+        #expect(FrameConversion.content(.stopped) == .stalled)
     }
 
     @Test func bgraRowsWithPaddingBecomeRGBA() {

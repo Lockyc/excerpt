@@ -26,6 +26,7 @@ public enum ScrollCaptureError: Error, Equatable, LocalizedError {
     case displayGone
     case displayChanged
     case cannotExcludeExcerpt
+    case streamStalled
 
     public var errorDescription: String? {
         switch self {
@@ -33,6 +34,8 @@ public enum ScrollCaptureError: Error, Equatable, LocalizedError {
         case .displayGone: "The display the region was on is no longer connected."
         case .displayChanged: "The displays changed during the capture."
         case .cannotExcludeExcerpt: "Excerpt couldn't keep its own windows out of the capture."
+        case .streamStalled:
+            "The screen stopped sending pictures, as it does when the display sleeps or locks."
         }
     }
 }
