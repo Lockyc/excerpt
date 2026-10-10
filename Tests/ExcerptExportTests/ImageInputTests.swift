@@ -53,6 +53,23 @@ import UniformTypeIdentifiers
         try handle.close()
     }
 
+    /// One PNG chunk: length, type, data, CRC.
+    static func chunk(_ type: String, _ payload: [UInt8]) -> Data {
+        func bigEndian(_ value: UInt32) -> [UInt8] {
+            withUnsafeBytes(of: value.bigEndian, Array.init)
+        }
+        let body = Array(type.utf8) + payload
+        return Data(bigEndian(UInt32(payload.count)) + body + bigEndian(PNGChunks.crc32(body)))
+    }
+
+    /// `png` with `chunks` inserted before its `IEND`, the last 12 bytes.
+    static func inserting(_ chunks: [Data], into png: Data) -> Data {
+        var out = png.prefix(png.count - 12)
+        for chunk in chunks { out.append(chunk) }
+        out.append(png.suffix(12))
+        return out
+    }
+
     @Test func aForeignRetinaScreenshotReadsAtTwoTimes() throws {
         let url = try Self.folder().appendingPathComponent("Screenshot 2026-10-10.png")
         try Self.write(Fixtures.sheet(width: 80, height: 60), as: .png, dpi: 144, to: url)
@@ -202,12 +219,15 @@ import UniformTypeIdentifiers
         try MasterFile.encode(original: original, edits: edits).write(to: master)
         // 2000 kept columns and 2000 seams of 54 pixels.
         let width = 2000 + 2000 * 54
-        #expect(throws: ImageInputError.tooManyPixels(master.path, width: width, height: 2)) {
+        #expect(throws: ImageInputError.rendersTooLarge(master.path, width: width, height: 2)) {
             try ImageInput.load(master)
         }
-        #expect(throws: ImageInputError.tooManyPixels(master.path, width: width, height: 2)) {
+        #expect(throws: ImageInputError.rendersTooLarge(master.path, width: width, height: 2)) {
             try ImageInput.load(master, maximumPixels: width * 2 - 1, maximumSide: width + 1)
         }
+        let message = ImageInputError.rendersTooLarge(master.path, width: width, height: 2)
+            .errorDescription!
+        #expect(message.contains("renders at \(width)×2 pixels"))
     }
 
     /// Review focus: the master beside a primary is checked like any input before it is read;
@@ -239,6 +259,42 @@ import UniformTypeIdentifiers
         let message = ImageInputError.damagedEdits(master.path, reason).errorDescription!
         #expect(message.contains("Excerpt x original.png"))
         #expect(message.contains(reason))
+    }
+
+    /// Review focus (privacy): an edits chunk excerpt can't parse is damaged edits, never a
+    /// reason to read the master flat and show its unedited original.
+    @Test func anUnreadableEditsChunkIsDamagedEdits() throws {
+        let folder = try Self.folder()
+        let png = try PNGCodec.encode(Fixtures.sheet(width: 20, height: 20), scale: 1)
+        let keyword = Array(PNGChunks.editsKeyword.utf8)
+        let payloads: [String: [UInt8]] = [
+            "compressed": keyword + [0, 1, 0, 0, 0] + Array("x".utf8),
+            "short": keyword + [0],
+            "unterminated": keyword,
+        ]
+        for (name, payload) in payloads {
+            let master = folder.appendingPathComponent("Excerpt \(name) original.png")
+            try Self.inserting([Self.chunk("iTXt", payload)], into: png).write(to: master)
+            #expect(
+                throws: ImageInputError.damagedEdits(
+                    master.path, EditDocumentError.damaged.errorDescription!), "\(name)"
+            ) { try ImageInput.load(master) }
+        }
+    }
+
+    /// Review focus: chunks are scanned in place, so a PNG of hundreds of thousands of them reads
+    /// in bounded time and memory.
+    @Test(.timeLimit(.minutes(1))) func aPNGOfManyChunksLoadsQuickly() throws {
+        let master = try Self.folder().appendingPathComponent("Excerpt many original.png")
+        let edits = EditDocument(scale: 1, cuts: [Cut(axis: .horizontal, lower: 5, upper: 10)])
+        let png = try MasterFile.encode(
+            original: Fixtures.sheet(width: 20, height: 20), edits: edits)
+        let empty = Self.chunk("teXt", [])
+        try Self.inserting(Array(repeating: empty, count: 300_000), into: png).write(to: master)
+        let start = ContinuousClock.now
+        let input = try ImageInput.load(master)
+        #expect(input.edits == edits)
+        #expect(ContinuousClock.now - start < .seconds(10))
     }
 
     /// Review focus: odd encodings and containers read or fail with a typed error, never a trap.
@@ -290,8 +346,6 @@ import UniformTypeIdentifiers
         document.draw(sheet, in: box)
         document.endPDFPage()
         document.closePDF()
-        do {
-            _ = try ImageInput.load(pdf)
-        } catch is ImageInputError {}
+        #expect(throws: ImageInputError.notAnImage(pdf.path)) { try ImageInput.load(pdf) }
     }
 }

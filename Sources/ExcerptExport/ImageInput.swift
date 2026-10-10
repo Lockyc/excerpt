@@ -12,6 +12,8 @@ public enum ImageInputError: Error, Equatable, LocalizedError {
     case notAnImage(String)
     case fileTooLarge(String, bytes: Int)
     case tooManyPixels(String, width: Int, height: Int)
+    /// A master whose cuts would render it past the pixel limits.
+    case rendersTooLarge(String, width: Int, height: Int)
     case damagedEdits(String, String)
 
     public var errorDescription: String? {
@@ -23,10 +25,15 @@ public enum ImageInputError: Error, Equatable, LocalizedError {
         case .fileTooLarge(let path, let bytes):
             "\(path) is \(bytes / 1_048_576) MB; excerpt reads images up to \(ImageInput.maximumBytes / 1_048_576) MB"
         case .tooManyPixels(let path, let width, let height):
-            "\(path) is \(width)×\(height) pixels; excerpt reads images up to \(ImageInput.maximumPixels / 1_000_000) megapixels and \(ImageInput.maximumSide) pixels a side"
+            "\(path) is \(width)×\(height) pixels; \(Self.pixelLimits)"
+        case .rendersTooLarge(let path, let width, let height):
+            "\(path) renders at \(width)×\(height) pixels with its edits; \(Self.pixelLimits)"
         case .damagedEdits(let path, let reason): "\(path): \(reason)"
         }
     }
+
+    private static let pixelLimits =
+        "excerpt reads images up to \(ImageInput.maximumPixels / 1_000_000) megapixels and \(ImageInput.maximumSide) pixels a side"
 }
 
 /// An image file as `excerpt read` takes it: any format ImageIO decodes, upright. A master
@@ -52,58 +59,97 @@ public struct ImageInput {
         _ url: URL, maximumPixels: Int = maximumPixels, maximumSide: Int = maximumSide
     ) throws -> ImageInput {
         let limits = Limits(pixels: maximumPixels, side: maximumSide)
-        let path = url.path
-        let file = try ImageFile(url, limits: limits)
-        let fileName = url.lastPathComponent
-
-        if let json = file.editsText {
-            let edits: EditDocument
-            do {
-                edits = try EditDocument.decode(Data(json.utf8))
-            } catch let error as EditDocumentError {
-                throw ImageInputError.damagedEdits(path, error.localizedDescription)
+        let name = url.deletingPathExtension().lastPathComponent
+        // The primary's bytes and decoded image end with this closure, before any master is
+        // rendered against them.
+        let step: Step = try {
+            let path = url.path
+            let file = try ImageFile(url, limits: limits)
+            let fileName = url.lastPathComponent
+            switch file.edits {
+            case .unreadable:
+                throw ImageInputError.damagedEdits(
+                    path, EditDocumentError.damaged.localizedDescription)
+            case .text(let json):
+                let edits: EditDocument
+                do {
+                    edits = try EditDocument.decode(Data(json.utf8))
+                } catch let error as EditDocumentError {
+                    throw ImageInputError.damagedEdits(path, error.localizedDescription)
+                }
+                try limits.checkRender(path, width: file.width, height: file.height, edits: edits)
+                let primaryName = LibraryNaming.primaryName(forOriginal: fileName) ?? fileName
+                return .done(
+                    ImageInput(
+                        original: try file.image(path, upright: false), edits: edits,
+                        name: URL(fileURLWithPath: primaryName).deletingPathExtension()
+                            .lastPathComponent))
+            case .none: break
             }
-            try limits.checkRender(path, width: file.width, height: file.height, edits: edits)
-            let primaryName = LibraryNaming.primaryName(forOriginal: fileName) ?? fileName
+            let scale = PNGCodec.scale(dpi: file.dpi)
+            if file.isPNG, fileName.hasSuffix(".png"),
+                LibraryNaming.primaryName(forOriginal: fileName) == nil,
+                let master = MasterCandidate(
+                    url.deletingLastPathComponent()
+                        .appendingPathComponent(LibraryNaming.originalName(forPrimary: fileName)),
+                    renderingTo: (file.width, file.height), limits: limits)
+            {
+                return .verify(
+                    PixelBuffer(try file.image(path, upright: true)), master, scale: scale)
+            }
+            return .done(
+                ImageInput(
+                    original: try file.image(path, upright: true),
+                    edits: EditDocument(scale: scale), name: name))
+        }()
+        switch step {
+        case .done(let input):
+            return input
+        case .verify(let primary, let master, let scale):
+            if let original = master.original(ifItRenders: primary) {
+                return ImageInput(original: original, edits: master.edits, name: name)
+            }
             return ImageInput(
-                original: try file.image(path, upright: false), edits: edits,
-                name: URL(fileURLWithPath: primaryName).deletingPathExtension().lastPathComponent)
+                original: primary.makeImage(), edits: EditDocument(scale: scale), name: name)
         }
-
-        let flat = try file.image(path, upright: true)
-        if file.isPNG, fileName.hasSuffix(".png"),
-            LibraryNaming.primaryName(forOriginal: fileName) == nil,
-            let master = verifiedMaster(
-                url.deletingLastPathComponent()
-                    .appendingPathComponent(LibraryNaming.originalName(forPrimary: fileName)),
-                rendering: flat, limits: limits)
-        {
-            return ImageInput(
-                original: master.original, edits: master.edits,
-                name: url.deletingPathExtension().lastPathComponent)
-        }
-        return ImageInput(
-            original: flat, edits: EditDocument(scale: PNGCodec.scale(dpi: file.dpi)),
-            name: url.deletingPathExtension().lastPathComponent)
     }
 
-    /// The master at `url` when it passes every check the input did and its render is `primary`
-    /// pixel for pixel, both as 8-bit sRGB RGBA; nil otherwise.
-    private static func verifiedMaster(
-        _ url: URL, rendering primary: CGImage, limits: Limits
-    ) -> (original: CGImage, edits: EditDocument)? {
-        guard let master = try? ImageFile(url, limits: limits), let json = master.editsText,
+    private enum Step {
+        case done(ImageInput)
+        /// A primary, as 8-bit sRGB RGBA, with a master that may have rendered it.
+        case verify(PixelBuffer, MasterCandidate, scale: Double)
+    }
+}
+
+/// The master beside a primary, checked like any input, whose edits render at the primary's
+/// size: the last check, comparing pixels, is `original(ifItRenders:)`.
+private struct MasterCandidate {
+    let file: ImageFile
+    let path: String
+    let edits: EditDocument
+
+    init?(_ url: URL, renderingTo size: (width: Int, height: Int), limits: Limits) {
+        guard let file = try? ImageFile(url, limits: limits), case .text(let json) = file.edits,
             let edits = try? EditDocument.decode(Data(json.utf8))
         else { return nil }
-        let map = Renderer.map(width: master.width, height: master.height, edits: edits)
-        guard map.renderedWidth == primary.width, map.renderedHeight == primary.height,
-            (try? limits.checkRender(
-                url.path, width: master.width, height: master.height, edits: edits)) != nil,
-            let original = try? master.image(url.path, upright: false)
+        let map = Renderer.map(width: file.width, height: file.height, edits: edits)
+        guard map.renderedWidth == size.width, map.renderedHeight == size.height,
+            (try? limits.check(url.path, width: size.width, height: size.height)) != nil
         else { return nil }
-        let rendered = Renderer.render(original, edits: edits).image
-        guard PixelBuffer(rendered) == PixelBuffer(primary) else { return nil }
-        return (original, edits)
+        self.file = file
+        self.path = url.path
+        self.edits = edits
+    }
+
+    /// The master's original when its render is `primary` pixel for pixel. The primary's file
+    /// and decode are already released; what remains at the peak is the primary's pixels, the
+    /// master's decoded original, the renderer's working images and the render's pixels:
+    /// measured at 715 MB for a 25-megapixel capture, about 7 × 4 bytes per rendered pixel, so
+    /// near 2.8 GB at `maximumPixels`.
+    func original(ifItRenders primary: PixelBuffer) -> CGImage? {
+        guard let original = try? file.image(path, upright: false) else { return nil }
+        let rendered = PixelBuffer(Renderer.render(original, edits: edits).image)
+        return rendered == primary ? original : nil
     }
 }
 
@@ -112,28 +158,44 @@ private struct Limits {
     let side: Int
 
     func check(_ path: String, width: Int, height: Int) throws {
-        guard width > 0, height > 0, width <= side, height <= side,
-            width.multipliedReportingOverflow(by: height).partialValue <= pixels
-        else { throw ImageInputError.tooManyPixels(path, width: width, height: height) }
+        guard width > 0, height > 0, width <= side, height <= side, fits(width, height) else {
+            throw ImageInputError.tooManyPixels(path, width: width, height: height)
+        }
     }
 
     /// Every cut adds a seam gap, so a render can be far larger than its original: its size is
     /// checked from the map before anything is drawn.
     func checkRender(_ path: String, width: Int, height: Int, edits: EditDocument) throws {
         let map = Renderer.map(width: width, height: height, edits: edits)
-        try check(path, width: map.renderedWidth, height: map.renderedHeight)
+        let (renderedWidth, renderedHeight) = (map.renderedWidth, map.renderedHeight)
+        guard renderedWidth <= side, renderedHeight <= side, fits(renderedWidth, renderedHeight)
+        else {
+            throw ImageInputError.rendersTooLarge(
+                path, width: renderedWidth, height: renderedHeight)
+        }
+    }
+
+    private func fits(_ width: Int, _ height: Int) -> Bool {
+        let (product, overflow) = width.multipliedReportingOverflow(by: height)
+        return !overflow && product <= pixels
     }
 }
 
 /// A file read and its image header checked, with no pixels decoded yet.
 private struct ImageFile {
+    /// A PNG's excerpt edits chunk: absent, its text, or present but unreadable.
+    enum Edits {
+        case none
+        case text(String)
+        case unreadable
+    }
+
     let source: CGImageSource
     let properties: [CFString: Any]
     let width: Int
     let height: Int
     let isPNG: Bool
-    /// The excerpt edits chunk, when this is a PNG carrying one (a master).
-    let editsText: String?
+    let edits: Edits
 
     var dpi: Double? { properties[kCGImagePropertyDPIWidth] as? Double }
 
@@ -151,14 +213,18 @@ private struct ImageFile {
         isPNG = type == UTType.png.identifier
         if isPNG {
             // ImageIO decodes a PNG cut short without complaint, filling the rest with grey.
-            guard let types = try? PNGChunks.chunkTypes(in: data), types.last == "IEND" else {
-                throw ImageInputError.notAnImage(path)
+            guard let scan = try? PNGChunks.scan(data, keyword: PNGChunks.editsKeyword),
+                scan.isComplete
+            else { throw ImageInputError.notAnImage(path) }
+            if !scan.carriesText {
+                edits = .none
+            } else if let json = scan.text {
+                edits = .text(json)
+            } else {
+                edits = .unreadable
             }
-            editsText =
-                types.contains("iTXt")
-                ? (try? PNGChunks.text(keyword: PNGChunks.editsKeyword, in: data)) ?? nil : nil
         } else {
-            editsText = nil
+            edits = .none
         }
         self.source = source
         self.properties = properties

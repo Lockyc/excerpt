@@ -50,7 +50,11 @@ import UniformTypeIdentifiers
         let rewritten = try PNGChunks.settingText(
             newJSON, keyword: PNGChunks.editsKeyword, in: master)
         func idat(_ png: Data) throws -> [[UInt8]] {
-            try PNGChunks.chunks(in: png).filter { $0.type == "IDAT" }.map(\.data)
+            var chunks: [[UInt8]] = []
+            try PNGChunks.forEachChunk(in: png) { type, range, bytes in
+                if type == PNGChunks.ChunkType("IDAT") { chunks.append(Array(bytes[range])) }
+            }
+            return chunks
         }
         #expect(try idat(rewritten) == idat(master))
         #expect(try PNGChunks.chunkTypes(in: rewritten).filter { $0 == "iTXt" }.count == 1)
