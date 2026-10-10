@@ -1,5 +1,5 @@
-import AppKit
 import ExcerptCore
+import Foundation
 
 /// User settings, backed by UserDefaults. Defaults match the workflow excerpt replaces.
 final class Preferences {
@@ -34,15 +34,18 @@ final class Preferences {
         set { defaults.set(newValue, forKey: "windowBackdrop") }
     }
     var windowPaddingPoints: Double {
-        get { defaults.double(forKey: "windowPaddingPoints") }
-        set { defaults.set(newValue, forKey: "windowPaddingPoints") }
+        get { max(0, defaults.double(forKey: "windowPaddingPoints")) }
+        set { defaults.set(max(0, newValue), forKey: "windowPaddingPoints") }
     }
-    var thumbnailSeconds: Double { defaults.double(forKey: "thumbnailSeconds") }
+    var thumbnailSeconds: Double { max(1, defaults.double(forKey: "thumbnailSeconds")) }
 
-    /// Stored as `RRGGBB` hex.
+    /// Stored as `RRGGBB` hex; anything but exactly six hex digits (after an optional `#`) reads as the default.
     var backdropColor: RGBA {
         get {
-            let hex = UInt32(defaults.string(forKey: "backdropColor")!, radix: 16) ?? 0xE5E5EA
+            var text = defaults.string(forKey: "backdropColor") ?? ""
+            if text.hasPrefix("#") { text.removeFirst() }
+            let valid = text.count == 6 && text.allSatisfy(\.isHexDigit)
+            let hex = valid ? UInt32(text, radix: 16) ?? 0xE5E5EA : 0xE5E5EA
             return RGBA(
                 r: UInt8(hex >> 16 & 0xFF), g: UInt8(hex >> 8 & 0xFF), b: UInt8(hex & 0xFF), a: 255)
         }

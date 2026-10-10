@@ -43,5 +43,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSWorkspace.shared.open(folder)
     }
 
-    func openSettings() {}  // Task 15
+    private lazy var settings = SettingsWindowController(
+        preferences: preferences, hotKeyStatus: hotKeyStatus)
+
+    func openSettings() { settings.show() }
 }
