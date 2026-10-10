@@ -68,6 +68,17 @@ final class HotKeyCenter {
         }
     }
 
+    /// Removes hotkey `id` and everything known about it; nothing when it has none. Carbon fails
+    /// an unregister only for a reference it never issued, which this centre never holds.
+    func unregister(id: UInt32) {
+        if let reference = references.removeValue(forKey: id) {
+            _ = UnregisterEventHotKey(reference)
+        }
+        actions[id] = nil
+        bindings[id] = nil
+        failures[id] = nil
+    }
+
     /// The hotkey's state now: its registration outcome, or `.system` while a macOS shortcut
     /// holds the same keys.
     func status(id: UInt32) -> Registration {
@@ -78,7 +89,8 @@ final class HotKeyCenter {
             ? .system : .registered
     }
 
-    private static func symbolicHotKeys() -> [SymbolicHotKey] {
+    /// macOS's symbolic hotkey table now.
+    static func symbolicHotKeys() -> [SymbolicHotKey] {
         var table: Unmanaged<CFArray>?
         guard CopySymbolicHotKeys(&table) == noErr, let entries = table?.takeRetainedValue() else {
             return []

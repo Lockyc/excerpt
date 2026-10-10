@@ -1,7 +1,24 @@
 import AppKit
+import ExcerptCapture
 import ExcerptCore
 import ExcerptEditor
 import ExcerptExport
+
+/// An action's hotkey and how its registration stands.
+struct HotKeyState: Equatable {
+    let binding: HotKeyBinding
+    let registration: HotKeyCenter.Registration
+
+    /// Why the hotkey may not fire, as the menu and Settings show it; nil when it will.
+    var note: String? {
+        switch registration {
+        case .registered: nil
+        case .inUse: "\(binding.display) is in use by another app"
+        case .system: HotKeyVerdict.heldBySystem.message(for: binding)
+        case .failed(let status): "\(binding.display) could not be registered (\(status))"
+        }
+    }
+}
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -10,26 +27,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusMenu: StatusMenu?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        for action in HotKeyAction.allCases {
-            guard let binding = action.defaultBinding else { continue }
-            hotKeys.register(binding, id: action.id) { [weak self] in self?.perform(action) }
-        }
+        applyHotKeys()
         statusMenu = StatusMenu(
             perform: { [weak self] in self?.perform($0) },
             openLibrary: { [weak self] in self?.openLibrary() },
             openSettings: { [weak self] in self?.openSettings() },
-            hotKeyStatus: { [weak self] in self?.hotKeyStatus() ?? [:] })
+            hotKeyStates: { [weak self] in self?.hotKeyStates() ?? [:] })
         claude.onBusyChange = { [weak self] name in self?.showPreparingForClaude(name) }
         claude.startPruning()
     }
 
-    /// The one source of hotkey state; read when the menu opens and when Settings is shown.
-    func hotKeyStatus() -> [HotKeyAction: HotKeyCenter.Registration] {
-        var status: [HotKeyAction: HotKeyCenter.Registration] = [:]
-        for action in HotKeyAction.allCases where action.defaultBinding != nil {
-            status[action] = hotKeys.status(id: action.id)
+    /// Registers every action's current binding in place of whatever was registered.
+    func applyHotKeys() {
+        for action in HotKeyAction.allCases {
+            hotKeys.unregister(id: action.id)
+            guard let binding = preferences.binding(for: action) else { continue }
+            hotKeys.register(binding, id: action.id) { [weak self] in self?.perform(action) }
         }
-        return status
+    }
+
+    /// Unregisters every hotkey, so a press reaches Settings' recorder instead of starting a
+    /// capture; `applyHotKeys` brings them back.
+    func suspendHotKeys() {
+        for action in HotKeyAction.allCases { hotKeys.unregister(id: action.id) }
+    }
+
+    /// The one source of hotkey state, for every action that has a hotkey; read when the menu
+    /// opens and whenever Settings shows the hotkeys.
+    func hotKeyStates() -> [HotKeyAction: HotKeyState] {
+        var states: [HotKeyAction: HotKeyState] = [:]
+        for action in HotKeyAction.allCases {
+            guard let binding = preferences.binding(for: action) else { continue }
+            states[action] = HotKeyState(
+                binding: binding, registration: hotKeys.status(id: action.id))
+        }
+        return states
     }
 
     private lazy var thumbnails = ThumbnailStack(
@@ -137,7 +169,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private lazy var settings = SettingsWindowController(
-        preferences: preferences, hotKeyStatus: { [weak self] in self?.hotKeyStatus() ?? [:] })
+        preferences: preferences, hotKeyStates: { [weak self] in self?.hotKeyStates() ?? [:] })
 
     func openSettings() { settings.show() }
 }

@@ -99,6 +99,13 @@ public struct HotKeyBinding: Hashable, Sendable {
         }
     }
 
+    /// Shows this binding as `item`'s key equivalent. Shown, not bound: the hotkey itself is
+    /// global, so the menu never handles the press.
+    @MainActor public func show(on item: NSMenuItem) {
+        item.keyEquivalent = menuKey
+        item.keyEquivalentModifierMask = modifierFlags
+    }
+
     /// e.g. `⌘⇧4`
     public var display: String {
         Self.modifierTable.filter { modifiers & $0.carbon != 0 }.map(\.symbol).joined()

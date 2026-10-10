@@ -4,21 +4,21 @@ import SwiftUI
 
 @MainActor
 final class SettingsWindowController {
-    private let hotKeyStatus: () -> [HotKeyAction: HotKeyCenter.Registration]
+    private let hotKeyStates: () -> [HotKeyAction: HotKeyState]
     private let model: SettingsModel
     private var window: NSWindow?
     private var hosting: NSHostingController<SettingsView>?
 
     init(
         preferences: Preferences,
-        hotKeyStatus: @escaping () -> [HotKeyAction: HotKeyCenter.Registration]
+        hotKeyStates: @escaping () -> [HotKeyAction: HotKeyState]
     ) {
-        self.hotKeyStatus = hotKeyStatus
+        self.hotKeyStates = hotKeyStates
         self.model = SettingsModel(preferences: preferences)
     }
 
     func show() {
-        let view = SettingsView(model: model, hotKeyStatus: hotKeyStatus())
+        let view = SettingsView(model: model, hotKeys: hotKeyStates())
         if let hosting {
             hosting.rootView = view
         } else {
@@ -83,7 +83,7 @@ final class SettingsModel: ObservableObject {
 
 struct SettingsView: View {
     @ObservedObject var model: SettingsModel
-    let hotKeyStatus: [HotKeyAction: HotKeyCenter.Registration]
+    let hotKeys: [HotKeyAction: HotKeyState]
 
     var body: some View {
         Form {
@@ -115,7 +115,11 @@ struct SettingsView: View {
             Section("Hotkeys") {
                 ForEach(HotKeyAction.allCases, id: \.self) { action in
                     LabeledContent(action.title) {
-                        Text(hotKeyText(action)).foregroundStyle(hotKeyColor(action))
+                        Text(hotKeys[action]?.binding.display ?? "None")
+                            .foregroundStyle(hotKeyColor(action))
+                    }
+                    if let note = hotKeys[action]?.note {
+                        Text(note).font(.caption).foregroundStyle(.orange)
                     }
                 }
             }
@@ -124,18 +128,8 @@ struct SettingsView: View {
         .frame(width: 460)
     }
 
-    private func hotKeyText(_ action: HotKeyAction) -> String {
-        guard let binding = action.defaultBinding else { return "None" }
-        switch hotKeyStatus[action] {
-        case .registered, nil: return binding.display
-        case .inUse: return "\(binding.display) — in use by another app"
-        case .system: return "\(binding.display) — held by a macOS shortcut"
-        case .failed(let status): return "\(binding.display) — failed (\(status))"
-        }
-    }
-
     private func hotKeyColor(_ action: HotKeyAction) -> Color {
-        if case .registered = hotKeyStatus[action] { return .primary }
-        return action.defaultBinding == nil ? .secondary : .orange
+        guard let state = hotKeys[action] else { return .secondary }
+        return state.note == nil ? .primary : .orange
     }
 }

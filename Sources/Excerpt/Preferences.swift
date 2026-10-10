@@ -1,3 +1,4 @@
+import ExcerptCapture
 import ExcerptCore
 import Foundation
 
@@ -56,6 +57,33 @@ final class Preferences {
                 String(format: "%02X%02X%02X", newValue.r, newValue.g, newValue.b),
                 forKey: "backdropColor")
         }
+    }
+
+    /// The user's hotkeys by action id: `keyCode:modifiers`, or empty for none. An action with no
+    /// entry has its default; a value that isn't text is skipped, keeping the others.
+    private var hotKeyOverrides: [String: String] {
+        defaults.dictionary(forKey: "hotKeys")?.compactMapValues { $0 as? String } ?? [:]
+    }
+
+    /// The hotkey for `action`: the user's, else the default; nil when the user cleared it. A
+    /// stored value that doesn't parse reads as the default.
+    func binding(for action: HotKeyAction) -> HotKeyBinding? {
+        guard let stored = hotKeyOverrides[String(action.id)] else { return action.defaultBinding }
+        return stored.isEmpty ? nil : HotKeyBinding(stored: stored) ?? action.defaultBinding
+    }
+
+    /// Sets `action`'s hotkey; nil clears it.
+    func setBinding(_ binding: HotKeyBinding?, for action: HotKeyAction) {
+        var overrides = hotKeyOverrides
+        overrides[String(action.id)] = binding?.stored ?? ""
+        defaults.set(overrides, forKey: "hotKeys")
+    }
+
+    /// Returns `action` to its default hotkey.
+    func resetBinding(for action: HotKeyAction) {
+        var overrides = hotKeyOverrides
+        overrides[String(action.id)] = nil
+        defaults.set(overrides, forKey: "hotKeys")
     }
 
     var store: LibraryStore {

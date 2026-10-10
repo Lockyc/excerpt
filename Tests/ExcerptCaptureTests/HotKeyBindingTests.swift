@@ -79,3 +79,13 @@ import Testing
         #expect(HotKeyBinding(keyCode: UInt32(kVK_F5), modifiers: 0).hasRequiredModifier)
     }
 }
+
+@Suite struct HotKeyBindingMenuTests {
+    @MainActor @Test func showingABindingSetsTheMenuItemsKeyEquivalent() {
+        let item = NSMenuItem(title: "Capture Area", action: nil, keyEquivalent: "")
+        HotKeyBinding(keyCode: UInt32(kVK_ANSI_4), modifiers: HotKeyBinding.commandShift)
+            .show(on: item)
+        #expect(item.keyEquivalent == "4")
+        #expect(item.keyEquivalentModifierMask == [.command, .shift])
+    }
+}
