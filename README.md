@@ -17,10 +17,10 @@ read.
 
 | | |
 |---|---|
-| Capture | Area (frozen screen), window, fullscreen → library + clipboard + thumbnail; hand checks pending |
+| Capture | Area (frozen screen), window, fullscreen, scrolling (auto-scroll or scroll it yourself, stitched with sticky bars kept once) → library + clipboard + thumbnail; hand checks pending |
 | Editor | Arrow, rectangle, text, highlight, blur, crop and cut over the capture; ⌘S writes the primary and its master; hand checks pending |
-| Core | Cuts render as torn seams; edits round-trip through the master PNG |
-| Next | Scrolling capture — see [docs/roadmap.md](docs/roadmap.md) |
+| Core | Cuts render as torn seams; edits round-trip through the master PNG; frames stitch on row signatures |
+| Next | Text capture and the For Claude export — see [docs/roadmap.md](docs/roadmap.md) |
 
 macOS's own Screenshots shortcuts (⌘⇧3 / ⌘⇧4) must be turned off for Excerpt's defaults to fire.
 

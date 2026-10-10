@@ -98,17 +98,27 @@ menu and Settings, never failed silently.
 2. **Auto-scroll** posts scroll-wheel events at the region's centre, ~60% of its height per
    step, then waits for the frame to settle (two identical `SCStream` frames, or ~300ms).
 3. **Stitching** (Core): frames reduce to row signatures; the offset from the previous frame is
-   the one maximising matching rows in the overlap. **Sticky regions** — top/bottom rows
-   unchanged while the rows between them move — are kept once: the header from the first frame,
-   the footer from the last.
+   the one with the highest share of matching evidence rows (unique, non-uniform) in the overlap,
+   clearly ahead of the others. **Sticky regions** — top/bottom rows unchanged while the rows
+   between them move — are kept once: the header from the first frame, the footer from the last.
 4. Stops on two consecutive no-movement steps, on `Return`, or at a maximum height (default
-   30,000px).
-5. **Manual fallback** when a step produces no movement before the end, or Accessibility is not
-   granted: the HUD reads "Scroll the page yourself · Return when done" and frames are sampled
-   and stitched as the user scrolls.
+   30,000 image pixels; the stitch is truncated contiguously there).
+5. **Manual fallback** when steps produce no movement before the page has moved, Accessibility is
+   not granted, the pointer moved, the wheel event failed, or the page scrolled a different
+   distance than asked: the HUD reads "Scroll the page yourself · Return when done" and frames
+   are sampled and stitched as the user scrolls, skipping any that don't match.
 6. A live preview of the stitch sits beside the region.
-7. An **uncertain stitch** (no offset clears the confidence threshold — video, animation) stops
-   and keeps what is stitched; it never fabricates a seam. The HUD says where it stopped.
+7. An **uncertain stitch** (no offset clears the confidence threshold — video, animation) stops,
+   keeping the stitch for `Return`; it never fabricates a seam. The HUD says where it stopped.
+   In manual mode a mismatched frame is skipped and the HUD asks to scroll back. In auto mode an
+   uncertain stitch, or the cap, halts: `Return` saves what is stitched, `Esc` discards. A
+   stream failure or display change saves what is stitched and says so.
+
+Known limits: a run of content identical except a narrow patch, flung past in manual mode, can
+stitch at a wrong offset (auto mode checks each step's travel); a final short step that aliases
+can be believed when the page ends next; any animation wider than a quarter of the scrolled
+span, or several on the same rows, halts the capture; a sticky header with a changing top edge
+(progress bar, clock) reads as content and halts.
 
 Permissions are requested on first use, per feature: Screen Recording for any capture,
 Accessibility for auto-scroll only.
