@@ -1,4 +1,5 @@
 import AppKit
+import ExcerptCore
 
 @MainActor
 enum Alerts {
@@ -29,7 +30,23 @@ enum Alerts {
     static func clipboardFailed(_ file: URL, _ error: Error) {
         show(
             "Couldn't copy to the clipboard",
-            "The capture is saved as \(file.lastPathComponent), but Excerpt couldn't read it back to copy: \(error.localizedDescription)."
+            "The capture is saved as \(file.lastPathComponent), but Excerpt couldn't copy it: \(error.localizedDescription)."
         )
+    }
+
+    /// A file the editor can't open: not a PNG, unreadable, damaged, or edited by a newer Excerpt.
+    static func openFailed(_ file: URL, _ error: Error) {
+        let reason: String
+        switch error {
+        case EditDocumentError.unsupportedVersion:
+            reason = "It was edited by a newer version of Excerpt."
+        case EditDocumentError.invalidScale, EditDocumentError.invalidGeometry:
+            reason = "Its saved edits are damaged."
+        case is PNGError:
+            reason = "It isn't a PNG Excerpt can read."
+        default:
+            reason = error.localizedDescription
+        }
+        show("Couldn't open \(file.lastPathComponent)", reason)
     }
 }

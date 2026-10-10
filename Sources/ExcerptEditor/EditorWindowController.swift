@@ -349,9 +349,14 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         }
     }
 
-    public func windowShouldClose(_ sender: NSWindow) -> Bool {
+    public func windowShouldClose(_ sender: NSWindow) -> Bool { confirmClose() }
+
+    /// True when nothing is unsaved, or the user chose Save (and it worked) or Don't Save;
+    /// false on Cancel or a failed save. Shared by the window's close and the app's quit.
+    public func confirmClose() -> Bool {
         canvas.endText()
         guard model.isDirty else { return true }
+        show()
         let alert = NSAlert()
         alert.messageText = "Save changes to \(capture.primary.lastPathComponent)?"
         alert.informativeText = "Your edits are lost if you don't save them."

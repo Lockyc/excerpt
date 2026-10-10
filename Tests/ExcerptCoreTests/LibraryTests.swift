@@ -144,6 +144,22 @@ import Testing
         #expect(try MasterFile.decode(second).edits == newer)
     }
 
+    @Test func aForeignOriginalNamedFileOpensAsItself() throws {
+        let store = LibraryStore(folder: tempFolder(), naming: LibraryNaming(timeZone: utc))
+        let unrelated = Fixtures.sheet(width: 200, height: 400)
+        let primary = try store.saveCapture(unrelated, scale: 2, at: date)
+        let foreign = primary.deletingLastPathComponent()
+            .appendingPathComponent(
+                LibraryNaming.originalName(forPrimary: primary.lastPathComponent))
+        try PNGCodec.encode(Fixtures.sheet(width: 60, height: 40), scale: 1).write(to: foreign)
+        let loaded = try store.load(foreign)
+        #expect(loaded.primary == foreign)
+        #expect(loaded.original.width == 60)
+        #expect(loaded.edits.scale == 1 && loaded.edits.cuts.isEmpty)
+        // The primary beside it opens as itself too, not through the foreign file.
+        #expect(try store.load(primary).original.width == 200)
+    }
+
     @Test func anUnwritableFolderThrows() throws {
         let blocker = FileManager.default.temporaryDirectory.appendingPathComponent(
             "excerpt-block-\(UUID().uuidString)")

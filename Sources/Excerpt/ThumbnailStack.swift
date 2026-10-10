@@ -6,15 +6,20 @@ import AppKit
 @MainActor
 final class ThumbnailStack {
     private let preferences: Preferences
+    private let onEdit: (URL) -> Void
     private var panels: [ThumbnailPanel] = []
     static let width: CGFloat = 300
     static let margin: CGFloat = 20
 
-    init(preferences: Preferences) { self.preferences = preferences }
+    init(preferences: Preferences, onEdit: @escaping (URL) -> Void) {
+        self.preferences = preferences
+        self.onEdit = onEdit
+    }
 
     func show(url: URL, image: CGImage) {
-        let panel = ThumbnailPanel(url: url, image: image, seconds: preferences.thumbnailSeconds) {
-            [weak self] closing in
+        let panel = ThumbnailPanel(
+            url: url, image: image, seconds: preferences.thumbnailSeconds, onEdit: onEdit
+        ) { [weak self] closing in
             self?.panels.removeAll { $0 === closing }
             self?.layout()
         }
@@ -37,12 +42,17 @@ final class ThumbnailStack {
 @MainActor
 final class ThumbnailPanel: NSPanel {
     private let url: URL
+    private let onEdit: (URL) -> Void
     private let onClose: (ThumbnailPanel) -> Void
     private var timer: Timer?
     private let seconds: Double
 
-    init(url: URL, image: CGImage, seconds: Double, onClose: @escaping (ThumbnailPanel) -> Void) {
+    init(
+        url: URL, image: CGImage, seconds: Double, onEdit: @escaping (URL) -> Void,
+        onClose: @escaping (ThumbnailPanel) -> Void
+    ) {
         self.url = url
+        self.onEdit = onEdit
         self.onClose = onClose
         self.seconds = seconds
         let width = ThumbnailStack.width
@@ -76,10 +86,7 @@ final class ThumbnailPanel: NSPanel {
         let bar = NSStackView(frame: CGRect(x: 8, y: 2, width: width - 16, height: barHeight - 4))
         bar.distribution = .fillEqually
         bar.addArrangedSubview(button("Copy", #selector(copyImage)))
-        let edit = button("Edit", nil)
-        edit.isEnabled = false
-        edit.toolTip = "The editor isn't in this build yet"
-        bar.addArrangedSubview(edit)
+        bar.addArrangedSubview(button("Edit", #selector(editTapped)))
         let claude = button("For Claude", nil)
         claude.isEnabled = false
         claude.toolTip = "The Claude export isn't in this build yet"
@@ -118,6 +125,10 @@ final class ThumbnailPanel: NSPanel {
         } catch {
             Alerts.clipboardFailed(url, error)
         }
+    }
+    @objc private func editTapped() {
+        onEdit(url)
+        dismiss()
     }
     @objc private func closeTapped() { dismiss() }
 

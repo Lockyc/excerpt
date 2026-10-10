@@ -60,28 +60,34 @@ public struct LibraryStore: Sendable {
         try PNGCodec.encode(rendered, scale: edits.scale).write(to: primary, options: .atomic)
     }
 
-    /// Opens a primary or a master. With a master present, its original and edits load; a
-    /// primary without one loads as an unedited capture.
+    /// Opens a primary or a master. A file is a master only when it carries the edits chunk, so
+    /// a user's own `… original.png` opens as itself and its sibling is never overwritten. A
+    /// primary without a master loads as an unedited capture.
     public func load(_ url: URL) throws -> LoadedCapture {
         let directory = url.deletingLastPathComponent()
         let name = url.lastPathComponent
-        let primary: URL
-        let master: URL
+        let candidates: [(primary: URL, master: URL)]
         if let primaryName = LibraryNaming.primaryName(forOriginal: name) {
-            primary = directory.appendingPathComponent(primaryName)
-            master = url
+            candidates = [(directory.appendingPathComponent(primaryName), url)]
         } else {
-            primary = url
-            master = directory.appendingPathComponent(LibraryNaming.originalName(forPrimary: name))
+            candidates = [
+                (
+                    url,
+                    directory.appendingPathComponent(LibraryNaming.originalName(forPrimary: name))
+                )
+            ]
         }
-        if FileManager.default.fileExists(atPath: master.path) {
-            let (original, edits) = try MasterFile.decode(Data(contentsOf: master))
+        for (primary, master) in candidates {
+            guard let data = try? Data(contentsOf: master),
+                (try? PNGChunks.text(keyword: PNGChunks.editsKeyword, in: data)) != nil
+            else { continue }
+            let (original, edits) = try MasterFile.decode(data)
             return LoadedCapture(
                 primary: primary, original: original.image,
                 edits: edits ?? EditDocument(scale: original.scale))
         }
-        let flat = try PNGCodec.decode(Data(contentsOf: primary))
+        let flat = try PNGCodec.decode(Data(contentsOf: url))
         return LoadedCapture(
-            primary: primary, original: flat.image, edits: EditDocument(scale: flat.scale))
+            primary: url, original: flat.image, edits: EditDocument(scale: flat.scale))
     }
 }

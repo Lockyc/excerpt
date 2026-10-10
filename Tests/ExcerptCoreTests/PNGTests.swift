@@ -1,6 +1,8 @@
 import ExcerptTestSupport
 import Foundation
+import ImageIO
 import Testing
+import UniformTypeIdentifiers
 
 @testable import ExcerptCore
 
@@ -47,6 +49,15 @@ import Testing
 
     @Test func rejectsNonPNG() {
         #expect(throws: PNGError.notPNG) { try PNGChunks.chunkTypes(in: Data("hello".utf8)) }
+    }
+
+    @Test func decodeRejectsAJPEGEvenWhenNamedPNG() throws {
+        let data = NSMutableData()
+        let destination = try #require(
+            CGImageDestinationCreateWithData(data, UTType.jpeg.identifier as CFString, 1, nil))
+        CGImageDestinationAddImage(destination, Fixtures.sheet(width: 40, height: 40), nil)
+        #expect(CGImageDestinationFinalize(destination))
+        #expect(throws: PNGError.notPNG) { try PNGCodec.decode(data as Data) }
     }
 
     @Test func masterFileRoundTrips() throws {

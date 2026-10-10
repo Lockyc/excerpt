@@ -27,8 +27,14 @@ public enum PNGCodec {
     }
 
     public static func decode(_ data: Data) throws -> DecodedPNG {
-        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
-            let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else {
+            throw PNGError.decodeFailed
+        }
+        // ImageIO sniffs content, so a JPEG renamed .png would otherwise open as a PNG.
+        guard CGImageSourceGetType(source) as String? == UTType.png.identifier else {
+            throw PNGError.notPNG
+        }
+        guard let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
         else { throw PNGError.decodeFailed }
         let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any]
         let dpi = (properties?[kCGImagePropertyDPIWidth] as? Double) ?? 72
