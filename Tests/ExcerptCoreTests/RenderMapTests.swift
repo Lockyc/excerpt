@@ -41,4 +41,42 @@ import Testing
         #expect(map.seams(.vertical).isEmpty)
         #expect(map.renderedWidth == 180 && map.renderedHeight == 220)
     }
+
+    @Test func anAnnotationOverhangingAnEdgeBandDrawsOnlyItsKeptPart() {
+        // Crop x 10..<190, y 20..<280 with rows 0..<30 (original 20..<50) removed.
+        let m = RenderMap(
+            crop: PixelRect(x: 10, y: 20, width: 180, height: 260),
+            rows: AxisMap(extent: 260, bands: [0..<30], gap: 10),
+            columns: AxisMap(extent: 180, bands: [], gap: 10))
+        // Original y 10..<60 spans off the crop's top edge, the band, then 10 kept rows.
+        #expect(
+            m.rect(CGRect(x: 20, y: 10, width: 30, height: 50))
+                == CGRect(x: 10, y: 10, width: 30, height: 10))
+    }
+
+    @Test func aCropEntirelyInsideABandHidesEverything() {
+        let m = RenderMap(
+            crop: PixelRect(x: 0, y: 100, width: 50, height: 40),
+            rows: AxisMap(extent: 40, bands: [0..<40], gap: 10),
+            columns: AxisMap(extent: 50, bands: [], gap: 10))
+        #expect(m.renderedHeight == 10)
+        #expect(m.isHidden(CGRect(x: 5, y: 110, width: 10, height: 10)))
+        #expect(m.rect(CGRect(x: 5, y: 110, width: 10, height: 10)) == nil)
+        #expect(m.point(CGPoint(x: 5, y: 120)) == CGPoint(x: 5, y: 5))
+    }
+
+    @Test func verticalSeamsOffsetByTheCropAndColumnsCut() {
+        let m = RenderMap(
+            crop: PixelRect(x: 10, y: 20, width: 180, height: 260),
+            rows: AxisMap(extent: 260, bands: [], gap: 10),
+            columns: AxisMap(extent: 180, bands: [40..<60], gap: 10))
+        #expect(m.seams(.vertical) == [Seam(axis: .vertical, band: 50..<70, gap: 40..<50)])
+        #expect(m.point(CGPoint(x: 100, y: 30)) == CGPoint(x: 80, y: 10))
+        #expect(m.point(CGPoint(x: 60, y: 30)) == CGPoint(x: 45, y: 10))
+        // Original x 40..<90 is crop-relative 30..<80: the band 40..<60 is cut from its middle.
+        #expect(
+            m.rect(CGRect(x: 40, y: 30, width: 50, height: 10))
+                == CGRect(x: 30, y: 10, width: 40, height: 10))
+        #expect(m.original(CGPoint(x: 80, y: 10)) == CGPoint(x: 100, y: 30))
+    }
 }

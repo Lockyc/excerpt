@@ -58,4 +58,19 @@ import Testing
         #expect(!map.isRemoved(15, 40))
         #expect(!map.isRemoved(25, 55))
     }
+
+    @Test func offImageEdgesDoNotOverhangAnEdgeBandsGap() {
+        let top = AxisMap(extent: 100, bands: [0..<30], gap: 10)
+        #expect(top.place(-10, bias: .after) == 10)
+        #expect(top.place(-10, bias: .before) == -10)
+        let bottom = AxisMap(extent: 100, bands: [70..<100], gap: 10)
+        #expect(bottom.place(110, bias: .before) == 70)
+        #expect(bottom.place(110, bias: .after) == 90)
+    }
+
+    @Test func aBoundaryPositionIsKeptNotRemoved() {
+        #expect(!map.isRemoved(20, 20))
+        #expect(!map.isRemoved(50, 50))
+        #expect(map.isRemoved(30, 30))
+    }
 }

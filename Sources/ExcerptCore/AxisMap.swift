@@ -82,6 +82,14 @@ public struct AxisMap: Equatable, Sendable {
             default: continue
             }
         }
+        // Off the image beside an edge band, only the kept part may draw: a leading edge starts
+        // after the gap, a trailing edge ends before it.
+        if bias == .after, v < 0, let first = bands.first, first.lowerBound == 0 {
+            return Double(gaps[0].destination.upperBound)
+        }
+        if bias == .before, v > Double(extent), let last = bands.last, last.upperBound == extent {
+            return Double(gaps[gaps.count - 1].destination.lowerBound)
+        }
         if let mapped = map(v) { return mapped }
         return v <= 0 ? v : Double(renderedLength) + v - Double(extent)
     }
@@ -104,8 +112,14 @@ public struct AxisMap: Equatable, Sendable {
         return r <= 0 ? r : Double(extent) + r - Double(renderedLength)
     }
 
-    /// Whether `lower...upper` lies wholly inside one removed band.
+    /// Whether `lower...upper` lies wholly inside one removed band. A position exactly on a band's
+    /// boundary is kept, as `place` treats it, so a zero-extent span must be strictly inside.
     public func isRemoved(_ lower: Double, _ upper: Double) -> Bool {
-        bands.contains { Double($0.lowerBound) <= lower && upper <= Double($0.upperBound) }
+        bands.contains {
+            let low = Double($0.lowerBound)
+            let high = Double($0.upperBound)
+            guard low <= lower && upper <= high else { return false }
+            return lower < upper || (lower > low && lower < high)
+        }
     }
 }
