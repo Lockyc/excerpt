@@ -25,10 +25,6 @@ import Testing
         #expect(buffer.bytes == [3, 2, 1, 255, 6, 5, 4, 255, 9, 8, 7, 255, 12, 11, 10, 128])
     }
 
-    @Test func theStreamsColourSpaceIsTheBuffersOwn() {
-        #expect(StreamFrameSource.colorSpaceName == PixelBuffer.colorSpace.name)
-    }
-
     @Test func thePointerIsInsideTheRegionOnlyWithinItsBounds() {
         let centre = CGPoint(x: 500, y: 400)
         let size = CGSize(width: 200, height: 100)

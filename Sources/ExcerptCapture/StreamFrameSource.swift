@@ -19,6 +19,7 @@ public final class StreamFrameSource: FrameSource {
     nonisolated static var colorSpaceName: CFString { PixelBuffer.colorSpace.name! }
 
     public func start(region: ScrollRegion) async throws {
+        precondition(stream == nil, "one stream per source: stop it before starting another")
         let content = try await SCShareableContent.excludingDesktopWindows(
             false, onScreenWindowsOnly: true)
         guard let display = content.displays.first(where: { $0.displayID == region.displayID })
@@ -34,6 +35,7 @@ public final class StreamFrameSource: FrameSource {
         configuration.height = Int(region.pixelRect.height)
         configuration.pixelFormat = kCVPixelFormatType_32BGRA
         configuration.colorSpaceName = Self.colorSpaceName
+        configuration.captureResolution = .best
         configuration.showsCursor = false
         configuration.minimumFrameInterval = CMTime(value: 1, timescale: 30)
         configuration.queueDepth = 3
@@ -48,11 +50,13 @@ public final class StreamFrameSource: FrameSource {
     }
 
     /// Stops the stream. Throws when it could not be stopped, unless the stream had already
-    /// failed on its own: that error reached the mailbox through `didStopWithError`.
+    /// failed on its own: that error reached the mailbox through `didStopWithError`. A throw
+    /// after the capture already ended is the caller's to report as a non-fatal note: the
+    /// stitch is already saved.
     public func stop() async throws {
         guard let stream else { return }
         self.stream = nil
-        output = nil
+        defer { output = nil }
         do {
             try await stream.stopCapture()
         } catch {
