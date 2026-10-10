@@ -32,7 +32,7 @@ let package = Package(
             exclude: ["Goldens"]),
         .testTarget(
             name: "ExcerptCaptureTests",
-            dependencies: ["ExcerptCapture"],
+            dependencies: ["ExcerptCapture", "ExcerptTestSupport"],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .testTarget(
