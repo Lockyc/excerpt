@@ -46,7 +46,8 @@ public struct ClaudeBundle: Sendable {
 
     /// Renders `original` with `edits`, reads its text and tiles it, then replaces the capture's
     /// cache folder with the result. Tiles and text come from the render alone, which is the
-    /// primary's pixels: nothing a cut removed or a blur covered is in either. Expired folders
+    /// primary's pixels: a cut band is in neither, and a blurred area is only `BlurRenderer`'s
+    /// blocks, which hold no readable text. Expired folders
     /// are pruned first; entries that could not be removed are reported in `pruneFailures`.
     /// The bundle is built in a hidden staging folder (a dot-name, which `folderName` never
     /// yields) and swapped in atomically, so a failure leaves the previous bundle in place.

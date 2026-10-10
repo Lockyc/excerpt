@@ -25,8 +25,9 @@ runs the command without the app.
   original — may be embedded in the dated primary PNG. The original and the edits live only in
   `… original.png`.
 - **Claude sees only the render.** For Claude's tiles and `text.md` are read from the render
-  through its `RenderMap`'s kept segments, never from the original, so cut and blurred content
-  can't reach them.
+  through its `RenderMap`'s kept segments, never from the original, so cut content can't reach
+  them and blurred content reaches them only as `BlurRenderer`'s blocks, sized so no text can be
+  read from them.
 - **Golden images** pin the renderer; a deliberate visual change regenerates them in the same
   commit. `EXCERPT_RECORD_GOLDENS=1 swift test` re-records goldens; inspect every recorded PNG
   before committing it.

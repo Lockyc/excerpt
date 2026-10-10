@@ -164,7 +164,8 @@ change re-renders the cache. Undo is a stack of document values.
     so every line appears whole in some tile;
   - `text.md` holds Vision OCR in reading order, each cut written in as `[⋯ 1,240 px hidden]`;
   - the clipboard receives `@<path>` references to every tile and `text.md`;
-  - both come from the render, never the original, so nothing a cut or blur removed reaches Claude;
+  - both come from the render, never the original, so a cut band never reaches Claude and a
+    blurred area reaches it only as the blur's noised blocks, from which no text is read;
   - the editor exports its current render, unsaved edits included; the thumbnail exports the
     primary file as `excerpt read` takes it, so a primary changed since it was saved exports as
     its own pixels.

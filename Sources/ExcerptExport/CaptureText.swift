@@ -22,8 +22,8 @@ public enum CaptureTextError: Error, Equatable, LocalizedError {
 }
 
 /// The text of a render, read only from what the render shows, with every cut written in where
-/// it was made. The render is the primary's pixels, so nothing a cut removed or a blur covered
-/// can reach the text.
+/// it was made. The render is the primary's pixels: a cut band is not in it, and a blurred area
+/// is only `BlurRenderer`'s blocks, which hold no readable text.
 public enum CaptureText {
     /// A part of the render read on its own: one kept span of rows by one kept span of columns,
     /// sliced like the tiles when tall, so a recogniser never sees a seam or its label.
