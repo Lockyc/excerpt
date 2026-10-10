@@ -49,10 +49,9 @@ final class CaptureCoordinator {
             switch action {
             case .area:
                 if case .area(let still, let rect) = await SelectionOverlay().run(
-                    mode: .area, stills: stills),
-                    let image = still.image.cropping(to: rect)
+                    mode: .area, stills: stills)
                 {
-                    deliver(image, scale: still.scale)
+                    deliver(try Self.crop(still, to: rect), scale: still.scale)
                 }
             case .window:
                 let windows = try await capturer.windowsFrontToBack()
@@ -81,10 +80,9 @@ final class CaptureCoordinator {
                 }
             case .text:
                 if case .area(let still, let rect) = await SelectionOverlay().run(
-                    mode: .area, stills: stills),
-                    let image = still.image.cropping(to: rect)
+                    mode: .area, stills: stills)
                 {
-                    await copyText(of: image, scale: still.scale)
+                    await copyText(of: try Self.crop(still, to: rect), scale: still.scale)
                 }
             case .selector:
                 return  // resolved to the mode picked above
@@ -92,6 +90,17 @@ final class CaptureCoordinator {
         } catch {
             Alerts.show("Capture failed", error.localizedDescription)
         }
+    }
+
+    /// A selection that can't be cut from its still.
+    private struct CropFailed: LocalizedError {
+        var errorDescription: String? { "The selection couldn't be cut from the screen." }
+    }
+
+    /// The selection `rect`, in pixels, cut from `still`.
+    private static func crop(_ still: DisplayStill, to rect: CGRect) throws -> CGImage {
+        guard let image = still.image.cropping(to: rect) else { throw CropFailed() }
+        return image
     }
 
     /// Capture Text: reads the selection off the main thread and copies its text, with no file
