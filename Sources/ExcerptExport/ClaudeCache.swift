@@ -33,16 +33,34 @@ public struct ClaudeCache: Sendable {
     }
 
     /// A capture's name as a folder name a Claude `@` reference can carry: anything but letters,
-    /// digits, `.`, `_` and `-` becomes `-`, so `Excerpt 2026-10-10 at 09.43.29` is
-    /// `Excerpt-2026-10-10-at-09.43.29`. A name of nothing but dots, or nothing, is `capture`.
+    /// digits, `.`, `_` and `-` becomes `-`, and a leading `.` too, so `Excerpt 2026-10-10 at
+    /// 09.43.29` reads `Excerpt-2026-10-10-at-09.43.29`. Sanitising is lossy, and APFS folds
+    /// case, so whenever it changed the name, cut it to 91 characters, emptied it, or the name
+    /// has an uppercase letter, an 8-hex-digit hash of the original UTF-8 is appended
+    /// (`capture` stands in for an empty name). Distinct names therefore get distinct folders; a
+    /// name already lowercase and clean is unchanged. The result never starts with `.`: the dot-names
+    /// under the root are the staging folders alone.
     public static func folderName(for name: String) -> String {
         let allowed = CharacterSet(
             charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-")
-        let mapped = String(
-            String.UnicodeScalarView(
-                name.unicodeScalars.map { allowed.contains($0) ? $0 : "-" }
-            ).prefix(100))
-        return mapped.allSatisfy { $0 == "." } ? "capture" : mapped
+        let mapped = name.unicodeScalars.enumerated().map { index, scalar in
+            allowed.contains(scalar) && !(index == 0 && scalar == ".") ? scalar : "-"
+        }
+        let clean = String(String.UnicodeScalarView(mapped))
+        let lossless = clean == name && clean.count <= 100 && !clean.isEmpty
+        if lossless && clean == clean.lowercased() { return clean }
+        let base = clean.isEmpty ? "capture" : String(clean.prefix(91))
+        return "\(base)-\(stableHash(name))"
+    }
+
+    /// 8 hex digits of FNV-1a over the UTF-8 bytes, folded from 64 bits: stable across runs
+    /// and machines, unlike `Hasher`.
+    private static func stableHash(_ name: String) -> String {
+        var hash: UInt64 = 0xcbf2_9ce4_8422_2325
+        for byte in name.utf8 { hash = (hash ^ UInt64(byte)) &* 0x100_0000_01b3 }
+        let folded = UInt32(truncatingIfNeeded: hash ^ (hash >> 32))
+        let hex = String(folded, radix: 16)
+        return String(repeating: "0", count: 8 - hex.count) + hex
     }
 
     /// The folder for a capture: a direct child of the root, whatever the name.
@@ -50,7 +68,8 @@ public struct ClaudeCache: Sendable {
         root.appendingPathComponent(Self.folderName(for: name), isDirectory: true)
     }
 
-    /// Makes the root, and any missing parents, readable by the user alone.
+    /// Creates the root, and any missing parents, with user-only permissions (0700); a root that
+    /// already exists keeps the permissions it has.
     public func ensureRoot() throws {
         do {
             try FileManager.default.createDirectory(
@@ -61,7 +80,8 @@ public struct ClaudeCache: Sendable {
         }
     }
 
-    /// The entries last modified `maximumAge` or more before `now`.
+    /// The entries last modified `maximumAge` or more before `now`; a future-dated entry never
+    /// expires.
     public static func expired(
         _ entries: [(url: URL, modified: Date)], now: Date, maximumAge: TimeInterval = maximumAge
     ) -> [URL] {

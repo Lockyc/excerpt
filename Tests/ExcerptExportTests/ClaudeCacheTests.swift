@@ -10,16 +10,29 @@ import Testing
     }
 
     @Test func folderNamesCarryNoSpacesOrSeparators() {
-        #expect(
-            ClaudeCache.folderName(for: "Excerpt 2026-10-10 at 09.43.29")
-                == "Excerpt-2026-10-10-at-09.43.29")
-        #expect(ClaudeCache.folderName(for: "a/b:c") == "a-b-c")
-        #expect(ClaudeCache.folderName(for: "..") == "capture")
-        #expect(ClaudeCache.folderName(for: ".") == "capture")
-        #expect(ClaudeCache.folderName(for: "") == "capture")
-        #expect(ClaudeCache.folderName(for: "../../etc") == "..-..-etc")
-        #expect(ClaudeCache.folderName(for: "/") == "-")
-        #expect(ClaudeCache.folderName(for: String(repeating: "x", count: 300)).count == 100)
+        let name = ClaudeCache.folderName(for: "Excerpt 2026-10-10 at 09.43.29")
+        #expect(name.hasPrefix("Excerpt-2026-10-10-at-09.43.29-"))
+        #expect(!name.contains(" ") && !name.contains("/") && !name.contains(":"))
+        #expect(ClaudeCache.folderName(for: "ok-name_1.2") == "ok-name_1.2")
+        #expect(ClaudeCache.folderName(for: "a b").hasPrefix("a-b-"))
+        #expect(ClaudeCache.folderName(for: "..").hasPrefix("..-") == false)
+        #expect(ClaudeCache.folderName(for: "").hasPrefix("capture-"))
+        #expect(ClaudeCache.folderName(for: "..").hasPrefix("-"))
+        #expect(!ClaudeCache.folderName(for: ".hidden").hasPrefix("."))
+        #expect(ClaudeCache.folderName(for: String(repeating: "x", count: 300)).count <= 100)
+    }
+
+    @Test func distinctNamesGetDistinctFolders() {
+        let prefix = String(repeating: "x", count: 120)
+        let names = [
+            "a b", "a-b", "日本語", "ñandú", "A", "a", "", "capture", "..", ".", "-",
+            prefix + "1", prefix + "2", ".x", "-x",
+        ]
+        let folders = names.map(ClaudeCache.folderName(for:))
+        #expect(Set(folders).count == names.count)
+        #expect(Set(folders.map { $0.lowercased() }).count == names.count)
+        #expect(ClaudeCache.folderName(for: "a b") == ClaudeCache.folderName(for: "a b"))
+        #expect(folders.allSatisfy { !$0.hasPrefix(".") && $0.count <= 100 })
     }
 
     @Test func folderNamesNeverEscapeTheRoot() {
@@ -74,6 +87,10 @@ import Testing
         let stuck = stuckParent.appendingPathComponent("inner")
         let other = root.appendingPathComponent("b-old")
         try manager.createDirectory(at: stuck, withIntermediateDirectories: true)
+        defer {
+            try? manager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: stuckParent.path)
+            try? manager.removeItem(at: root)
+        }
         try manager.createDirectory(at: other, withIntermediateDirectories: true)
         let now = Date()
         let aged = [FileAttributeKey.modificationDate: now.addingTimeInterval(-8 * 86_400)]
@@ -81,15 +98,21 @@ import Testing
         try manager.setAttributes(aged, ofItemAtPath: other.path)
         try manager.setAttributes(aged, ofItemAtPath: stuckParent.path)
         try manager.setAttributes([.posixPermissions: 0o500], ofItemAtPath: stuckParent.path)
-        defer {
-            try? manager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: stuckParent.path)
-            try? manager.removeItem(at: root)
-        }
         // Locking the parent changed its mtime? setAttributes of permissions leaves mtime alone.
         let result = try ClaudeCache(root: root).prune(now: now)
         #expect(result.removed.map(\.lastPathComponent) == ["b-old"])
         #expect(result.failed.map(\.url.lastPathComponent) == ["a-stuck"])
         #expect(!manager.fileExists(atPath: other.path))
+    }
+
+    @Test func aFreshStagingFolderSurvivesPruning() throws {
+        let root = scratchRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let staging = root.appendingPathComponent(".staging-abc")
+        try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
+        let result = try ClaudeCache(root: root).prune(now: Date())
+        #expect(result.removed.isEmpty && result.failed.isEmpty)
+        #expect(FileManager.default.fileExists(atPath: staging.path))
     }
 
     @Test func theRootIsCreatedUserOnly() throws {
