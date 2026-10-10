@@ -104,7 +104,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         editor.show()
     }
 
-    /// For Claude from a thumbnail: the capture as saved, its master's edits included.
+    /// For Claude from a thumbnail: the primary as `excerpt read` takes it, with its master's
+    /// edits while it is exactly the master's render, and as its own pixels once changed since.
     func forClaude(_ url: URL) {
         claude.export(primary: url)
     }
