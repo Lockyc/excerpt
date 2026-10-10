@@ -62,5 +62,6 @@ notarize:
 
 [group("release")]
 [doc("Release VERSION: notarize, tag, fast-forward main, publish with NOTES")]
+[no-cd]
 release notes:
-    scripts/release.sh publish "{{notes}}"
+    "{{justfile_directory()}}/scripts/release.sh" publish "{{notes}}"

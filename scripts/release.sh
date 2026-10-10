@@ -37,16 +37,20 @@ notarize() {
     just app
     rm -f "$zip"
     ditto -c -k --keepParent "$app" "$zip"
-    local result=build/notary.json
+    # A rejection may also exit non-zero; capture that so Apple's log still prints.
+    local result=build/notary.json submitted=0
     xcrun notarytool submit "$zip" --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" \
-        --team-id "$APPLE_TEAM_ID" --wait --output-format json > "$result"
+        --team-id "$APPLE_TEAM_ID" --wait --output-format json > "$result" || submitted=$?
     local status id
-    status=$(plutil -extract status raw -o - "$result")
-    id=$(plutil -extract id raw -o - "$result")
-    if [ "$status" != Accepted ]; then
+    status=$(plutil -extract status raw -o - "$result" 2> /dev/null || true)
+    id=$(plutil -extract id raw -o - "$result" 2> /dev/null || true)
+    if [ -z "$id" ]; then
+        fail "notarytool submit failed (exit $submitted) before Apple accepted a submission."
+    fi
+    if [ "$submitted" -ne 0 ] || [ "$status" != Accepted ]; then
         xcrun notarytool log "$id" --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" \
             --team-id "$APPLE_TEAM_ID" >&2 || true
-        fail "notarization returned $status."
+        fail "notarization returned ${status:-no status} (notarytool exit $submitted)."
     fi
     xcrun stapler staple "$app"
     rm -f "$zip"
