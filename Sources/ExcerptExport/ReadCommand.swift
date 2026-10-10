@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 /// `excerpt read <image>`: the For Claude bundle for any image file, from the command line.
@@ -27,10 +28,13 @@ public enum ReadCommand {
         public static let noInput: Int32 = 66
         public static let software: Int32 = 70
         public static let cantCreate: Int32 = 73
+        public static let ioError: Int32 = 74
     }
 
     public static let usage = """
-        usage: excerpt read <image>
+        usage: excerpt read [--] <image>
+
+        A name starting with '-' needs `--` before it or a leading `./`.
 
         Reads an image the way For Claude exports a capture: its text in reading order, with any
         excerpt cuts marked, on stdout, and the paths of 1× tiles Claude can read on stderr.
@@ -43,8 +47,9 @@ public enum ReadCommand {
         switch command {
         case "-h", "--help", "help": return .help
         case "read":
-            let rest = Array(arguments.dropFirst())
+            var rest = Array(arguments.dropFirst())
             if rest == ["-h"] || rest == ["--help"] { return .help }
+            if rest.first == "--" { rest.removeFirst() }
             guard rest.count == 1, let path = rest.first, !path.isEmpty else {
                 return .usage("read takes one image")
             }
@@ -114,7 +119,9 @@ public enum ReadCommand {
     /// nil when there is none and the app should start.
     public static func main(_ arguments: [String]) -> Int32? {
         let output: Output
-        switch parse(arguments) {
+        let invocation = parse(arguments)
+        if invocation != .app { signal(SIGPIPE, SIG_DFL) }
+        switch invocation {
         case .app: return nil
         case .help: output = Output(stdout: usage)
         case .usage(let problem):
@@ -125,8 +132,34 @@ public enum ReadCommand {
                 directory: URL(fileURLWithPath: FileManager.default.currentDirectoryPath),
                 cache: .standard, recognizer: VisionTextRecognizer())
         }
-        FileHandle.standardOutput.write(Data(output.stdout.utf8))
-        FileHandle.standardError.write(Data(output.stderr.utf8))
-        return output.status
+        return emit(output, stdout: .standardOutput, stderr: .standardError)
     }
+
+    /// Writes `output`, returning its status. A reader that has gone away (EPIPE) ends quietly
+    /// with the status unchanged; any other write failure is noted on stderr and exits 74.
+    static func emit(_ output: Output, stdout: FileHandle, stderr: FileHandle) -> Int32 {
+        var status = output.status
+        for (handle, text) in [(stdout, output.stdout), (stderr, output.stderr)] {
+            do {
+                try handle.write(contentsOf: Data(text.utf8))
+            } catch let error as NSError where error.isBrokenPipe {
+                continue
+            } catch {
+                try? stderr.write(
+                    contentsOf: Data(
+                        "excerpt: couldn't write the output: \(error.localizedDescription)\n".utf8))
+                status = Status.ioError
+            }
+        }
+        return status
+    }
+}
+
+extension NSError {
+    fileprivate var isBrokenPipe: Bool {
+        (domain == NSPOSIXErrorDomain && code == Int(EPIPE))
+            || (underlying?.isBrokenPipe ?? false)
+    }
+
+    private var underlying: NSError? { userInfo[NSUnderlyingErrorKey] as? NSError }
 }

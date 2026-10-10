@@ -116,4 +116,39 @@ import Testing
                 == "excerpt: couldn't remove old bundle /cache/old: permission denied\n")
         #expect(ReadCommand.pruneNotes([]).isEmpty)
     }
+
+    @Test func dashesAndDashDash() {
+        #expect(ReadCommand.parse(["read", "-x"]) == .read("-x"))
+        #expect(ReadCommand.parse(["read", "--", "-x"]) == .read("-x"))
+        #expect(ReadCommand.parse(["read", "--", "a.png"]) == .read("a.png"))
+        #expect(ReadCommand.parse(["read", "--"]) == .usage("read takes one image"))
+        #expect(ReadCommand.parse(["read", "--", "a", "b"]) == .usage("read takes one image"))
+    }
+
+    @Test func aClosedPipeDoesNotCrashTheWriter() throws {
+        signal(SIGPIPE, SIG_IGN)
+        let closed = Pipe()
+        try closed.fileHandleForReading.close()
+        let sink = Pipe()
+        let output = ReadCommand.Output(stdout: "text\n", stderr: "", status: 0)
+        #expect(
+            ReadCommand.emit(
+                output, stdout: closed.fileHandleForWriting,
+                stderr: sink.fileHandleForWriting) == 0)
+        let failed = ReadCommand.Output(stdout: "text\n", stderr: "", status: 65)
+        let closed2 = Pipe()
+        try closed2.fileHandleForReading.close()
+        #expect(
+            ReadCommand.emit(
+                failed, stdout: closed2.fileHandleForWriting,
+                stderr: sink.fileHandleForWriting) == 65)
+    }
+
+    @Test func anotherWriteErrorExitsWithIOError() throws {
+        let sink = Pipe()
+        let readOnly = try FileHandle(forReadingFrom: URL(fileURLWithPath: "/dev/null"))
+        let output = ReadCommand.Output(stdout: "text\n", stderr: "", status: 0)
+        #expect(
+            ReadCommand.emit(output, stdout: readOnly, stderr: sink.fileHandleForWriting) == 74)
+    }
 }
