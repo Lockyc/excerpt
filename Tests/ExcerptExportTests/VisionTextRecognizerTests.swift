@@ -175,3 +175,44 @@ import Testing
         )
     }
 }
+
+/// Panes read by real Vision: a menu over a terminal reads pane by pane, and a sheet's shaded
+/// row numbers stay on their rows.
+@Suite struct PaneReadingTests {
+    static func read(_ image: CGImage) throws -> [String] {
+        try CaptureText.read(image, scale: 2, recognizer: VisionTextRecognizer())
+            .split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+    }
+
+    @Test(.timeLimit(.minutes(3))) func aMenuOverATerminalReadsPaneByPane() throws {
+        let menu = ["About warden", "Services", "Hide warden", "Hide Others", "Show All"]
+        let terminal = [
+            "Welcome to the shell", "Type help for commands", "excerpt on dev", "zed launched",
+            "build started at noon", "warning timed out", "excerpt on dev", "just run",
+            "swift build", "Building for production",
+        ]
+        let image = TextFixtures.panes(
+            [
+                .init(
+                    x: 0, y: 0, width: 260, height: 240, background: 0.93, lineHeight: 40,
+                    lines: menu),
+                .init(
+                    x: 260, y: 0, width: 360, height: 240, background: 0.12, ink: 0.9,
+                    lineHeight: 22, lines: terminal),
+            ], width: 620, height: 240)
+        let lines = try Self.read(image)
+        #expect(lines.filter { !$0.isEmpty } == menu + terminal)
+    }
+
+    @Test(.timeLimit(.minutes(3))) func shadedRowNumbersStayOnTheirRows() throws {
+        let numbers = ["101", "102", "103", "104"]
+        let cells = ["Northwind 4821", "Contoso 1290", "Fabrikam 7730", "Litware 5104"]
+        let image = TextFixtures.panes(
+            [
+                .init(x: 0, y: 0, width: 80, height: 112, background: 0.85, lines: numbers),
+                .init(x: 80, y: 0, width: 400, height: 112, lines: cells),
+            ], width: 480, height: 112)
+        let lines = try Self.read(image)
+        #expect(lines.filter { !$0.isEmpty } == zip(numbers, cells).map { "\($0) \($1)" })
+    }
+}
