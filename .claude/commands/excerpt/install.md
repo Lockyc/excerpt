@@ -31,7 +31,7 @@ Expect the link's path and the usage text. If `excerpt` isn't found, `/usr/local
 Tell the user, as a short list:
 - The first capture asks for **Screen Recording**: System Settings → Privacy & Security → Screen & System Audio Recording → Excerpt on, then reopen Excerpt.
 - **Scrolling capture** also asks for Accessibility (Privacy & Security → Accessibility).
-- macOS's own screenshot shortcuts hold ⌘⇧3–⌘⇧6 until turned off in System Settings → Keyboard → Keyboard Shortcuts → Screenshots, or Excerpt's are rebound in its Settings. Excerpt's menu flags any shortcut macOS still holds.
+- macOS's own screenshot shortcuts hold ⌘⇧3–⌘⇧5 until turned off in System Settings → Keyboard → Keyboard Shortcuts → Screenshots, or Excerpt's are rebound in its Settings. Excerpt's menu flags any shortcut macOS still holds.
 
 ## 5. Done
 

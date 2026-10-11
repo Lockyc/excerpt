@@ -17,4 +17,12 @@ import Testing
     @Test func differentModifiersAreNotAConflict() {
         #expect(!systemShortcutHolds(keyCode: 21, modifiers: 4864, in: table))
     }
+    @Test func touchBarScreenshotShortcutsAreNotAConflict() {
+        let touchBar = [
+            SymbolicHotKey(keyCode: 22, modifiers: 768, enabled: true),
+            SymbolicHotKey(keyCode: 22, modifiers: 4864, enabled: true),
+        ]
+        #expect(!systemShortcutHolds(keyCode: 22, modifiers: 768, in: touchBar))
+        #expect(!systemShortcutHolds(keyCode: 22, modifiers: 4864, in: touchBar))
+    }
 }

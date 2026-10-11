@@ -11,11 +11,16 @@ public struct SymbolicHotKey: Equatable, Sendable {
     }
 }
 
+/// macOS's Touch Bar screenshot shortcuts (⌘⇧6 and ⌃⌘⇧6, key code 22). The table lists them as
+/// enabled on every Mac, but only a Mac with a Touch Bar acts on them.
+let touchBarShortcuts: Set<[UInt32]> = [[22, 768], [22, 4864]]
+
 /// True when an enabled system shortcut already owns this key + modifiers. Carbon's
 /// RegisterEventHotKey does not see these, so the combination would register "successfully"
-/// while the system acts on the press instead.
+/// while the system acts on the press instead. The Touch Bar screenshot shortcuts never count.
 public func systemShortcutHolds(keyCode: UInt32, modifiers: UInt32, in table: [SymbolicHotKey])
     -> Bool
 {
-    table.contains { $0.enabled && $0.keyCode == keyCode && $0.modifiers == modifiers }
+    guard !touchBarShortcuts.contains([keyCode, modifiers]) else { return false }
+    return table.contains { $0.enabled && $0.keyCode == keyCode && $0.modifiers == modifiers }
 }

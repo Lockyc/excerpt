@@ -89,7 +89,8 @@ Hotkeys use Carbon `RegisterEventHotKey` (no permission, no dependency) and are 
 in Settings, which refuses a combination another action holds, one of the editor's shortcuts or
 an app-wide one such as ⌘Q, or one without ⌘, ⌃ or ⌥ unless it is an F-key. A binding Carbon
 reports as taken, or that an enabled macOS shortcut holds, is flagged in the menu and Settings,
-never failed silently.
+never failed silently. The Touch Bar screenshot shortcuts (⌘⇧6, ⌃⌘⇧6) are never counted as
+holding one.
 
 - **Area:** the screen freezes when selection starts (a still of every display is taken first,
   and the selection is cut from it), so hover states and open menus survive. Crosshair, loupe,
