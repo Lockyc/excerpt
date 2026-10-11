@@ -189,6 +189,21 @@ final class EditorModel {
         selection = nil
     }
 
+    /// Whether `axis` already has `EditDocument.maximumCutsPerAxis` cuts: another would save a
+    /// master that reads as damaged, so the cut tool makes none there.
+    func isFull(_ axis: Axis) -> Bool {
+        document.cuts.lazy.filter { $0.axis == axis }.count >= EditDocument.maximumCutsPerAxis
+    }
+
+    /// The line the cut tool shows for an axis that takes no more cuts; empty when both do.
+    var cutLimitNote: String {
+        let limit = EditDocument.maximumCutsPerAxis.formatted()
+        let full = [(Axis.horizontal, "row"), (.vertical, "column")].filter { isFull($0.0) }
+        guard !full.isEmpty else { return "" }
+        let axes = full.map(\.1).joined(separator: " and ")
+        return "\(limit) \(axes) cuts, the most a capture holds"
+    }
+
     /// The line the editor shows for annotations a cut hides; empty when there are none.
     func hiddenNote(map: RenderMap) -> String {
         let count = AnnotationGeometry.hiddenCount(

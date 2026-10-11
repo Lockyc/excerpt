@@ -273,7 +273,7 @@ extension EditorModel {
             return Gestures.cut(
                 from: start, to: end, width: original.width, height: original.height,
                 minimum: minimumDrag, snapping: snap ? pixels : nil, radius: snapRadius
-            ).map(Pending.cut)
+            ).flatMap { isFull($0.axis) ? nil : .cut($0) }
         case .crop:
             return Gestures.crop(
                 from: start, to: end, width: original.width, height: original.height,

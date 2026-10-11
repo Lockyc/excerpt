@@ -282,7 +282,9 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         colors.selectedSegment = Palette.allCases.firstIndex(of: model.color) ?? 0
         widths.selectedSegment = StrokeWidth.allCases.firstIndex(of: model.width) ?? 0
         hiddenNote.stringValue = model.hiddenNote(map: canvas.base.map)
-        snapHint.stringValue = model.tool == .cut || model.tool == .crop ? Self.snapHint : ""
+        let limit = model.tool == .cut ? model.cutLimitNote : ""
+        snapHint.stringValue =
+            !limit.isEmpty ? limit : model.tool == .cut || model.tool == .crop ? Self.snapHint : ""
 
         let blurSelected = model.selectedAnnotationIsBlur
         colors.isEnabled = !blurSelected

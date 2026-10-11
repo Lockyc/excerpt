@@ -79,6 +79,27 @@ import Testing
         #expect(m.pending == nil)
     }
 
+    @Test func aFullAxisTakesNoMoreCutsAndSaysSo() {
+        let full = [Cut](
+            repeating: Cut(axis: .horizontal, lower: 10, upper: 20),
+            count: EditDocument.maximumCutsPerAxis)
+        let m = model(EditDocument(scale: 1, cuts: full, salt: 7))
+        m.tool = .cut
+        #expect(
+            m.cutLimitNote
+                == "\(EditDocument.maximumCutsPerAxis.formatted()) row cuts, the most a capture holds"
+        )
+        let map = map(m)
+        m.mouseDown(Pointer(rendered: CGPoint(x: 100, y: 47), map: map), map: map)
+        m.mouseDragged(Pointer(rendered: CGPoint(x: 104, y: 154), map: map), map: map, snap: true)
+        #expect(m.pending == nil)
+        m.mouseUp(Pointer(rendered: CGPoint(x: 104, y: 154), map: map), map: map, snap: true)
+        #expect(m.document.cuts == full && !m.canUndo)
+        drag(m, CGPoint(x: 60, y: 300), CGPoint(x: 200, y: 304))
+        #expect(m.document.cuts.count == full.count + 1)
+        #expect(m.document.cuts.last?.axis == .vertical)
+    }
+
     @Test func optionKeepsTheDraggedEdges() {
         let m = model()
         m.tool = .cut

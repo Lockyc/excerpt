@@ -57,8 +57,9 @@ Captures land in the **library** — `~/Documents/Screenshots/` by default (a se
 ## The cut tool
 
 **Model.** A cut is an axis plus a half-open range in original pixels. A *horizontal* cut
-removes rows (the image gets shorter); a *vertical* cut removes columns (narrower). Any number
-of each; overlapping or touching same-axis cuts merge. Rows are removed before columns, so every
+removes rows (the image gets shorter); a *vertical* cut removes columns (narrower). Up to
+`EditDocument.maximumCutsPerAxis` of each: at that many the cut tool makes none on that axis and
+says so. Overlapping or touching same-axis cuts merge. Rows are removed before columns, so every
 tear spans the full remaining extent. Annotations are stored in original coordinates and placed
 through one coordinate map (original → rendered); an annotation wholly inside a removed band is
 not drawn, and the editor reports it ("1 annotation hidden by a cut").
