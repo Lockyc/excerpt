@@ -55,30 +55,33 @@ public struct PixelRect: Codable, Hashable, Sendable {
 }
 
 /// Everything the user changed about a capture, stored in the master PNG: cuts, an optional
-/// crop and the annotations, all in original pixels. `scale` is the capture's pixels-per-point,
+/// crop and the annotations, all in original pixels, and whether the render has a border. `scale` is the capture's pixels-per-point,
 /// which turns pixel lengths into the points shown on labels and sizes strokes and text.
 public struct EditDocument: Codable, Equatable, Sendable {
-    /// Version 2 carries `crop` and `annotations`; a version 1 build rejects it rather than open
-    /// it without them, so its next save can't erase them.
-    public static let currentVersion = 2
+    /// Version 2 carries `crop` and `annotations`, version 3 `border`; an older build rejects a
+    /// newer document rather than open it without them, so its next save can't erase them.
+    public static let currentVersion = 3
 
     public var scale: Double
     public var cuts: [Cut]
     public var crop: PixelRect?
     public var annotations: [Annotation]
+    /// A `Border` around the render.
+    public var border: Bool
     /// Random per document and stored with it: seeds blur noise so it can't be recomputed from
     /// the blur rect alone.
     public var salt: UInt64
 
     public init(
         scale: Double, cuts: [Cut] = [], crop: PixelRect? = nil, annotations: [Annotation] = [],
-        salt: UInt64 = .random(in: .min ... .max)
+        border: Bool = false, salt: UInt64 = .random(in: .min ... .max)
     ) {
         self.salt = salt
         self.scale = scale
         self.cuts = cuts
         self.crop = crop
         self.annotations = annotations
+        self.border = border
     }
 
     enum CodingKeys: String, CodingKey {
@@ -87,17 +90,20 @@ public struct EditDocument: Codable, Equatable, Sendable {
         case cuts
         case crop
         case annotations
+        case border
         case salt
     }
 
-    /// Version 1 documents have no `crop`, `annotations` or `salt` keys; the first two read as
-    /// none and the salt is drawn at random.
+    /// Version 1 documents have no `crop`, `annotations` or `salt` keys, and versions before 3
+    /// no `border`; the first two read as none, the border as off, and the salt is drawn at
+    /// random.
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         scale = try container.decode(Double.self, forKey: .scale)
         cuts = try container.decode([Cut].self, forKey: .cuts)
         crop = try container.decodeIfPresent(PixelRect.self, forKey: .crop)
         annotations = try container.decodeIfPresent([Annotation].self, forKey: .annotations) ?? []
+        border = try container.decodeIfPresent(Bool.self, forKey: .border) ?? false
         salt =
             try container.decodeIfPresent(UInt64.self, forKey: .salt) ?? .random(in: .min ... .max)
     }
@@ -110,10 +116,11 @@ public struct EditDocument: Codable, Equatable, Sendable {
         try container.encode(cuts, forKey: .cuts)
         try container.encodeIfPresent(crop, forKey: .crop)
         try container.encode(annotations, forKey: .annotations)
+        if border { try container.encode(border, forKey: .border) }
         try container.encode(salt, forKey: .salt)
     }
 
-    public var isEmpty: Bool { cuts.isEmpty && crop == nil && annotations.isEmpty }
+    public var isEmpty: Bool { cuts.isEmpty && crop == nil && annotations.isEmpty && !border }
 
     /// An id no annotation in this document has.
     public var nextAnnotationID: Int {

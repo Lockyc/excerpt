@@ -2,7 +2,8 @@ import AppKit
 import ExcerptCore
 
 /// Draws the capture through Core: the cached base render (blur, crop, cuts) as an image, then
-/// the annotations through `AnnotationRenderer` on every repaint, then the editor's own chrome
+/// the annotations through `AnnotationRenderer` and the `Border` on every repaint, then the
+/// editor's own chrome
 /// (selection, handles, a drag in progress). Input goes to the model in rendered pixels.
 @MainActor
 final class CanvasView: NSView, NSTextFieldDelegate {
@@ -98,6 +99,10 @@ final class CanvasView: NSView, NSTextFieldDelegate {
         AnnotationRenderer.draw(
             model.displayDocument.annotations, map: base.map, scale: model.document.scale,
             in: context, canvasHeight: height)
+        if model.document.border {
+            Border.draw(
+                in: context, width: base.image.width, height: height, scale: model.document.scale)
+        }
         context.restoreGState()
 
         drawChrome(in: context)

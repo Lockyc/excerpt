@@ -16,6 +16,20 @@ import Testing
         #expect(PixelBuffer(result.image) == PixelBuffer(image))
     }
 
+    @Test func borderFramesTheRenderInsideItsEdge() {
+        let image = Fixtures.sheet(width: 120, height: 80)
+        let result = Renderer.render(image, edits: EditDocument(scale: 2, border: true))
+        let pixels = PixelBuffer(result.image)
+        let plain = PixelBuffer(image)
+        #expect(result.image.width == 120 && result.image.height == 80)
+        for (x, y) in [(0, 0), (1, 40), (60, 1), (119, 79), (118, 40), (60, 78)] {
+            #expect(pixels[x: x, y: y] == Border.color)
+        }
+        for (x, y) in [(2, 2), (60, 40), (117, 77)] {
+            #expect(pixels[x: x, y: y] == plain[x: x, y: y])
+        }
+    }
+
     @Test func bothAxesShrinkTheImage() {
         let image = Fixtures.sheet(width: 600, height: 800)
         let edits = EditDocument(

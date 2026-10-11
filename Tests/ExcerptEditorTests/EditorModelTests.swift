@@ -44,6 +44,14 @@ import Testing
         #expect(m.document.cuts.count == 1)
     }
 
+    @Test func borderIsOneUndoableStep() {
+        let m = model()
+        m.setBorder(true)
+        #expect(m.document.border && m.isDirty)
+        m.undo()
+        #expect(!m.document.border && !m.isDirty)
+    }
+
     @Test func aNoOpRecordsNothing() {
         let m = model()
         m.apply { _ in }

@@ -46,6 +46,7 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
     private let tools = NSSegmentedControl()
     private let colors = NSSegmentedControl()
     private let widths = NSSegmentedControl()
+    private let borderButton = NSButton(title: "Border", target: nil, action: nil)
     private let snapHint = NSTextField(labelWithString: "")
     private let hiddenNote = NSTextField(labelWithString: "")
     private let undoButton = NSButton()
@@ -138,6 +139,14 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         widths.target = self
         widths.action = #selector(widthChosen)
 
+        borderButton.setButtonType(.pushOnPushOff)
+        borderButton.bezelStyle = .rounded
+        borderButton.image = NSImage(systemSymbolName: "square", accessibilityDescription: nil)
+        borderButton.imagePosition = .imageLeading
+        borderButton.toolTip = "A \(Int(Border.points))pt grey border around the image"
+        borderButton.target = self
+        borderButton.action = #selector(borderToggled)
+
         for label in [snapHint, hiddenNote] {
             label.textColor = .secondaryLabelColor
             label.lineBreakMode = .byTruncatingTail
@@ -160,7 +169,7 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         saveButton.action = #selector(saveDocument)
 
         for control in [
-            tools, colors, widths, undoButton, redoButton, deleteButton, copyButton,
+            tools, colors, widths, borderButton, undoButton, redoButton, deleteButton, copyButton,
             claudeButton, saveButton,
         ] as [NSControl] {
             control.refusesFirstResponder = true
@@ -168,7 +177,7 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
 
         let spacer = NSView()
         spacer.setContentHuggingPriority(.fittingSizeCompression, for: .horizontal)
-        let styleRow = Self.row([tools, colors, widths])
+        let styleRow = Self.row([tools, colors, widths, borderButton])
         let actionRow = Self.row(
             [
                 snapHint, hiddenNote, spacer, undoButton, redoButton, deleteButton, copyButton,
@@ -281,6 +290,7 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         tools.selectedSegment = Tool.allCases.firstIndex(of: model.tool) ?? 0
         colors.selectedSegment = Palette.allCases.firstIndex(of: model.color) ?? 0
         widths.selectedSegment = StrokeWidth.allCases.firstIndex(of: model.width) ?? 0
+        borderButton.state = model.document.border ? .on : .off
         hiddenNote.stringValue = model.hiddenNote(map: canvas.base.map)
         let limit = model.tool == .cut ? model.cutLimitNote : ""
         snapHint.stringValue =
@@ -338,6 +348,11 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
 
     @objc private func widthChosen() {
         model.setWidth(StrokeWidth.allCases[widths.selectedSegment])
+    }
+
+    @objc private func borderToggled() {
+        canvas.endText()
+        model.setBorder(borderButton.state == .on)
     }
 
     @objc private func undoPressed() { undo() }

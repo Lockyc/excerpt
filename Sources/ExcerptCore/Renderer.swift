@@ -95,12 +95,15 @@ public enum Renderer {
                 bands: CutSet.normalized(cuts, axis: .vertical, extent: crop.width), gap: gap))
     }
 
-    /// The full render that export writes: the base, then the annotations through its map.
+    /// The full render that export writes: the base, then the annotations through its map, then
+    /// the border.
     public static func render(
         _ original: CGImage, edits: EditDocument, style: SeamStyle = .standard
     ) -> RenderResult {
         let base = renderBase(original, edits: edits, style: style)
-        guard edits.annotations.contains(where: { !$0.shape.isBlur }) else { return base }
+        guard edits.border || edits.annotations.contains(where: { !$0.shape.isBlur }) else {
+            return base
+        }
         let width = base.image.width
         let height = base.image.height
         let context = PixelBuffer.makeContext(width: width, height: height)
@@ -108,6 +111,9 @@ public enum Renderer {
         AnnotationRenderer.draw(
             edits.annotations, map: base.map, scale: edits.scale, in: context,
             canvasHeight: height)
+        if edits.border {
+            Border.draw(in: context, width: width, height: height, scale: edits.scale)
+        }
         return RenderResult(image: context.makeImage()!, map: base.map)
     }
 

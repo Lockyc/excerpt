@@ -133,6 +133,9 @@ final class EditorModel {
     /// The document now matches what ⌘S wrote.
     func markSaved() { saved = document }
 
+    /// Turns the render's border on or off, as one undoable step.
+    func setBorder(_ on: Bool) { apply { $0.border = on } }
+
     /// Sets the colour new annotations get, and recolours the selected annotation.
     func setColor(_ color: Palette) {
         self.color = color
