@@ -120,14 +120,29 @@ public final class ScreenCapturer {
     }
 
     /// One window, by itself, without its shadow (the backdrop frames it instead).
+    ///
+    /// A window that lies on one display is cut from that display with only itself composited:
+    /// a desktop-independent filter renders a sheet's whole window tree — the parent with the
+    /// sheet on it — shrunk into the sheet's size. A window spanning displays falls back to the
+    /// desktop-independent filter, which no single display can hold.
     public func image(of window: CapturableWindow, scale: CGFloat) async throws -> CGImage {
+        let frame = window.window.frame
         let configuration = SCStreamConfiguration()
-        configuration.width = Int(window.window.frame.width * scale)
-        configuration.height = Int(window.window.frame.height * scale)
+        configuration.width = Int(frame.width * scale)
+        configuration.height = Int(frame.height * scale)
         configuration.showsCursor = false
-        configuration.ignoreShadowsSingleWindow = true
         configuration.captureResolution = .best
-        let filter = SCContentFilter(desktopIndependentWindow: window.window)
+        let content = try await SCShareableContent.excludingDesktopWindows(
+            true, onScreenWindowsOnly: true)
+        let filter: SCContentFilter
+        if let display = content.displays.first(where: { $0.frame.contains(frame) }) {
+            filter = SCContentFilter(display: display, including: [window.window])
+            configuration.sourceRect = frame.offsetBy(
+                dx: -display.frame.minX, dy: -display.frame.minY)
+        } else {
+            filter = SCContentFilter(desktopIndependentWindow: window.window)
+            configuration.ignoreShadowsSingleWindow = true
+        }
         return try await SCScreenshotManager.captureImage(
             contentFilter: filter, configuration: configuration)
     }
