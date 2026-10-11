@@ -95,6 +95,30 @@ public final class ScreenCapturer {
         }
     }
 
+    /// The desktop picture of display `displayID` as it shows now, at `scale`, dynamic and
+    /// aerial wallpapers included: the windows at or below the desktop level (the window
+    /// manager's per-display wallpaper and the backstop behind it), without the desktop icons or
+    /// widgets above them. Nil when the display has none.
+    public func wallpaper(displayID: CGDirectDisplayID, scale: CGFloat) async throws -> CGImage? {
+        let content = try await SCShareableContent.excludingDesktopWindows(
+            false, onScreenWindowsOnly: true)
+        guard let display = content.displays.first(where: { $0.displayID == displayID })
+        else { return nil }
+        let desktopLayer = Int(CGWindowLevelForKey(.desktopWindow))
+        let windows = content.windows.filter {
+            $0.windowLayer <= desktopLayer && $0.frame.intersects(display.frame)
+        }
+        guard !windows.isEmpty else { return nil }
+        let configuration = SCStreamConfiguration()
+        configuration.width = Int(CGFloat(display.width) * scale)
+        configuration.height = Int(CGFloat(display.height) * scale)
+        configuration.showsCursor = false
+        configuration.captureResolution = .best
+        let filter = SCContentFilter(display: display, including: windows)
+        return try await SCScreenshotManager.captureImage(
+            contentFilter: filter, configuration: configuration)
+    }
+
     /// One window, by itself, without its shadow (the backdrop frames it instead).
     public func image(of window: CapturableWindow, scale: CGFloat) async throws -> CGImage {
         let configuration = SCStreamConfiguration()

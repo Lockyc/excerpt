@@ -68,12 +68,20 @@ final class CaptureCoordinator {
                 if case .window(let window) = await SelectionOverlay().run(
                     mode: .window(windows: windows), stills: stills)
                 {
-                    let scale = stills.first { $0.frame.intersects(window.frame) }?.scale ?? 2
+                    let still = stills.first { $0.frame.intersects(window.frame) }
+                    let scale = still?.scale ?? 2
                     var image = try await capturer.image(of: window, scale: scale)
                     if preferences.windowBackdrop {
+                        var fill = Backdrop.Fill.color(preferences.backdropColor)
+                        if preferences.backdropStyle == .wallpaper, let still,
+                            let wallpaper = try? await capturer.wallpaper(
+                                displayID: still.displayID, scale: scale)
+                        {
+                            fill = .image(wallpaper)
+                        }
                         image = Backdrop.compose(
                             image, padding: Int(preferences.windowPaddingPoints * scale),
-                            color: preferences.backdropColor)
+                            fill: fill)
                     }
                     deliver(image, scale: scale)
                 }

@@ -181,6 +181,9 @@ final class SettingsModel: ObservableObject {
     }
     @Published var windowBackdrop: Bool { didSet { preferences.windowBackdrop = windowBackdrop } }
     @Published var padding: Double { didSet { preferences.windowPaddingPoints = padding } }
+    @Published var backdropStyle: BackdropStyle {
+        didSet { preferences.backdropStyle = backdropStyle }
+    }
     @Published var backdrop: Color {
         didSet {
             guard let c = NSColor(backdrop).usingColorSpace(.sRGB) else { return }
@@ -199,6 +202,7 @@ final class SettingsModel: ObservableObject {
         thumbnailAtPointer = preferences.thumbnailAtPointer
         windowBackdrop = preferences.windowBackdrop
         padding = preferences.windowPaddingPoints
+        backdropStyle = preferences.backdropStyle
         let c = preferences.backdropColor
         backdrop = Color(
             .sRGB, red: Double(c.r) / 255, green: Double(c.g) / 255, blue: Double(c.b) / 255)
@@ -242,10 +246,18 @@ struct SettingsView: View {
                     Stepper("\(Int(model.padding)) pt", value: $model.padding, in: 0...200, step: 8)
                 }
                 .disabled(!model.windowBackdrop)
+                Picker("Backdrop", selection: $model.backdropStyle) {
+                    Text("Desktop wallpaper").tag(BackdropStyle.wallpaper)
+                    Text("Colour").tag(BackdropStyle.colour)
+                }
+                .disabled(!model.windowBackdrop)
                 ColorPicker("Backdrop colour", selection: $model.backdrop, supportsOpacity: false)
-                    .disabled(!model.windowBackdrop)
+                    .disabled(!model.windowBackdrop || model.backdropStyle == .wallpaper)
                 if !model.windowBackdrop {
-                    Text("Turn on the backdrop to set its padding and colour.")
+                    Text("Turn on the backdrop to set its padding and fill.")
+                        .font(.caption).foregroundStyle(.secondary)
+                } else if model.backdropStyle == .wallpaper {
+                    Text("The colour fills in when the wallpaper can't be captured.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }

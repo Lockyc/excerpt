@@ -94,7 +94,8 @@ never failed silently.
 - **Area:** the screen freezes when selection starts (a still of every display is taken first,
   and the selection is cut from it), so hover states and open menus survive. Crosshair, loupe,
   W×H readout; `Space` moves the selection, `Esc` cancels.
-- **Window:** hover-highlight, click; placed on a plain backdrop with padding (both settings).
+- **Window:** hover-highlight, click; placed on a padded backdrop, its display's wallpaper with a soft
+  shadow under the window, or a colour (all settings).
 - **Fullscreen:** the display under the cursor.
 - **Text:** select an area on the frozen screen; its text is copied in reading order and no file
   is saved. A note gives the line count, or says no text was found and leaves the clipboard

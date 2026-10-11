@@ -14,6 +14,7 @@ final class Preferences {
             "playSound": true,
             "windowBackdrop": true,
             "windowPaddingPoints": 40.0,
+            "backdropStyle": BackdropStyle.wallpaper.rawValue,
             "backdropColor": Self.defaultBackdropHex,
             "thumbnailSeconds": 15.0,
             "thumbnailAtPointer": false,
@@ -39,6 +40,12 @@ final class Preferences {
     var windowPaddingPoints: Double {
         get { defaults.double(forKey: "windowPaddingPoints") }
         set { defaults.set(newValue, forKey: "windowPaddingPoints") }
+    }
+    var backdropStyle: BackdropStyle {
+        get {
+            BackdropStyle(rawValue: defaults.string(forKey: "backdropStyle") ?? "") ?? .wallpaper
+        }
+        set { defaults.set(newValue.rawValue, forKey: "backdropStyle") }
     }
     var thumbnailSeconds: Double { max(1, defaults.double(forKey: "thumbnailSeconds")) }
     var thumbnailAtPointer: Bool {
@@ -94,4 +101,11 @@ final class Preferences {
     var store: LibraryStore {
         LibraryStore(folder: libraryFolder, naming: LibraryNaming(prefix: namePrefix))
     }
+}
+
+/// What fills the padding around a window capture.
+enum BackdropStyle: String, CaseIterable {
+    /// The desktop picture of the window's display; the colour when it can't be captured.
+    case wallpaper
+    case colour
 }
