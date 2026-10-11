@@ -5,7 +5,7 @@ import CoreGraphics
 /// keeps its size and every placement through its map.
 public enum Border {
     public static let points = 1.0
-    public static let color = RGBA(r: 160, g: 160, b: 160, a: 255)
+    public static let color = RGBA(r: 0, g: 0, b: 0, a: 255)
 
     /// Fills the frame along the inside of a `width`×`height` canvas, at least one pixel thick.
     public static func draw(in context: CGContext, width: Int, height: Int, scale: Double) {

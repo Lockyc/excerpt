@@ -153,7 +153,7 @@ Dock icon.
 
 Tools: `V` select · `A` arrow · `R` rectangle · `T` text · `H` highlight · `B` blur · `K` crop ·
 `C` cut. Six colours, three sizes (one control sets stroke and text). **Border** frames the
-render in a solid grey line drawn inside its edge, so a capture pasted into an email stands
+render in a solid black line drawn inside its edge, so a capture pasted into an email stands
 apart from the message. The arrow drag
 **starts at the head**. Crop snaps using the same gap detection as cuts.
 
@@ -173,13 +173,14 @@ through the coordinate map → border. The canvas caches the render up to the cu
 over it through the same Core code, so a drag repaints only annotations; a cut, crop or blur
 change re-renders the cache. Undo is a stack of document values.
 
-`⌘S` re-renders the primary, writes or updates the master, and closes the editor; Copy and For
-Claude save the same way before they run, then close it. Closing with unsaved edits asks.
+`⌘S` (Save) re-renders the primary, writes or updates the master, copies the render and closes
+the editor; with nothing unsaved it only copies and closes. For Claude saves the same way before
+it exports, then closes. Closing with unsaved edits asks.
 
 ## Export
 
-- **Copy** (`⌘C`) — the primary PNG, or in the editor the render of the edits it saves. **Drag** from the
-  thumbnail or the editor's title bar.
+- **Copy** — the thumbnail's copies the primary PNG; the editor's Save copies its render.
+  **Drag** from the thumbnail or the editor's title bar.
 - **For Claude** (`⌘⇧C`), shaped for Claude's ~1568px long-edge downscale:
   - tiles render at **1× (points)** — Retina doubles pixels without adding legible text;
   - a capture that fits is one image; taller ones split into ~1500px tiles overlapping ~100px,

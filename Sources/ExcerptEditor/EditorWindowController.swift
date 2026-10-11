@@ -52,7 +52,6 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
     private let undoButton = NSButton()
     private let redoButton = NSButton()
     private let deleteButton = NSButton()
-    private let copyButton = NSButton(title: "Copy", target: nil, action: nil)
     private let claudeButton = NSButton(title: "For Claude", target: nil, action: nil)
     private let saveButton = NSButton(title: "Save", target: nil, action: nil)
 
@@ -61,7 +60,8 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         didSet { update() }
     }
 
-    /// `save` writes the document (the app's `LibraryStore.saveEdits`); `copy` is handed a
+    /// `save` writes the document (the app's `LibraryStore.saveEdits`); `copy`, Save's last
+    /// step, is handed a
     /// closure that renders the current PNG, puts it on the pasteboard, reports any failure, the
     /// render's included, and returns whether it worked; `forClaude` exports the original with
     /// the current edits; `onClose` runs once the window has closed.
@@ -143,7 +143,7 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         borderButton.bezelStyle = .rounded
         borderButton.image = NSImage(systemSymbolName: "square", accessibilityDescription: nil)
         borderButton.imagePosition = .imageLeading
-        borderButton.toolTip = "A \(Int(Border.points))pt grey border around the image"
+        borderButton.toolTip = "A \(Int(Border.points))pt black border around the image"
         borderButton.target = self
         borderButton.action = #selector(borderToggled)
 
@@ -160,16 +160,13 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
             redoButton, symbol: "arrow.uturn.forward", label: "Redo", action: #selector(redoPressed)
         )
         configure(deleteButton, symbol: "trash", label: "Delete", action: #selector(deletePressed))
-        copyButton.target = self
-        copyButton.action = #selector(copyPressed)
-        copyButton.toolTip = "Save, copy the image and close (⌘C)"
         claudeButton.target = self
         claudeButton.action = #selector(forClaudePressed)
         saveButton.target = self
         saveButton.action = #selector(saveDocument)
 
         for control in [
-            tools, colors, widths, borderButton, undoButton, redoButton, deleteButton, copyButton,
+            tools, colors, widths, borderButton, undoButton, redoButton, deleteButton,
             claudeButton, saveButton,
         ] as [NSControl] {
             control.refusesFirstResponder = true
@@ -180,8 +177,8 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         let styleRow = Self.row([tools, colors, widths, borderButton])
         let actionRow = Self.row(
             [
-                snapHint, hiddenNote, spacer, undoButton, redoButton, deleteButton, copyButton,
-                claudeButton, saveButton,
+                snapHint, hiddenNote, spacer, undoButton, redoButton, deleteButton, claudeButton,
+                saveButton,
             ])
         let bar = NSStackView(views: [styleRow, actionRow])
         bar.orientation = .vertical
@@ -329,8 +326,9 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
             isPreparingForClaude
             ? "Preparing for Claude…"
             : "Save, copy tiles and text of the image for Claude and close (⇧⌘C)"
-        saveButton.isEnabled = model.isDirty
-        saveButton.toolTip = model.isDirty ? "Save and close (⌘S)" : "No unsaved changes"
+        saveButton.toolTip =
+            model.isDirty
+            ? "Save, copy the image and close (⌘S)" : "Copy the image and close (⌘S)"
         window?.isDocumentEdited = model.isDirty
         fitWidth()  // a column cut changes the rendered width
     }
@@ -363,7 +361,18 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         model.deleteSelection()
     }
 
-    @objc func copyPressed() {
+    /// ⇧⌘C: like Save, it writes unsaved edits first, so what Claude reads is what the library
+    /// holds.
+    @objc func forClaudePressed() {
+        finish {
+            forClaude(model.original, model.document)
+            return true
+        }
+    }
+
+    /// ⌘S: writes unsaved edits, puts the image on the clipboard and closes. With nothing
+    /// unsaved there is nothing to write, so an unedited capture stays one file.
+    @objc func saveDocument() {
         let original = model.original
         finish {
             let document = model.document
@@ -374,22 +383,7 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         }
     }
 
-    /// ⇧⌘C: like Copy, it saves first, so what Claude reads is what the library holds.
-    @objc func forClaudePressed() {
-        finish {
-            forClaude(model.original, model.document)
-            return true
-        }
-    }
-
-    /// ⌘S: with nothing unsaved there is nothing to write, so an unedited capture stays one file.
-    @objc func saveDocument() {
-        canvas.endText()
-        guard model.isDirty else { return }
-        finish { true }
-    }
-
-    /// Copy, For Claude and Save each end the edit: unsaved edits are written (the master keeps
+    /// Save and For Claude each end the edit: unsaved edits are written (the master keeps
     /// the original, so they stay adjustable), then `action` runs, then the window closes. A
     /// failed save or action leaves it open.
     private func finish(_ action: () -> Bool) {
@@ -537,7 +531,6 @@ final class EditorWindow: NSWindow {
         switch shortcut {
         case .undo: editor?.undo()
         case .redo: editor?.redo()
-        case .copy: editor?.copyPressed()
         default: return super.performKeyEquivalent(with: event)
         }
         return true
