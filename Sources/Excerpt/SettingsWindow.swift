@@ -41,6 +41,8 @@ final class SettingsWindowController {
             window.title = "Excerpt Settings"
             window.styleMask = [.titled, .closable]
             window.isReleasedWhenClosed = false
+            // The window doesn't take the form's size by itself; unsized, it's only a title bar.
+            window.setContentSize(hosting.view.fittingSize)
             self.window = window
             // A macOS shortcut turned on or off elsewhere shows as soon as Settings is back.
             keyObserver = NotificationCenter.default.addObserver(
