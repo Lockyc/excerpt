@@ -179,7 +179,8 @@ change re-renders the cache. Undo is a stack of document values.
   - tiles render at **1× (points)** — Retina doubles pixels without adding legible text;
   - a capture that fits is one image; taller ones split into ~1500px tiles overlapping ~100px,
     so every line appears whole in some tile;
-  - `text.md` holds Vision OCR in reading order, each cut written in as `[⋯ 1,240 px hidden]`;
+  - `text.md` holds Vision OCR in reading order, panes on different backgrounds one after the
+    other (`ReadingOrder.blocks`), each cut written in as `[⋯ 1,240 px hidden]`;
   - the clipboard receives `@<path>` references to every tile and `text.md`;
   - both come from the render, never the original, so a cut band never reaches Claude and a
     blurred area reaches it only as the blur's noised blocks, from which no text is read;
@@ -199,9 +200,9 @@ change re-renders the cache. Undo is a stack of document values.
   `EditDocument.maximumAnnotations` annotations read as damaged, and a capture cut into over
   `CaptureText.maximumRegions` regions is refused before any is read.
 
-  Known limits: `text.md` reads two-column layouts row by row; `@path` references assume a home
-  folder without spaces; Vision can miss text on busy synthetic backgrounds. Tiles split on height
-  only, so a wide capture reaches Claude downscaled.
+  Known limits: `text.md` reads columns that share a background row by row; `@path` references
+  assume a home folder without spaces; Vision can miss text on busy synthetic backgrounds. Tiles
+  split on height only, so a wide capture reaches Claude downscaled.
 
 ## Install and release
 
