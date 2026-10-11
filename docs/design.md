@@ -152,9 +152,10 @@ for PNG, not the default). Fits to width; tall captures scroll. Floats above oth
 Dock icon.
 
 Tools: `V` select · `A` arrow · `R` rectangle · `T` text · `H` highlight · `B` blur · `K` crop ·
-`C` cut. Six colours, three sizes (one control sets stroke and text). **Border** frames the
-render in a solid black line drawn inside its edge, so a capture pasted into an email stands
-apart from the message. The arrow drag
+`C` cut. Six colours, three sizes (one control sets stroke and text). **Border** drops down
+an on/off switch, the six colours and three widths (2, 4, 8pt); it frames the render in a solid
+line drawn inside its edge, so a capture pasted into an email stands apart from the message.
+Choosing a colour or width turns it on. A new editor starts on the arrow. The arrow drag
 **starts at the head**. Crop snaps using the same gap detection as cuts.
 
 **Blur is destructive**: pixelation over noise. Blur rects under 12pt apart are one group,

@@ -47,9 +47,18 @@ import Testing
     @Test func borderIsOneUndoableStep() {
         let m = model()
         m.setBorder(true)
-        #expect(m.document.border && m.isDirty)
+        #expect(m.document.border == .initial && m.isDirty)
         m.undo()
-        #expect(!m.document.border && !m.isDirty)
+        #expect(m.document.border == nil && !m.isDirty)
+    }
+
+    @Test func choosingABorderStyleTurnsItOnAndIsRemembered() {
+        let m = model()
+        m.setBorderWidth(.thick)
+        #expect(m.document.border == Border(color: .black, width: .thick))
+        m.setBorder(false)
+        m.setBorderColor(.red)
+        #expect(m.document.border == Border(color: .red, width: .thick))
     }
 
     @Test func aNoOpRecordsNothing() {

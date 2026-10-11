@@ -101,7 +101,7 @@ public enum Renderer {
         _ original: CGImage, edits: EditDocument, style: SeamStyle = .standard
     ) -> RenderResult {
         let base = renderBase(original, edits: edits, style: style)
-        guard edits.border || edits.annotations.contains(where: { !$0.shape.isBlur }) else {
+        guard edits.border != nil || edits.annotations.contains(where: { !$0.shape.isBlur }) else {
             return base
         }
         let width = base.image.width
@@ -111,9 +111,7 @@ public enum Renderer {
         AnnotationRenderer.draw(
             edits.annotations, map: base.map, scale: edits.scale, in: context,
             canvasHeight: height)
-        if edits.border {
-            Border.draw(in: context, width: width, height: height, scale: edits.scale)
-        }
+        edits.border?.draw(in: context, width: width, height: height, scale: edits.scale)
         return RenderResult(image: context.makeImage()!, map: base.map)
     }
 

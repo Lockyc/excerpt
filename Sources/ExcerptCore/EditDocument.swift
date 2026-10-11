@@ -55,8 +55,9 @@ public struct PixelRect: Codable, Hashable, Sendable {
 }
 
 /// Everything the user changed about a capture, stored in the master PNG: cuts, an optional
-/// crop and the annotations, all in original pixels, and whether the render has a border. `scale` is the capture's pixels-per-point,
-/// which turns pixel lengths into the points shown on labels and sizes strokes and text.
+/// crop and the annotations, all in original pixels, and an optional border. `scale` is the
+/// capture's pixels-per-point, which turns pixel lengths into the points shown on labels and sizes
+/// strokes and text.
 public struct EditDocument: Codable, Equatable, Sendable {
     /// Version 2 carries `crop` and `annotations`, version 3 `border`; an older build rejects a
     /// newer document rather than open it without them, so its next save can't erase them.
@@ -66,15 +67,15 @@ public struct EditDocument: Codable, Equatable, Sendable {
     public var cuts: [Cut]
     public var crop: PixelRect?
     public var annotations: [Annotation]
-    /// A `Border` around the render.
-    public var border: Bool
+    /// The frame around the render; nil for none.
+    public var border: Border?
     /// Random per document and stored with it: seeds blur noise so it can't be recomputed from
     /// the blur rect alone.
     public var salt: UInt64
 
     public init(
         scale: Double, cuts: [Cut] = [], crop: PixelRect? = nil, annotations: [Annotation] = [],
-        border: Bool = false, salt: UInt64 = .random(in: .min ... .max)
+        border: Border? = nil, salt: UInt64 = .random(in: .min ... .max)
     ) {
         self.salt = salt
         self.scale = scale
@@ -103,9 +104,20 @@ public struct EditDocument: Codable, Equatable, Sendable {
         cuts = try container.decode([Cut].self, forKey: .cuts)
         crop = try container.decodeIfPresent(PixelRect.self, forKey: .crop)
         annotations = try container.decodeIfPresent([Annotation].self, forKey: .annotations) ?? []
-        border = try container.decodeIfPresent(Bool.self, forKey: .border) ?? false
+        border = try Self.decodeBorder(from: container)
         salt =
             try container.decodeIfPresent(UInt64.self, forKey: .salt) ?? .random(in: .min ... .max)
+    }
+
+    /// A version 3 border was first a bare `true` for one fixed frame, and documents were saved
+    /// in that shape; it reads as the initial border.
+    private static func decodeBorder(
+        from container: KeyedDecodingContainer<CodingKeys>
+    ) throws -> Border? {
+        if let on = try? container.decodeIfPresent(Bool.self, forKey: .border) {
+            return on ? .initial : nil
+        }
+        return try container.decodeIfPresent(Border.self, forKey: .border)
     }
 
     /// Always writes `currentVersion`: whatever was read is now in this build's shape.
@@ -116,11 +128,11 @@ public struct EditDocument: Codable, Equatable, Sendable {
         try container.encode(cuts, forKey: .cuts)
         try container.encodeIfPresent(crop, forKey: .crop)
         try container.encode(annotations, forKey: .annotations)
-        if border { try container.encode(border, forKey: .border) }
+        try container.encodeIfPresent(border, forKey: .border)
         try container.encode(salt, forKey: .salt)
     }
 
-    public var isEmpty: Bool { cuts.isEmpty && crop == nil && annotations.isEmpty && !border }
+    public var isEmpty: Bool { cuts.isEmpty && crop == nil && annotations.isEmpty && border == nil }
 
     /// An id no annotation in this document has.
     public var nextAnnotationID: Int {

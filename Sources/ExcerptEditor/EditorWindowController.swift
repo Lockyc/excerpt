@@ -47,6 +47,8 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
     private let colors = NSSegmentedControl()
     private let widths = NSSegmentedControl()
     private let borderButton = NSButton(title: "Border", target: nil, action: nil)
+    private let borderPanel: BorderPanel
+    private let borderPopover = NSPopover()
     private let snapHint = NSTextField(labelWithString: "")
     private let hiddenNote = NSTextField(labelWithString: "")
     private let undoButton = NSButton()
@@ -77,6 +79,7 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         self.onClose = onClose
         model = EditorModel(original: capture.original, document: capture.edits)
         canvas = CanvasView(model: model)
+        borderPanel = BorderPanel(model: model)
         let window = EditorWindow(
             contentRect: CGRect(x: 0, y: 0, width: 800, height: 600),
             styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered,
@@ -139,11 +142,13 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
 
         borderButton.setButtonType(.pushOnPushOff)
         borderButton.bezelStyle = .rounded
-        borderButton.image = Self.symbol("square", label: nil)
-        borderButton.imagePosition = .imageLeading
-        borderButton.toolTip = "A \(Int(Border.points))pt black border around the image"
+        borderButton.image = Self.symbol("chevron.down", label: nil)
+        borderButton.imagePosition = .imageTrailing
+        borderButton.toolTip = "Border colour and width"
         borderButton.target = self
-        borderButton.action = #selector(borderToggled)
+        borderButton.action = #selector(borderPressed)
+        borderPopover.contentViewController = borderPanel
+        borderPopover.behavior = .transient
 
         for label in [snapHint, hiddenNote] {
             label.textColor = .secondaryLabelColor
@@ -241,7 +246,7 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         "\(Int(width.points))pt stroke · \(Int(width.textPoints))pt text"
     }
 
-    private static func swatch(_ color: Palette) -> NSImage {
+    static func swatch(_ color: Palette) -> NSImage {
         NSImage(size: CGSize(width: 18, height: 18), flipped: false) { rect in
             NSColor(cgColor: color.rgba.cgColor)?.setFill()
             NSBezierPath(ovalIn: rect.insetBy(dx: 1, dy: 1)).fill()
@@ -290,7 +295,8 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         tools.selectedSegment = Tool.allCases.firstIndex(of: model.tool) ?? 0
         colors.selectedSegment = Palette.allCases.firstIndex(of: model.color) ?? 0
         widths.selectedSegment = StrokeWidth.allCases.firstIndex(of: model.width) ?? 0
-        borderButton.state = model.document.border ? .on : .off
+        borderButton.state = model.document.border == nil ? .off : .on
+        borderPanel.refresh()
         hiddenNote.stringValue = model.hiddenNote(map: canvas.base.map)
         let limit = model.tool == .cut ? model.cutLimitNote : ""
         snapHint.stringValue =
@@ -351,9 +357,17 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         model.setWidth(StrokeWidth.allCases[widths.selectedSegment])
     }
 
-    @objc private func borderToggled() {
+    /// Drops down the border settings; the button stays lit while the image has a border.
+    @objc private func borderPressed() {
         canvas.endText()
-        model.setBorder(borderButton.state == .on)
+        borderButton.state = model.document.border == nil ? .off : .on
+        if borderPopover.isShown {
+            borderPopover.close()
+        } else {
+            borderPanel.refresh()
+            borderPopover.show(
+                relativeTo: borderButton.bounds, of: borderButton, preferredEdge: .maxY)
+        }
     }
 
     @objc private func undoPressed() { undo() }

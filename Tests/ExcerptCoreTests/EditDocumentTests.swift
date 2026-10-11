@@ -71,11 +71,18 @@ import Testing
     }
 
     @Test func borderRoundTripsAndReadsOffWhenAbsent() throws {
-        let doc = EditDocument(scale: 2, border: true)
-        #expect(try EditDocument.decode(doc.encoded()).border)
+        let doc = EditDocument(scale: 2, border: Border(color: .blue, width: .thick))
+        #expect(try EditDocument.decode(doc.encoded()).border == doc.border)
         #expect(!doc.isEmpty)
         let json = Data(#"{"version":2,"scale":2,"cuts":[]}"#.utf8)
-        #expect(try !EditDocument.decode(json).border)
+        #expect(try EditDocument.decode(json).border == nil)
+    }
+
+    @Test func aBareTrueBorderReadsAsTheInitialOne() throws {
+        let on = Data(#"{"version":3,"scale":2,"cuts":[],"border":true}"#.utf8)
+        #expect(try EditDocument.decode(on).border == .initial)
+        let off = Data(#"{"version":3,"scale":2,"cuts":[],"border":false}"#.utf8)
+        #expect(try EditDocument.decode(off).border == nil)
     }
 
     @Test func emptinessCoversCropAndAnnotations() {

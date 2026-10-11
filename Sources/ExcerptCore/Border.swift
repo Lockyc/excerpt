@@ -3,22 +3,47 @@ import CoreGraphics
 /// The solid frame a document can draw around its render, so a capture pasted into an email or
 /// a page stands apart from it. Drawn inside the edge, over the outermost pixels, so the render
 /// keeps its size and every placement through its map.
-public enum Border {
-    public static let points = 1.0
-    public static let color = RGBA(r: 0, g: 0, b: 0, a: 255)
+public struct Border: Codable, Equatable, Sendable {
+    public enum Width: String, Codable, CaseIterable, Sendable {
+        case thin
+        case medium
+        case thick
+
+        public var points: Double {
+            switch self {
+            case .thin: 2
+            case .medium: 4
+            case .thick: 8
+            }
+        }
+    }
+
+    public var color: Palette
+    public var width: Width
+
+    /// What turning the border on gives first.
+    public static let initial = Border(color: .black, width: .medium)
+
+    public init(color: Palette, width: Width) {
+        self.color = color
+        self.width = width
+    }
 
     /// Fills the frame along the inside of a `width`×`height` canvas, at least one pixel thick.
-    public static func draw(in context: CGContext, width: Int, height: Int, scale: Double) {
-        let w = CGFloat(min(max(1, (points * scale).rounded()), Double(min(width, height))))
-        let canvasWidth = CGFloat(width)
-        let canvasHeight = CGFloat(height)
+    public func draw(
+        in context: CGContext, width canvasWidth: Int, height canvasHeight: Int, scale: Double
+    ) {
+        let w = CGFloat(
+            min(max(1, (width.points * scale).rounded()), Double(min(canvasWidth, canvasHeight))))
+        let fullWidth = CGFloat(canvasWidth)
+        let fullHeight = CGFloat(canvasHeight)
         context.saveGState()
-        context.setFillColor(color.cgColor)
+        context.setFillColor(color.rgba.cgColor)
         context.fill([
-            CGRect(x: 0, y: 0, width: canvasWidth, height: w),
-            CGRect(x: 0, y: canvasHeight - w, width: canvasWidth, height: w),
-            CGRect(x: 0, y: 0, width: w, height: canvasHeight),
-            CGRect(x: canvasWidth - w, y: 0, width: w, height: canvasHeight),
+            CGRect(x: 0, y: 0, width: fullWidth, height: w),
+            CGRect(x: 0, y: fullHeight - w, width: fullWidth, height: w),
+            CGRect(x: 0, y: 0, width: w, height: fullHeight),
+            CGRect(x: fullWidth - w, y: 0, width: w, height: fullHeight),
         ])
         context.restoreGState()
     }

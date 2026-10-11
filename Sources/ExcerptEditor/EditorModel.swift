@@ -30,6 +30,8 @@ final class EditorModel {
     }
     private(set) var color: Palette = .initial
     private(set) var width: StrokeWidth = .initial
+    /// What the border is, or becomes when turned on: the document's own while it has one.
+    private(set) var borderStyle: Border = .initial
     var selection: Selection? { didSet { onChange?() } }
     /// View points per rendered pixel, so hit slop and minimum drags stay the same size on screen.
     var viewScale: Double = 1 {
@@ -46,6 +48,7 @@ final class EditorModel {
         self.original = original
         self.document = document
         self.saved = document
+        if let border = document.border { borderStyle = border }
     }
 
     /// Edits not yet written by ⌘S.
@@ -134,7 +137,19 @@ final class EditorModel {
     func markSaved() { saved = document }
 
     /// Turns the render's border on or off, as one undoable step.
-    func setBorder(_ on: Bool) { apply { $0.border = on } }
+    func setBorder(_ on: Bool) { apply { $0.border = on ? borderStyle : nil } }
+
+    /// Recolours the border, turning it on: choosing a border colour means wanting one.
+    func setBorderColor(_ color: Palette) {
+        borderStyle.color = color
+        setBorder(true)
+    }
+
+    /// Resizes the border, turning it on.
+    func setBorderWidth(_ width: Border.Width) {
+        borderStyle.width = width
+        setBorder(true)
+    }
 
     /// Sets the colour new annotations get, and recolours the selected annotation.
     func setColor(_ color: Palette) {

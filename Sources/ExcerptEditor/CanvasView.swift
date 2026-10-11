@@ -99,10 +99,8 @@ final class CanvasView: NSView, NSTextFieldDelegate {
         AnnotationRenderer.draw(
             model.displayDocument.annotations, map: base.map, scale: model.document.scale,
             in: context, canvasHeight: height)
-        if model.document.border {
-            Border.draw(
-                in: context, width: base.image.width, height: height, scale: model.document.scale)
-        }
+        model.document.border?.draw(
+            in: context, width: base.image.width, height: height, scale: model.document.scale)
         context.restoreGState()
 
         drawChrome(in: context)

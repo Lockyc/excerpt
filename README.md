@@ -58,7 +58,7 @@ shown as a thumbnail with **Edit**, **For Claude** and **Close**. The editor has
 arrow, rectangle, text, highlight, blur, crop and **cut** (`C`): drag across the rows or columns
 to remove, and the join becomes a torn seam. Cut and blurred content never reaches the saved
 file; the original and your edits stay in a separate `… original.png`, so reopening a capture
-lets you adjust them. **Border** frames the image in a thin black line, so a screenshot pasted
+lets you adjust them. **Border** frames the image in a solid line of your colour and width, so a screenshot pasted
 into an email stands apart from it. **Save** (⌘S) saves, copies the image and closes the editor.
 
 **For Claude** (⇧⌘C in the editor) writes the capture as tiles sized for Claude to read plus a
