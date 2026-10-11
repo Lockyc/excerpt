@@ -54,6 +54,8 @@ final class SettingsWindowController {
         NSApp.activate(ignoringOtherApps: true)
         window?.center()
         window?.makeKeyAndOrderFront(nil)
+        // Nothing starts focused, so keys pressed as the window opens can't edit the prefix.
+        window?.makeFirstResponder(nil)
     }
 }
 
