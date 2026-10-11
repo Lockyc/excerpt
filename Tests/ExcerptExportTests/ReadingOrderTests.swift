@@ -108,3 +108,80 @@ import Testing
         #expect(ReadingOrder.text(lines, write: { "> " + $0.text }) == ["> x"])
     }
 }
+
+@Suite struct ColumnTests {
+    /// Runs `height` high, one per y, from `x` to `x + 100`, named `prefix` and their index.
+    static func column(_ prefix: String, x: Int, ys: [Int], height: Int = 20) -> [RecognizedText] {
+        ys.enumerated().map { index, y in
+            RecognizedText("\(prefix)\(index + 1)", CGRect(x: x, y: y, width: 100, height: height))
+        }
+    }
+
+    static func texts(_ blocks: [[TextLine]]) -> [[String]] { blocks.map { $0.map(\.text) } }
+
+    /// A menu over a terminal: two panes on different backgrounds whose lines are spaced
+    /// differently, so they only meet by chance.
+    static let menu = column("m", x: 10, ys: [0, 32, 64, 96])
+    static let terminal = column("t", x: 300, ys: [12, 34, 56, 78, 100])
+
+    @Test func panesOnDifferentBackgroundsReadOneThenTheOther() {
+        var asked: [(Range<Int>, Range<Int>)] = []
+        let blocks = ReadingOrder.blocks(Self.menu + Self.terminal) { gutter, rows in
+            asked.append((gutter, rows))
+            return gutter.contains(200)
+        }
+        #expect(
+            Self.texts(blocks) == [["m1", "m2", "m3", "m4"], ["t1", "t2", "t3", "t4", "t5"]])
+        #expect(asked.contains { $0.0 == 110..<300 && $0.1 == 0..<120 })
+    }
+
+    @Test func panesOnOneBackgroundReadRowByRow() {
+        let blocks = ReadingOrder.blocks(Self.menu + Self.terminal) { _, _ in false }
+        #expect(blocks.count == 1)
+        #expect(blocks[0].first?.text == "m1")
+    }
+
+    @Test func rowsThatLineUpStayWholeAcrossAChangedBackground() {
+        // A spreadsheet's shaded row numbers beside its cells.
+        let numbers = Self.column("", x: 0, ys: [0, 30, 60, 90])
+        let cells = Self.column("cell", x: 200, ys: [1, 31, 59, 90])
+        let blocks = ReadingOrder.blocks(numbers + cells) { _, _ in true }
+        #expect(Self.texts(blocks) == [["1 cell1", "2 cell2", "3 cell3", "4 cell4"]])
+    }
+
+    @Test func aGapNarrowerThanALineIsNotAGutter() {
+        let left = Self.column("a", x: 0, ys: [0, 32, 64])
+        let right = Self.column("b", x: 110, ys: [14, 46])
+        #expect(ReadingOrder.blocks(left + right) { _, _ in true }.count == 1)
+    }
+
+    @Test func aBarAcrossTheTopIsReadBeforeThePanes() {
+        let bar = RecognizedText("bar", CGRect(x: 0, y: -40, width: 420, height: 20))
+        let blocks = ReadingOrder.blocks([bar] + Self.menu + Self.terminal) { _, _ in true }
+        #expect(
+            Self.texts(blocks) == [
+                ["bar"], ["m1", "m2", "m3", "m4"], ["t1", "t2", "t3", "t4", "t5"],
+            ])
+    }
+
+    @Test func linesAboveAndBelowPanesJoinTheirNeighbours() {
+        let above = Self.column("above", x: 0, ys: [-70, -40])
+        let below = Self.column("below", x: 0, ys: [150])
+        // Only the panes' own rows change background across the gutter.
+        let blocks = ReadingOrder.blocks(above + Self.menu + Self.terminal + below) { _, rows in
+            rows.lowerBound >= 0 && rows.upperBound <= 120
+        }
+        #expect(Self.texts(blocks).first == ["above1", "above2"])
+        #expect(Self.texts(blocks).last == ["below1"])
+        #expect(blocks.count == 4)
+    }
+
+    @Test func blocksAreWrittenWithABlankLineBetween() {
+        let blocks = ReadingOrder.blocks(Self.menu + Self.terminal) { _, _ in true }
+        #expect(
+            ReadingOrder.text(blocks: blocks) == [
+                "m1", "m2", "m3", "m4", "", "t1", "t2", "t3", "t4", "t5",
+            ])
+        #expect(ReadingOrder.blocks([]) { _, _ in true }.isEmpty)
+    }
+}
