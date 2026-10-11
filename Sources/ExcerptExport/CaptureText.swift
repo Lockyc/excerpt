@@ -144,7 +144,38 @@ public enum CaptureText {
                 }
             }
         }
-        return compose(runs, map: map, scale: scale)
+        return compose(runs, map: map, scale: scale) { gutter, rows in
+            backgroundChanges(image, gutter: gutter, rows: rows)
+        }
+    }
+
+    /// Two pixels differ in background when a channel differs by more than this.
+    static let backgroundTolerance = 16
+    /// The fraction of rows whose two ends of a gutter must differ for the background to change.
+    static let backgroundChangedFraction = 0.75
+
+    /// Whether `image`'s background changes across `gutter` over `rows`: the pixels at the
+    /// gutter's two ends differ on at least `backgroundChangedFraction` of the rows. Both are
+    /// clamped to the image; false when nothing of them is in it.
+    public static func backgroundChanges(
+        _ image: CGImage, gutter: Range<Int>, rows: Range<Int>
+    ) -> Bool {
+        let rows = rows.clamped(to: 0..<image.height)
+        let columns = gutter.clamped(to: 0..<image.width)
+        guard columns.count >= 2, !rows.isEmpty else { return false }
+        func column(_ x: Int) -> PixelBuffer {
+            PixelBuffer(
+                image.cropping(
+                    to: CGRect(x: x, y: rows.lowerBound, width: 1, height: rows.count))!)
+        }
+        let (left, right) = (column(columns.lowerBound), column(columns.upperBound - 1))
+        let differing = (0..<rows.count).filter { y in
+            let (a, b) = (left[x: 0, y: y], right[x: 0, y: y])
+            return [(a.r, b.r), (a.g, b.g), (a.b, b.b)].contains {
+                abs(Int($0) - Int($1)) > backgroundTolerance
+            }
+        }
+        return Double(differing.count) >= backgroundChangedFraction * Double(rows.count)
     }
 
     /// The text of an image with nothing cut: what Capture Text copies.
@@ -171,8 +202,13 @@ public enum CaptureText {
     /// The text of `runs` (rendered pixels): lines in reading order, a row cut on its own line
     /// where it was made, and a column cut between the runs either side of it on each line it
     /// splits. A column cut no line spans is written on its own line at the top. Runs whose bounds
-    /// aren't `usable` are dropped. Empty when there is neither text nor a cut.
-    public static func compose(_ runs: [RecognizedText], map: RenderMap, scale: Double) -> String {
+    /// aren't `usable` are dropped. Each kept segment's runs are read as `ReadingOrder.blocks`
+    /// split by `backgroundChanges`, which never splits by default. Empty when there is neither
+    /// text nor a cut.
+    public static func compose(
+        _ runs: [RecognizedText], map: RenderMap, scale: Double,
+        backgroundChanges: ReadingOrder.BackgroundChange = { _, _ in false }
+    ) -> String {
         let runs = runs.filter { usable($0.bounds) }
         let columnSegments = map.columns.segments
         func column(_ run: RecognizedText) -> Int {
@@ -205,8 +241,10 @@ public enum CaptureText {
                 gaps.removeFirst()
             }
             let rows = segment.destination..<(segment.destination + segment.source.count)
-            let lines = ReadingOrder.lines(runs.filter { rows.contains(Int($0.bounds.midY)) })
-            body += ReadingOrder.text(lines, write: write)
+            let blocks = ReadingOrder.blocks(
+                runs.filter { rows.contains(Int($0.bounds.midY)) },
+                backgroundChanges: backgroundChanges)
+            body += ReadingOrder.text(blocks: blocks, write: write)
         }
         body += gaps.map { marker(removedPixels: $0.removed, scale: scale) }
         let unspanned = map.columns.gaps.indices.filter { !spanned.contains($0) }.map {

@@ -193,6 +193,36 @@ import Testing
             try CaptureText.read(image, scale: 2, recognizer: ColourWords()) == "alpha\n\nomega\n")
     }
 
+    static let grey = RGBA(r: 230, g: 230, b: 230, a: 255)
+
+    @Test func panesOnDifferentBackgroundsAreReadOneAfterTheOther() throws {
+        // A grey pane beside a white one, their lines spaced so they don't pair off.
+        let painted = PixelBuffer(
+            ColourWords.page(
+                width: 400, height: 60,
+                words: ["alpha": (10, 10), "beta": (10, 24), "left": (250, 15), "right": (250, 29)])
+        )
+        let image = Fixtures.paint(width: 400, height: 60) { x, y in
+            let pixel = painted[x: x, y: y]
+            return pixel == ColourWords.white && x < 200 ? Self.grey : pixel
+        }
+        #expect(
+            try CaptureText.read(image, scale: 1, recognizer: ColourWords())
+                == "alpha\nbeta\n\nleft\nright\n")
+    }
+
+    @Test func aBackgroundChangesWhereMostRowsDifferAcrossTheGutter() {
+        // Grey left of x = 100 on the top 60 rows, white everywhere else.
+        let image = Fixtures.paint(width: 200, height: 100) { x, y in
+            x < 100 && y < 60 ? Self.grey : ColourWords.white
+        }
+        #expect(CaptureText.backgroundChanges(image, gutter: 80..<120, rows: 0..<60))
+        #expect(!CaptureText.backgroundChanges(image, gutter: 80..<120, rows: 0..<100))
+        #expect(!CaptureText.backgroundChanges(image, gutter: 120..<180, rows: 0..<60))
+        #expect(CaptureText.backgroundChanges(image, gutter: -20..<120, rows: -5..<60))
+        #expect(!CaptureText.backgroundChanges(image, gutter: 80..<120, rows: 200..<300))
+    }
+
     @Test func regionsSkipSeamsAndSliceTallSegments() {
         let map = Renderer.render(
             Fixtures.sheet(width: 300, height: 7_000),
