@@ -286,8 +286,23 @@ struct SettingsView: View {
             }
         }
         ForEach([hotKeys.refusals[action], state?.note].compactMap { $0 }, id: \.self) { message in
-            Text(message).font(.caption).foregroundStyle(.orange)
+            HStack {
+                Text(message).foregroundStyle(.orange)
+                if message == state?.note, state?.registration == .system {
+                    Button("Open Keyboard Shortcuts…") { Self.openKeyboardShortcuts() }
+                        .buttonStyle(.link)
+                        .help("Turn the macOS shortcut off to give it to Excerpt")
+                }
+            }
+            .font(.caption)
         }
+    }
+
+    private static func openKeyboardShortcuts() {
+        NSWorkspace.shared.open(
+            URL(
+                string: "x-apple.systempreferences:com.apple.Keyboard-Settings.extension?Shortcuts")!
+        )
     }
 
     private static func color(_ state: HotKeyState?, recording: Bool) -> Color {

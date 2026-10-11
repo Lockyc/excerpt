@@ -22,7 +22,7 @@ public enum HotKeyVerdict: Equatable, Sendable {
         switch self {
         case .accepted: nil
         case .heldBySystem:
-            "\(binding.display) is a macOS shortcut: turn it off in System Settings → Keyboard → Keyboard Shortcuts for Excerpt to get it"
+            "\(binding.display) is a macOS shortcut"
         case .taken(let action): "\(binding.display) is already \(action)"
         case .needsModifier: "Add ⌘, ⌃ or ⌥: \(binding.display) alone would block typing it"
         case .unknownKey: "That key can't be a hotkey"
