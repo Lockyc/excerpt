@@ -256,6 +256,9 @@ private struct ImageFile {
                 edits = .unreadable
             }
         } else {
+            guard type != UTType.jpeg.identifier || JPEGStructure.isComplete(data) else {
+                throw ImageInputError.notAnImage(path)
+            }
             edits = .none
         }
         self.source = source

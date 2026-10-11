@@ -178,6 +178,24 @@ import UniformTypeIdentifiers
         #expect(throws: ImageInputError.notAnImage(url.path)) { try ImageInput.load(url) }
     }
 
+    /// ImageIO decodes a JPEG cut short as a whole image, its missing rows grey; it is refused.
+    @Test(arguments: [false, true]) func aTruncatedJPEGFailsWithItsPath(progressive: Bool) throws {
+        let url = try Self.folder().appendingPathComponent("cut-short.jpg")
+        try Self.write(
+            Fixtures.sheet(width: 200, height: 200), as: .jpeg, dpi: nil, to: url,
+            properties: [
+                kCGImagePropertyJFIFDictionary: [kCGImagePropertyJFIFIsProgressive: progressive]
+            ])
+        let jpeg = try Data(contentsOf: url)
+        _ = try ImageInput.load(url)
+        try (jpeg + Data([0, 0, 0x12, 0x34])).write(to: url)
+        _ = try ImageInput.load(url)
+        for length in [jpeg.count / 2, jpeg.count - 2] {
+            try jpeg.prefix(length).write(to: url)
+            #expect(throws: ImageInputError.notAnImage(url.path)) { try ImageInput.load(url) }
+        }
+    }
+
     /// Review focus: a FIFO would block a read forever; it is refused at once.
     @Test(.timeLimit(.minutes(1))) func aFIFOOrDeviceIsRefused() throws {
         let fifo = try Self.folder().appendingPathComponent("pipe.png")
