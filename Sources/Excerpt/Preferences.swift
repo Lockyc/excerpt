@@ -16,6 +16,7 @@ final class Preferences {
             "windowPaddingPoints": 40.0,
             "backdropColor": Self.defaultBackdropHex,
             "thumbnailSeconds": 15.0,
+            "thumbnailAtPointer": false,
         ])
     }
 
@@ -40,6 +41,10 @@ final class Preferences {
         set { defaults.set(newValue, forKey: "windowPaddingPoints") }
     }
     var thumbnailSeconds: Double { max(1, defaults.double(forKey: "thumbnailSeconds")) }
+    var thumbnailAtPointer: Bool {
+        get { defaults.bool(forKey: "thumbnailAtPointer") }
+        set { defaults.set(newValue, forKey: "thumbnailAtPointer") }
+    }
 
     /// Stored as `RRGGBB` hex; anything but exactly six hex digits (after an optional `#`) reads as the default.
     var backdropColor: RGBA {

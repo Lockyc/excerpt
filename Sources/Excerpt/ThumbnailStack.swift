@@ -3,13 +3,18 @@ import ExcerptCapture
 
 /// Large floating previews in the bottom-left corner, newest at the bottom. Actions are always
 /// visible. Each closes after the configured delay (paused while the pointer is over it) or as
-/// soon as its file is dragged out.
+/// soon as its file is dragged out. With `thumbnailAtPointer` on, the newest first appears
+/// centred on the pointer, with no delay running, and docks in the corner once the pointer
+/// leaves `PointerPlacement`'s safety zone around it.
 @MainActor
 final class ThumbnailStack {
     private let preferences: Preferences
     private let onEdit: (URL) -> Void
     private let onClaude: (URL) -> Void
     private var panels: [ThumbnailPanel] = []
+    /// The panel held at the pointer, which `layout` leaves where it is.
+    private var atPointer: ThumbnailPanel?
+    private var pointerMonitors: [Any] = []
     static let width: CGFloat = 300
     static let margin: CGFloat = 20
 
@@ -23,17 +28,64 @@ final class ThumbnailStack {
     }
 
     func show(url: URL, image: CGImage) {
+        dock()
+        let held = preferences.thumbnailAtPointer
         let panel = ThumbnailPanel(
-            url: url, image: image, seconds: preferences.thumbnailSeconds, onEdit: onEdit,
-            onClaude: onClaude
+            url: url, image: image, seconds: preferences.thumbnailSeconds, held: held,
+            onEdit: onEdit, onClaude: onClaude
         ) { [weak self] closing in
-            self?.panels.removeAll { $0 === closing }
-            self?.layout()
+            guard let self else { return }
+            if closing === atPointer { stopWatchingPointer() }
+            panels.removeAll { $0 === closing }
+            layout()
         }
         panels.insert(panel, at: 0)
         if panels.count > 4 { panels.last?.dismiss() }
+        if held { holdAtPointer(panel) }
         layout()
         panel.orderFrontRegardless()
+    }
+
+    private func holdAtPointer(_ panel: ThumbnailPanel) {
+        let pointer = NSEvent.mouseLocation
+        let screen =
+            NSScreen.screens.first { NSMouseInRect(pointer, $0.frame, false) } ?? NSScreen.main
+        guard let visible = screen?.visibleFrame else { return }
+        panel.setFrame(
+            PointerPlacement.frame(size: panel.frame.size, centredOn: pointer, within: visible),
+            display: false)
+        atPointer = panel
+        let check: (NSEvent) -> Void = { [weak self] _ in
+            MainActor.assumeIsolated { self?.pointerMoved() }
+        }
+        pointerMonitors = [
+            NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved, handler: check),
+            NSEvent.addLocalMonitorForEvents(matching: .mouseMoved) { event in
+                check(event)
+                return event
+            },
+        ].compactMap { $0 }
+    }
+
+    private func pointerMoved() {
+        guard let panel = atPointer,
+            !PointerPlacement.isInSafetyZone(NSEvent.mouseLocation, around: panel.frame)
+        else { return }
+        dock()
+    }
+
+    /// Sends the panel held at the pointer to its corner slot and starts its delay.
+    private func dock() {
+        guard let panel = atPointer else { return }
+        stopWatchingPointer()
+        layout(animating: panel)
+        panel.release()
+    }
+
+    private func stopWatchingPointer() {
+        pointerMonitors.forEach(NSEvent.removeMonitor)
+        pointerMonitors = []
+        atPointer = nil
     }
 
     /// Shows For Claude as busy on the thumbnails whose capture `isCapture` picks while its
@@ -44,11 +96,17 @@ final class ThumbnailStack {
         }
     }
 
-    private func layout() {
+    private func layout(animating moving: ThumbnailPanel? = nil) {
         guard let screen = NSScreen.main?.visibleFrame else { return }
         var y = screen.minY + Self.margin
-        for panel in panels {
-            panel.setFrameOrigin(CGPoint(x: screen.minX + Self.margin, y: y))
+        for panel in panels where panel !== atPointer {
+            let origin = CGPoint(x: screen.minX + Self.margin, y: y)
+            if panel === moving {
+                panel.animator().setFrame(
+                    CGRect(origin: origin, size: panel.frame.size), display: true)
+            } else {
+                panel.setFrameOrigin(origin)
+            }
             y += panel.frame.height + 10
         }
     }
@@ -63,11 +121,14 @@ final class ThumbnailPanel: NSPanel {
     private let onClose: (ThumbnailPanel) -> Void
     private var timer: Timer?
     private let seconds: Double
+    /// Held at the pointer: no delay runs until `release`.
+    private var held: Bool
 
     init(
-        url: URL, image: CGImage, seconds: Double, onEdit: @escaping (URL) -> Void,
+        url: URL, image: CGImage, seconds: Double, held: Bool, onEdit: @escaping (URL) -> Void,
         onClaude: @escaping (URL) -> Void, onClose: @escaping (ThumbnailPanel) -> Void
     ) {
+        self.held = held
         self.url = url
         self.onEdit = onEdit
         self.onClaude = onClaude
@@ -117,7 +178,7 @@ final class ThumbnailPanel: NSPanel {
             NSTrackingArea(
                 rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
                 owner: self))
-        startTimer()
+        if !held { startTimer() }
     }
 
     private func button(_ title: String, _ action: Selector) -> NSButton {
@@ -147,8 +208,13 @@ final class ThumbnailPanel: NSPanel {
         }
     }
 
+    func release() {
+        held = false
+        startTimer()
+    }
+
     override func mouseEntered(with event: NSEvent) { timer?.invalidate() }
-    override func mouseExited(with event: NSEvent) { startTimer() }
+    override func mouseExited(with event: NSEvent) { if !held { startTimer() } }
 
     @objc private func copyImage() {
         do {

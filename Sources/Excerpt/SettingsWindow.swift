@@ -172,6 +172,9 @@ final class SettingsModel: ObservableObject {
     }
     @Published var prefix: String { didSet { preferences.namePrefix = prefix } }
     @Published var playSound: Bool { didSet { preferences.playSound = playSound } }
+    @Published var thumbnailAtPointer: Bool {
+        didSet { preferences.thumbnailAtPointer = thumbnailAtPointer }
+    }
     @Published var windowBackdrop: Bool { didSet { preferences.windowBackdrop = windowBackdrop } }
     @Published var padding: Double { didSet { preferences.windowPaddingPoints = padding } }
     @Published var backdrop: Color {
@@ -189,6 +192,7 @@ final class SettingsModel: ObservableObject {
         folder = preferences.libraryFolder.path
         prefix = preferences.namePrefix
         playSound = preferences.playSound
+        thumbnailAtPointer = preferences.thumbnailAtPointer
         windowBackdrop = preferences.windowBackdrop
         padding = preferences.windowPaddingPoints
         let c = preferences.backdropColor
@@ -228,6 +232,7 @@ struct SettingsView: View {
             }
             Section("Capture") {
                 Toggle("Play shutter sound", isOn: $model.playSound)
+                Toggle("Show thumbnail at the pointer", isOn: $model.thumbnailAtPointer)
                 Toggle("Place window captures on a backdrop", isOn: $model.windowBackdrop)
                 LabeledContent("Backdrop padding") {
                     Stepper("\(Int(model.padding)) pt", value: $model.padding, in: 0...200, step: 8)
