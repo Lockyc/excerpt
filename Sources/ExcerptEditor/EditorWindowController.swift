@@ -31,8 +31,8 @@ private final class CenteringClipView: NSClipView {
 /// colour, size and action on a toolbar that is always visible, and the canvas in a scroll view.
 @MainActor
 public final class EditorWindowController: NSWindowController, NSWindowDelegate {
-    static let toolbarHeight: CGFloat = 68
-    static let minimumWidth: CGFloat = 720
+    static let toolbarHeight: CGFloat = 92
+    static let minimumWidth: CGFloat = 860
     private static let snapHint = "⌥ places edges without snapping"
 
     private let capture: LoadedCapture
@@ -112,11 +112,9 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         tools.segmentCount = Tool.allCases.count
         tools.trackingMode = .selectOne
         for (i, tool) in Tool.allCases.enumerated() {
-            tools.setImage(
-                NSImage(systemSymbolName: tool.symbol, accessibilityDescription: tool.title),
-                forSegment: i)
+            tools.setImage(Self.symbol(tool.symbol, label: tool.title), forSegment: i)
             tools.setToolTip("\(tool.title) (\(tool.key.uppercased()))", forSegment: i)
-            tools.setWidth(30, forSegment: i)
+            tools.setWidth(44, forSegment: i)
         }
         tools.target = self
         tools.action = #selector(toolChosen)
@@ -125,7 +123,7 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         colors.trackingMode = .selectOne
         for (i, color) in Palette.allCases.enumerated() {
             colors.setImage(Self.swatch(color), forSegment: i)
-            colors.setWidth(26, forSegment: i)
+            colors.setWidth(36, forSegment: i)
         }
         colors.target = self
         colors.action = #selector(colorChosen)
@@ -134,14 +132,14 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         widths.trackingMode = .selectOne
         for (i, width) in StrokeWidth.allCases.enumerated() {
             widths.setLabel(width.label, forSegment: i)
-            widths.setWidth(28, forSegment: i)
+            widths.setWidth(38, forSegment: i)
         }
         widths.target = self
         widths.action = #selector(widthChosen)
 
         borderButton.setButtonType(.pushOnPushOff)
         borderButton.bezelStyle = .rounded
-        borderButton.image = NSImage(systemSymbolName: "square", accessibilityDescription: nil)
+        borderButton.image = Self.symbol("square", label: nil)
         borderButton.imagePosition = .imageLeading
         borderButton.toolTip = "A \(Int(Border.points))pt black border around the image"
         borderButton.target = self
@@ -170,6 +168,7 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
             claudeButton, saveButton,
         ] as [NSControl] {
             control.refusesFirstResponder = true
+            control.controlSize = .large
         }
 
         let spacer = NSView()
@@ -182,14 +181,12 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
             ])
         let bar = NSStackView(views: [styleRow, actionRow])
         bar.orientation = .vertical
-        bar.alignment = .leading
-        bar.spacing = 6
-        bar.edgeInsets = NSEdgeInsets(top: 6, left: 10, bottom: 6, right: 10)
-        for row in [styleRow, actionRow] {
-            row.widthAnchor.constraint(
-                equalTo: bar.widthAnchor, constant: -(bar.edgeInsets.left + bar.edgeInsets.right)
-            ).isActive = true
-        }
+        bar.alignment = .centerX
+        bar.spacing = 8
+        bar.edgeInsets = NSEdgeInsets(top: 8, left: 10, bottom: 8, right: 10)
+        actionRow.widthAnchor.constraint(
+            equalTo: bar.widthAnchor, constant: -(bar.edgeInsets.left + bar.edgeInsets.right)
+        ).isActive = true
 
         let clip = CenteringClipView()
         clip.drawsBackground = true
@@ -225,8 +222,14 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         return row
     }
 
+    /// A toolbar symbol, drawn large to match the large controls.
+    private static func symbol(_ name: String, label: String?) -> NSImage? {
+        NSImage(systemSymbolName: name, accessibilityDescription: label)?
+            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 16, weight: .regular))
+    }
+
     private func configure(_ button: NSButton, symbol: String, label: String, action: Selector) {
-        button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)
+        button.image = Self.symbol(symbol, label: label)
         button.imagePosition = .imageOnly
         button.bezelStyle = .rounded
         button.target = self
@@ -239,7 +242,7 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
     }
 
     private static func swatch(_ color: Palette) -> NSImage {
-        NSImage(size: CGSize(width: 14, height: 14), flipped: false) { rect in
+        NSImage(size: CGSize(width: 18, height: 18), flipped: false) { rect in
             NSColor(cgColor: color.rgba.cgColor)?.setFill()
             NSBezierPath(ovalIn: rect.insetBy(dx: 1, dy: 1)).fill()
             NSColor.separatorColor.setStroke()

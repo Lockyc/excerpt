@@ -137,7 +137,7 @@ final class ThumbnailPanel: NSPanel {
         self.seconds = seconds
         let width = ThumbnailStack.width
         let imageHeight = min(220, width * CGFloat(image.height) / CGFloat(image.width))
-        let barHeight: CGFloat = 32
+        let barHeight: CGFloat = 44
         super.init(
             contentRect: CGRect(x: 0, y: 0, width: width, height: imageHeight + barHeight),
             styleMask: [.nonactivatingPanel, .borderless], backing: .buffered, defer: false)
@@ -190,7 +190,7 @@ final class ThumbnailPanel: NSPanel {
         b.target = self
         b.action = action
         b.bezelStyle = .recessed
-        b.controlSize = .small
+        b.controlSize = .large
     }
 
     /// While the capture's export runs, For Claude is disabled and says why.

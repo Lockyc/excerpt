@@ -21,7 +21,7 @@ final class EditorModel {
     private var saved: EditDocument
     private var history = UndoStack<EditDocument>()
 
-    var tool: Tool = .select {
+    var tool: Tool = .arrow {
         didSet {
             cancelDrag()
             selection = nil
