@@ -30,6 +30,9 @@ final class CanvasView: NSView, NSTextFieldDelegate {
     private(set) var base: RenderResult
     private var baseDocument: EditDocument
     private var textField: NSTextField?
+    /// Floats beside whatever ⌫ would delete: the selection, or the crop under the crop tool.
+    private let deleteButton = NSButton()
+    private static let deleteButtonSize: CGFloat = 28
     private var textTarget: TextTarget?
 
     init(model: EditorModel) {
@@ -38,6 +41,15 @@ final class CanvasView: NSView, NSTextFieldDelegate {
         base = Renderer.renderBase(model.original, edits: baseDocument)
         super.init(frame: .zero)
         model.onChange = { [weak self] in self?.refresh() }
+        deleteButton.image = NSImage(systemSymbolName: "trash", accessibilityDescription: "Delete")
+        deleteButton.bezelStyle = .circular
+        deleteButton.contentTintColor = .systemRed
+        deleteButton.toolTip = "Delete (⌫)"
+        deleteButton.refusesFirstResponder = true
+        deleteButton.target = self
+        deleteButton.action = #selector(deletePressed)
+        deleteButton.isHidden = true
+        addSubview(deleteButton)
         resize()
     }
 
@@ -58,6 +70,7 @@ final class CanvasView: NSView, NSTextFieldDelegate {
             resize()
         }
         needsDisplay = true
+        placeDeleteButton()
         onChange()
     }
 
@@ -65,6 +78,44 @@ final class CanvasView: NSView, NSTextFieldDelegate {
         setFrameSize(
             CGSize(width: renderedSize.width * zoom, height: renderedSize.height * zoom))
         needsDisplay = true
+        placeDeleteButton()
+    }
+
+    /// What ⌫ would delete, in rendered pixels; nil when nothing, or while a drag or text edit
+    /// is under way.
+    private var deletionTarget: CGRect? {
+        guard model.canDelete, model.drag == nil, textField == nil else { return nil }
+        let map = base.map
+        switch model.selection {
+        case .annotation(let id):
+            guard let annotation = model.document.annotations.first(where: { $0.id == id })
+            else { return nil }
+            return map.rect(AnnotationGeometry.bounds(of: annotation, scale: model.document.scale))
+        case .seam(let axis, let band):
+            return map.seams(axis).first(where: { $0.band == band }).map(gapRect)
+        case nil:
+            guard model.tool == .crop, let crop = model.document.crop else { return nil }
+            return map.rect(crop.cgRect)
+        }
+    }
+
+    /// Above the target's top-right corner, kept on the canvas.
+    private func placeDeleteButton() {
+        guard let target = deletionTarget else {
+            deleteButton.isHidden = true
+            return
+        }
+        let size = Self.deleteButtonSize
+        let rect = viewRect(target)
+        let x = min(max(rect.maxX + 4, 4), bounds.width - size - 4)
+        let y = min(max(rect.minY - size - 4, 4), bounds.height - size - 4)
+        deleteButton.frame = CGRect(x: x, y: y, width: size, height: size)
+        deleteButton.isHidden = false
+    }
+
+    @objc private func deletePressed() {
+        endText()
+        model.deleteSelection()
     }
 
     // MARK: Drawing

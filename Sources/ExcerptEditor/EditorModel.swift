@@ -30,8 +30,13 @@ final class EditorModel {
     }
     private(set) var color: Palette = .initial
     private(set) var width: StrokeWidth = .initial
-    /// What the border is, or becomes when turned on: the document's own while it has one.
-    private(set) var borderStyle: Border = .initial
+    /// What the border is, or becomes when turned on: the document's own while it has one,
+    /// else the one last chosen.
+    private(set) var borderStyle: Border {
+        didSet { if borderStyle != oldValue { onBorderStyleChange?(borderStyle) } }
+    }
+    /// Called when the user picks a border colour or width, so the next editor starts with it.
+    var onBorderStyleChange: ((Border) -> Void)?
     var selection: Selection? { didSet { onChange?() } }
     /// View points per rendered pixel, so hit slop and minimum drags stay the same size on screen.
     var viewScale: Double = 1 {
@@ -44,11 +49,11 @@ final class EditorModel {
     /// The original's pixels, for snapping; read on first use.
     private(set) lazy var pixels = PixelBuffer(original)
 
-    init(original: CGImage, document: EditDocument) {
+    init(original: CGImage, document: EditDocument, borderStyle: Border = .initial) {
         self.original = original
         self.document = document
         self.saved = document
-        if let border = document.border { borderStyle = border }
+        self.borderStyle = document.border ?? borderStyle
     }
 
     /// Edits not yet written by ⌘S.

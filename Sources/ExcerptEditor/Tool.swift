@@ -1,3 +1,5 @@
+import ExcerptCore
+
 /// The editor's tools, each on a single-letter key.
 public enum Tool: CaseIterable {
     case select
@@ -54,5 +56,17 @@ public enum Tool: CaseIterable {
         guard let tool = Tool.allCases.first(where: { $0.key == Character(key.lowercased()) })
         else { return nil }
         self = tool
+    }
+}
+
+extension Tool {
+    /// Whether this tool draws `shape`'s kind of annotation.
+    func draws(_ shape: Shape) -> Bool {
+        switch (self, shape) {
+        case (.arrow, .arrow), (.rectangle, .rectangle), (.text, .text), (.highlight, .highlight),
+            (.blur, .blur):
+            true
+        default: false
+        }
     }
 }

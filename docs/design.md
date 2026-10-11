@@ -152,12 +152,16 @@ for PNG, not the default). Fits to width; tall captures scroll. Floats above oth
 Dock icon.
 
 Tools: `V` select · `A` arrow · `R` rectangle · `T` text · `H` highlight · `B` blur · `K` crop ·
-`C` cut. Six colours, three sizes (one control sets stroke and text). **Border** turns the
-border on and off, and its chevron drops down an on/off switch, the six colours and three widths
-(2, 4, 8pt); it frames the render in a solid
-line drawn inside its edge, so a capture pasted into an email stands apart from the message.
-Choosing a colour or width turns it on. A new editor starts on the arrow. The arrow drag
-**starts at the head**. Crop snaps using the same gap detection as cuts.
+`C` cut. A new editor starts on the arrow. A drawing tool pressed on an annotation it draws
+selects and moves it rather than drawing over it; other kinds are drawn over. Six colours,
+three sizes (one control sets stroke and text). Whatever `⌫` would delete — the selection, or
+the crop under `K` — has a delete button floating beside it. The arrow drag **starts at the
+head**. Crop snaps using the same gap detection as cuts.
+
+**Border** turns the border on and off, and its chevron drops down an on/off switch, the six
+colours and three widths (2, 4, 8pt); it frames the render in a solid line drawn inside its edge,
+so a capture pasted into an email stands apart from the message. Choosing a colour or width
+turns it on, and the next editor, across launches, starts from the last one chosen.
 
 **Blur is destructive**: pixelation over noise. Blur rects under 12pt apart are one group,
 pixelated on one grid over the group's bounding box in blocks at least 12pt and at least half
@@ -168,8 +172,8 @@ known strings. The noise is seeded from a per-document salt stored in the master
 shows the true result.
 
 **The edit document** holds the cuts, an optional crop, the annotations (arrow, rectangle,
-text, highlight, blur), all in original pixels, whether it has a border, plus the blur salt, so every edit stays
-adjustable from the master.
+text, highlight, blur), all in original pixels, an optional border, plus the blur salt, so
+every edit stays adjustable from the master.
 Render order: blur (from original pixels) → crop → cuts and their labels → annotations, placed
 through the coordinate map → border. The canvas caches the render up to the cuts and draws annotations
 over it through the same Core code, so a drag repaints only annotations; a cut, crop or blur
@@ -177,7 +181,8 @@ change re-renders the cache. Undo is a stack of document values.
 
 `⌘S` (Save) re-renders the primary, writes or updates the master, copies the render and closes
 the editor; with nothing unsaved it only copies and closes. For Claude saves the same way before
-it exports, then closes. Closing with unsaved edits asks.
+it exports, then closes. **Discard** closes at once, dropping unsaved edits; closing the window
+any other way with unsaved edits asks.
 
 ## Export
 

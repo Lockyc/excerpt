@@ -47,6 +47,16 @@ final class Preferences {
         }
         set { defaults.set(newValue.rawValue, forKey: "backdropStyle") }
     }
+    /// The editor border's last colour and width; the initial border until one is picked, or
+    /// when what is stored can't be read.
+    var editorBorder: Border {
+        get {
+            defaults.data(forKey: "editorBorder").flatMap {
+                try? JSONDecoder().decode(Border.self, from: $0)
+            } ?? .initial
+        }
+        set { defaults.set(try? JSONEncoder().encode(newValue), forKey: "editorBorder") }
+    }
     var thumbnailSeconds: Double { max(1, defaults.double(forKey: "thumbnailSeconds")) }
     var thumbnailAtPointer: Bool {
         get { defaults.bool(forKey: "thumbnailAtPointer") }

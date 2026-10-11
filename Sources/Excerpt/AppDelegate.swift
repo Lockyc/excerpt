@@ -141,6 +141,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.claude.export(
                     original: original, edits: document, primary: capture.primary)
             },
+            borderStyle: preferences.editorBorder,
+            rememberBorder: { [weak self] in self?.preferences.editorBorder = $0 },
             onClose: { [weak self] in
                 // The window is still mid-close; release it on the next turn, not under itself.
                 DispatchQueue.main.async { self?.editors[primary] = nil }

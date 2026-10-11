@@ -76,6 +76,7 @@ extension EditorModel {
             selection = nil
             if tool == .cut { setDrag(.region(start: p.original)) }
         case .arrow, .rectangle, .highlight:
+            if grabAnnotation(at: p, map: map) { return }
             let before = document
             let id = document.nextAnnotationID
             var next = document
@@ -87,11 +88,26 @@ extension EditorModel {
             selection = nil
             setDrag(.shape(id: id, start: p.original, before: before))
         case .blur, .crop:
+            if tool == .blur, grabAnnotation(at: p, map: map) { return }
             selection = nil
             setDrag(.region(start: p.original))
         case .text:
             break
         }
+    }
+
+    /// Under a drawing tool, a press on an annotation that tool draws selects it and starts
+    /// moving it, as the select tool would, instead of drawing a new one over it. Other kinds
+    /// are drawn over, so an arrow can start inside a highlight.
+    private func grabAnnotation(at p: Pointer, map: RenderMap) -> Bool {
+        let own = document.annotations.filter { tool.draws($0.shape) }
+        guard
+            let id = HitTest.annotation(
+                at: p.original, in: own, scale: document.scale, slop: slop, map: map)
+        else { return false }
+        selection = .annotation(id)
+        setDrag(.move(id: id, last: p.original, before: document))
+        return true
     }
 
     func mouseDragged(_ p: Pointer, map: RenderMap, snap: Bool) {

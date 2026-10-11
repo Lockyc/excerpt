@@ -46,6 +46,22 @@ import Testing
         #expect(m.document.annotations.isEmpty && !m.canUndo)
     }
 
+    @Test func aDrawingToolGrabsItsOwnKindAndDrawsOverOthers() {
+        let m = model()
+        m.tool = .highlight
+        drag(m, CGPoint(x: 20, y: 20), CGPoint(x: 300, y: 200))
+        m.tool = .arrow
+        drag(m, CGPoint(x: 100, y: 100), CGPoint(x: 200, y: 100))  // starts inside the highlight
+        #expect(m.document.annotations.count == 2)
+        m.selection = nil
+        drag(m, CGPoint(x: 150, y: 100), CGPoint(x: 150, y: 150))  // on the arrow: moves it
+        #expect(m.document.annotations.count == 2)
+        #expect(m.selection == .annotation(2))
+        #expect(
+            m.document.annotations[1].shape
+                == .arrow(tail: CGPoint(x: 200, y: 150), head: CGPoint(x: 100, y: 150)))
+    }
+
     @Test func rectanglesAndHighlightsAreDraggedOutFromAnyCorner() {
         let m = model()
         m.tool = .rectangle

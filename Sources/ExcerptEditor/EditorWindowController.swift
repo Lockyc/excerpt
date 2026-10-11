@@ -55,7 +55,7 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
     private let hiddenNote = NSTextField(labelWithString: "")
     private let undoButton = NSButton()
     private let redoButton = NSButton()
-    private let deleteButton = NSButton()
+    private let discardButton = NSButton(title: "Discard", target: nil, action: nil)
     private let claudeButton = NSButton(title: "For Claude", target: nil, action: nil)
     private let saveButton = NSButton(title: "Save", target: nil, action: nil)
 
@@ -65,21 +65,25 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
     }
 
     /// `save` writes the document (the app's `LibraryStore.saveEdits`); `copy`, Save's last
-    /// step, is handed a
-    /// closure that renders the current PNG, puts it on the pasteboard, reports any failure, the
-    /// render's included, and returns whether it worked; `forClaude` exports the original with
-    /// the current edits; `onClose` runs once the window has closed.
+    /// step, is handed a closure that renders the current PNG, puts it on the pasteboard,
+    /// reports any failure, the render's included, and returns whether it worked; `forClaude`
+    /// exports the original with the current edits; `borderStyle` is the border a capture
+    /// without one gets when turned on, and `rememberBorder` is told each colour or width the
+    /// user picks; `onClose` runs once the window has closed.
     public init(
         capture: LoadedCapture, save: @escaping (EditDocument) throws -> Void,
         copy: @escaping (() throws -> Data) -> Bool,
-        forClaude: @escaping (CGImage, EditDocument) -> Void, onClose: @escaping () -> Void
+        forClaude: @escaping (CGImage, EditDocument) -> Void, borderStyle: Border,
+        rememberBorder: @escaping (Border) -> Void, onClose: @escaping () -> Void
     ) {
         self.capture = capture
         self.save = save
         self.copy = copy
         self.forClaude = forClaude
         self.onClose = onClose
-        model = EditorModel(original: capture.original, document: capture.edits)
+        model = EditorModel(
+            original: capture.original, document: capture.edits, borderStyle: borderStyle)
+        model.onBorderStyleChange = rememberBorder
         canvas = CanvasView(model: model)
         borderPanel = BorderPanel(model: model)
         let window = EditorWindow(
@@ -166,14 +170,18 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         configure(
             redoButton, symbol: "arrow.uturn.forward", label: "Redo", action: #selector(redoPressed)
         )
-        configure(deleteButton, symbol: "trash", label: "Delete", action: #selector(deletePressed))
+        discardButton.bezelColor = .systemRed
+        discardButton.hasDestructiveAction = true
+        discardButton.toolTip = "Close without saving"
+        discardButton.target = self
+        discardButton.action = #selector(discardPressed)
         claudeButton.target = self
         claudeButton.action = #selector(forClaudePressed)
         saveButton.target = self
         saveButton.action = #selector(saveDocument)
 
         for control in [
-            tools, colors, widths, borderControl, undoButton, redoButton, deleteButton,
+            tools, colors, widths, borderControl, undoButton, redoButton, discardButton,
             claudeButton, saveButton,
         ] as [NSControl] {
             control.refusesFirstResponder = true
@@ -185,7 +193,7 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         let styleRow = Self.row([tools, colors, widths, borderControl])
         let actionRow = Self.row(
             [
-                snapHint, hiddenNote, spacer, undoButton, redoButton, deleteButton, claudeButton,
+                snapHint, hiddenNote, spacer, undoButton, redoButton, discardButton, claudeButton,
                 saveButton,
             ])
         let bar = NSStackView(views: [styleRow, actionRow])
@@ -329,11 +337,6 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         undoButton.toolTip = model.canUndo ? "Undo (⌘Z)" : "Nothing to undo"
         redoButton.isEnabled = model.canRedo
         redoButton.toolTip = model.canRedo ? "Redo (⇧⌘Z)" : "Nothing to redo"
-        deleteButton.isEnabled = model.canDelete
-        deleteButton.toolTip =
-            model.canDelete
-            ? "Delete the \(model.selection == nil ? "crop" : "selection") (⌫)"
-            : "Select an annotation, seam or crop to delete"
         claudeButton.isEnabled = !isPreparingForClaude
         claudeButton.toolTip =
             isPreparingForClaude
@@ -382,9 +385,10 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
     @objc private func undoPressed() { undo() }
     @objc private func redoPressed() { redo() }
 
-    @objc private func deletePressed() {
+    /// Closes at once, dropping unsaved edits without asking.
+    @objc private func discardPressed() {
         canvas.endText()
-        model.deleteSelection()
+        window?.close()
     }
 
     /// ⇧⌘C: like Save, it writes unsaved edits first, so what Claude reads is what the library

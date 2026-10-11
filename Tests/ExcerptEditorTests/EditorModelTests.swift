@@ -54,11 +54,29 @@ import Testing
 
     @Test func choosingABorderStyleTurnsItOnAndIsRemembered() {
         let m = model()
+        var chosen: [Border] = []
+        m.onBorderStyleChange = { chosen.append($0) }
         m.setBorderWidth(.thick)
         #expect(m.document.border == Border(color: .black, width: .thick))
         m.setBorder(false)
         m.setBorderColor(.red)
         #expect(m.document.border == Border(color: .red, width: .thick))
+        #expect(
+            chosen == [Border(color: .black, width: .thick), Border(color: .red, width: .thick)])
+    }
+
+    @Test func aNewEditorStartsWithTheLastBorderStyleUnlessItsDocumentHasOne() {
+        let last = Border(color: .blue, width: .thin)
+        let plain = EditorModel(
+            original: Fixtures.sheet(width: 10, height: 10), document: EditDocument(scale: 1),
+            borderStyle: last)
+        plain.setBorder(true)
+        #expect(plain.document.border == last)
+        let own = Border(color: .green, width: .thick)
+        let framed = EditorModel(
+            original: Fixtures.sheet(width: 10, height: 10),
+            document: EditDocument(scale: 1, border: own), borderStyle: last)
+        #expect(framed.borderStyle == own)
     }
 
     @Test func aNoOpRecordsNothing() {
