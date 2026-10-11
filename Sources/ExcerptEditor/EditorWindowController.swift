@@ -46,7 +46,9 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
     private let tools = NSSegmentedControl()
     private let colors = NSSegmentedControl()
     private let widths = NSSegmentedControl()
-    private let borderButton = NSButton(title: "Border", target: nil, action: nil)
+    /// A split control: "Border" turns the border on and off, the chevron drops down its
+    /// settings.
+    private let borderControl = NSSegmentedControl()
     private let borderPanel: BorderPanel
     private let borderPopover = NSPopover()
     private let snapHint = NSTextField(labelWithString: "")
@@ -140,13 +142,15 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         widths.target = self
         widths.action = #selector(widthChosen)
 
-        borderButton.setButtonType(.pushOnPushOff)
-        borderButton.bezelStyle = .rounded
-        borderButton.image = Self.symbol("chevron.down", label: nil)
-        borderButton.imagePosition = .imageTrailing
-        borderButton.toolTip = "Border colour and width"
-        borderButton.target = self
-        borderButton.action = #selector(borderPressed)
+        borderControl.segmentCount = 2
+        borderControl.trackingMode = .selectAny
+        borderControl.setLabel("Border", forSegment: 0)
+        borderControl.setToolTip("Border on or off", forSegment: 0)
+        borderControl.setImage(Self.symbol("chevron.down", label: "Border settings"), forSegment: 1)
+        borderControl.setWidth(30, forSegment: 1)
+        borderControl.setToolTip("Border colour and width", forSegment: 1)
+        borderControl.target = self
+        borderControl.action = #selector(borderPressed)
         borderPopover.contentViewController = borderPanel
         borderPopover.behavior = .transient
 
@@ -169,7 +173,7 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         saveButton.action = #selector(saveDocument)
 
         for control in [
-            tools, colors, widths, borderButton, undoButton, redoButton, deleteButton,
+            tools, colors, widths, borderControl, undoButton, redoButton, deleteButton,
             claudeButton, saveButton,
         ] as [NSControl] {
             control.refusesFirstResponder = true
@@ -178,7 +182,7 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
 
         let spacer = NSView()
         spacer.setContentHuggingPriority(.fittingSizeCompression, for: .horizontal)
-        let styleRow = Self.row([tools, colors, widths, borderButton])
+        let styleRow = Self.row([tools, colors, widths, borderControl])
         let actionRow = Self.row(
             [
                 snapHint, hiddenNote, spacer, undoButton, redoButton, deleteButton, claudeButton,
@@ -295,7 +299,7 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         tools.selectedSegment = Tool.allCases.firstIndex(of: model.tool) ?? 0
         colors.selectedSegment = Palette.allCases.firstIndex(of: model.color) ?? 0
         widths.selectedSegment = StrokeWidth.allCases.firstIndex(of: model.width) ?? 0
-        borderButton.state = model.document.border == nil ? .off : .on
+        borderControl.setSelected(model.document.border != nil, forSegment: 0)
         borderPanel.refresh()
         hiddenNote.stringValue = model.hiddenNote(map: canvas.base.map)
         let limit = model.tool == .cut ? model.cutLimitNote : ""
@@ -357,16 +361,21 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         model.setWidth(StrokeWidth.allCases[widths.selectedSegment])
     }
 
-    /// Drops down the border settings; the button stays lit while the image has a border.
+    /// "Border" turns the border on or off; the chevron drops down its settings.
     @objc private func borderPressed() {
         canvas.endText()
-        borderButton.state = model.document.border == nil ? .off : .on
+        // The chevron never stays selected, so a click on it is the one that selects it.
+        guard borderControl.isSelected(forSegment: 1) else {
+            model.setBorder(borderControl.isSelected(forSegment: 0))
+            return
+        }
+        borderControl.setSelected(false, forSegment: 1)
         if borderPopover.isShown {
             borderPopover.close()
         } else {
             borderPanel.refresh()
             borderPopover.show(
-                relativeTo: borderButton.bounds, of: borderButton, preferredEdge: .maxY)
+                relativeTo: borderControl.bounds, of: borderControl, preferredEdge: .maxY)
         }
     }
 

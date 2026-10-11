@@ -57,10 +57,19 @@ final class BorderPanel: NSViewController {
         let stack = NSStackView(views: [header, colors, widths])
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = 12
-        stack.edgeInsets = NSEdgeInsets(top: 14, left: 14, bottom: 14, right: 14)
-        header.widthAnchor.constraint(equalTo: colors.widthAnchor).isActive = true
-        view = stack
+        stack.spacing = 14
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        let container = NSView()
+        container.addSubview(stack)
+        let inset: CGFloat = 20
+        NSLayoutConstraint.activate([
+            header.widthAnchor.constraint(equalTo: colors.widthAnchor),
+            stack.topAnchor.constraint(equalTo: container.topAnchor, constant: inset),
+            stack.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -inset),
+            stack.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: inset),
+            stack.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -inset),
+        ])
+        view = container
         refresh()
     }
 
