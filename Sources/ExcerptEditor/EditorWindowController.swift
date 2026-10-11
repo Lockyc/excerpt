@@ -37,7 +37,7 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
 
     private let capture: LoadedCapture
     private let save: (EditDocument) throws -> Void
-    private let copy: (() throws -> Data) -> Void
+    private let copy: (() throws -> Data) -> Bool
     private let forClaude: (CGImage, EditDocument) -> Void
     private let onClose: () -> Void
     private let model: EditorModel
@@ -61,12 +61,12 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
     }
 
     /// `save` writes the document (the app's `LibraryStore.saveEdits`); `copy` is handed a
-    /// closure that renders the current PNG, puts it on the pasteboard and reports any failure,
-    /// the render's included; `forClaude` exports the original with the current edits, saved or
-    /// not; `onClose` runs once the window has closed.
+    /// closure that renders the current PNG, puts it on the pasteboard, reports any failure, the
+    /// render's included, and returns whether it worked; `forClaude` exports the original with
+    /// the current edits; `onClose` runs once the window has closed.
     public init(
         capture: LoadedCapture, save: @escaping (EditDocument) throws -> Void,
-        copy: @escaping (() throws -> Data) -> Void,
+        copy: @escaping (() throws -> Data) -> Bool,
         forClaude: @escaping (CGImage, EditDocument) -> Void, onClose: @escaping () -> Void
     ) {
         self.capture = capture
@@ -153,7 +153,7 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         configure(deleteButton, symbol: "trash", label: "Delete", action: #selector(deletePressed))
         copyButton.target = self
         copyButton.action = #selector(copyPressed)
-        copyButton.toolTip = "Copy the current image (⌘C)"
+        copyButton.toolTip = "Save, copy the image and close (⌘C)"
         claudeButton.target = self
         claudeButton.action = #selector(forClaudePressed)
         saveButton.target = self
@@ -318,9 +318,9 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         claudeButton.toolTip =
             isPreparingForClaude
             ? "Preparing for Claude…"
-            : "Copy tiles and text of the current image for Claude (⇧⌘C)"
+            : "Save, copy tiles and text of the image for Claude and close (⇧⌘C)"
         saveButton.isEnabled = model.isDirty
-        saveButton.toolTip = model.isDirty ? "Save (⌘S)" : "No unsaved changes"
+        saveButton.toolTip = model.isDirty ? "Save and close (⌘S)" : "No unsaved changes"
         window?.isDocumentEdited = model.isDirty
         fitWidth()  // a column cut changes the rendered width
     }
@@ -349,26 +349,38 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
     }
 
     @objc func copyPressed() {
-        canvas.endText()
         let original = model.original
-        let document = model.document
-        copy {
-            let image = Renderer.render(original, edits: document).image
-            return try PNGCodec.encode(image, scale: document.scale)
+        finish {
+            let document = model.document
+            return copy {
+                let image = Renderer.render(original, edits: document).image
+                return try PNGCodec.encode(image, scale: document.scale)
+            }
         }
     }
 
-    /// ⇧⌘C: the current render, unsaved edits included, like Copy.
+    /// ⇧⌘C: like Copy, it saves first, so what Claude reads is what the library holds.
     @objc func forClaudePressed() {
-        canvas.endText()
-        forClaude(model.original, model.document)
+        finish {
+            forClaude(model.original, model.document)
+            return true
+        }
     }
 
     /// ⌘S: with nothing unsaved there is nothing to write, so an unedited capture stays one file.
     @objc func saveDocument() {
         canvas.endText()
         guard model.isDirty else { return }
-        _ = writeDocument()
+        finish { true }
+    }
+
+    /// Copy, For Claude and Save each end the edit: unsaved edits are written (the master keeps
+    /// the original, so they stay adjustable), then `action` runs, then the window closes. A
+    /// failed save or action leaves it open.
+    private func finish(_ action: () -> Bool) {
+        canvas.endText()
+        guard !model.isDirty || writeDocument(), action() else { return }
+        window?.close()
     }
 
     func undo() {

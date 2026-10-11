@@ -171,11 +171,12 @@ through the coordinate map. The canvas caches the render up to the cuts and draw
 over it through the same Core code, so a drag repaints only annotations; a cut, crop or blur
 change re-renders the cache. Undo is a stack of document values.
 
-`⌘S` re-renders the primary and writes or updates the master. Closing with unsaved edits asks.
+`⌘S` re-renders the primary, writes or updates the master, and closes the editor; Copy and For
+Claude save the same way before they run, then close it. Closing with unsaved edits asks.
 
 ## Export
 
-- **Copy** (`⌘C`) — the primary PNG, or in the editor the current render. **Drag** from the
+- **Copy** (`⌘C`) — the primary PNG, or in the editor the render of the edits it saves. **Drag** from the
   thumbnail or the editor's title bar.
 - **For Claude** (`⌘⇧C`), shaped for Claude's ~1568px long-edge downscale:
   - tiles render at **1× (points)** — Retina doubles pixels without adding legible text;
@@ -186,7 +187,7 @@ change re-renders the cache. Undo is a stack of document values.
   - the clipboard receives `@<path>` references to every tile and `text.md`;
   - both come from the render, never the original, so a cut band never reaches Claude and a
     blurred area reaches it only as the blur's noised blocks, from which no text is read;
-  - the editor exports its current render, unsaved edits included; the thumbnail exports the
+  - the editor exports the render of the edits it saves; the thumbnail exports the
     primary file as `excerpt read` takes it, so a primary changed since it was saved exports as
     its own pixels.
 - **`excerpt read <image>`** — the same bundle for any image file, not only a capture, so a

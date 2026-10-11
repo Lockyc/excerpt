@@ -131,8 +131,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             copy: { makePNG in
                 do {
                     try Pasteboard.copyPNG(data: makePNG())
+                    return true
                 } catch {
                     Alerts.copyFailed(capture.primary, error)
+                    return false
                 }
             },
             forClaude: { [weak self] original, document in
