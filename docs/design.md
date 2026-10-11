@@ -105,7 +105,7 @@ holding one.
   shown once the stills are taken; the mode picked runs on them.
 - Stills exclude desktop icons and excerpt's own windows through the `SCContentFilter`.
 - **After every capture that makes a file** it is saved, copied to the clipboard, and shown as
-  a large thumbnail (Copy · Edit · For Claude · Close, draggable) that closes after 15s (paused
+  a large thumbnail (Edit · For Claude · Close, draggable) that closes after 15s (paused
   while the pointer is over it), or on drag-out. Shutter sound on. With *Show thumbnail at the
   pointer* on, it first appears centred on the pointer with no timeout, and docks in the corner
   once the pointer strays past `PointerPlacement.safetyMargin` of it (or the next capture lands).
@@ -179,7 +179,7 @@ it exports, then closes. Closing with unsaved edits asks.
 
 ## Export
 
-- **Copy** — the thumbnail's copies the primary PNG; the editor's Save copies its render.
+- **Copy** — every capture is copied as it lands, and the editor's Save copies its render.
   **Drag** from the thumbnail or the editor's title bar.
 - **For Claude** (`⌘⇧C`), shaped for Claude's ~1568px long-edge downscale:
   - tiles render at **1× (points)** — Retina doubles pixels without adding legible text;

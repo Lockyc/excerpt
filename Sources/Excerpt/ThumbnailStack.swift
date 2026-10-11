@@ -165,7 +165,6 @@ final class ThumbnailPanel: NSPanel {
 
         let bar = NSStackView(frame: CGRect(x: 8, y: 2, width: width - 16, height: barHeight - 4))
         bar.distribution = .fillEqually
-        bar.addArrangedSubview(button("Copy", #selector(copyImage)))
         bar.addArrangedSubview(button("Edit", #selector(editTapped)))
         style(claudeButton, #selector(claudeTapped))
         setPreparingForClaude(false)
@@ -216,13 +215,6 @@ final class ThumbnailPanel: NSPanel {
     override func mouseEntered(with event: NSEvent) { timer?.invalidate() }
     override func mouseExited(with event: NSEvent) { if !held { startTimer() } }
 
-    @objc private func copyImage() {
-        do {
-            try Pasteboard.copyPNG(at: url)
-        } catch {
-            Alerts.clipboardFailed(url, error)
-        }
-    }
     @objc private func editTapped() {
         onEdit(url)
         dismiss()
