@@ -13,6 +13,11 @@ import Testing
                 .appendingPathComponent("excerpt-claude-\(UUID().uuidString)"))
     }
 
+    /// A primary called `name` in a captures folder; nothing need exist there.
+    static func primary(_ name: String, in folder: String = "/captures") -> URL {
+        URL(fileURLWithPath: folder).appendingPathComponent(name + ".png")
+    }
+
     /// The roadmap gate's shape: a 10,000-point capture at 2× becomes eight 1× tiles and the
     /// text, with the cut written in.
     @Test func aTallCaptureBecomesOneTimesTilesAndText() throws {
@@ -22,11 +27,12 @@ import Testing
         let edits = EditDocument(
             scale: 2, cuts: [Cut(axis: .horizontal, lower: 9_000, upper: 9_036)], salt: 7)
         let bundle = try ClaudeBundle.write(
-            original: original, edits: edits, name: name,
+            original: original, edits: edits,
+            primary: ClaudeBundleTests.primary(name),
             cache: Self.cache(), recognizer: ColourWords())
-        // Uppercase and spaces make the name lossy, so the folder carries a hash suffix.
         #expect(
-            bundle.folder.lastPathComponent == ClaudeCache.folderName(for: name))
+            bundle.folder.lastPathComponent
+                == ClaudeCache.folderName(for: ClaudeBundleTests.primary(name)))
         #expect(bundle.folder.lastPathComponent.hasPrefix("Excerpt-2026-10-10-at-09.43.29-"))
         // 20,000 rows less 36 cut plus the 36-pixel seam is 20,000 pixels: 10,000 points.
         #expect(bundle.tiles.count == 8)
@@ -48,26 +54,40 @@ import Testing
     @Test func aOneTimesSourceIsNotScaled() throws {
         let original = Fixtures.sheet(width: 500, height: 1_000)
         let bundle = try ClaudeBundle.write(
-            original: original, edits: EditDocument(scale: 1), name: "one", cache: Self.cache(),
+            original: original, edits: EditDocument(scale: 1),
+            primary: ClaudeBundleTests.primary("one"), cache: Self.cache(),
             recognizer: ColourWords())
         #expect(bundle.tiles.count == 1)
         let tile = try PNGCodec.decode(Data(contentsOf: bundle.tiles[0])).image
         #expect(PixelBuffer(tile) == PixelBuffer(original))
     }
 
+    @Test func sameNamedCapturesInTwoFoldersKeepTheirOwnBundles() throws {
+        let cache = Self.cache()
+        let tall = try ClaudeBundle.write(
+            original: Fixtures.sheet(width: 100, height: 4_000), edits: EditDocument(scale: 1),
+            primary: Self.primary("shot", in: "/a"), cache: cache, recognizer: ColourWords())
+        let short = try ClaudeBundle.write(
+            original: Fixtures.sheet(width: 100, height: 400), edits: EditDocument(scale: 1),
+            primary: Self.primary("shot", in: "/b"), cache: cache, recognizer: ColourWords())
+        #expect(tall.folder != short.folder)
+        #expect(tall.tiles.allSatisfy { FileManager.default.fileExists(atPath: $0.path) })
+        #expect(tall.tiles.count == 3 && short.tiles.count == 1)
+    }
+
     @Test func writingAgainReplacesTheFolder() throws {
         let cache = Self.cache()
         let tall = try ClaudeBundle.write(
             original: Fixtures.sheet(width: 100, height: 4_000), edits: EditDocument(scale: 1),
-            name: "same", cache: cache, recognizer: ColourWords())
+            primary: ClaudeBundleTests.primary("same"), cache: cache, recognizer: ColourWords())
         #expect(tall.tiles.count == 3)
         let short = try ClaudeBundle.write(
             original: Fixtures.sheet(width: 100, height: 400), edits: EditDocument(scale: 1),
-            name: "same", cache: cache, recognizer: ColourWords())
+            primary: ClaudeBundleTests.primary("same"), cache: cache, recognizer: ColourWords())
         let left = try FileManager.default.contentsOfDirectory(atPath: short.folder.path).sorted()
         #expect(left == ["text.md", "tile-1-of-1.png"])
         let siblings = try FileManager.default.contentsOfDirectory(atPath: cache.root.path)
-        #expect(siblings == ["same"])
+        #expect(siblings == [short.folder.lastPathComponent])
     }
 
     /// Review focus: an unwritable cache fails with the folder named, leaving nothing behind.
@@ -79,7 +99,7 @@ import Testing
         #expect {
             try ClaudeBundle.write(
                 original: Fixtures.sheet(width: 50, height: 50), edits: EditDocument(scale: 1),
-                name: "x", cache: cache, recognizer: ColourWords())
+                primary: ClaudeBundleTests.primary("x"), cache: cache, recognizer: ColourWords())
         } throws: { error in
             guard case ClaudeBundleError.cacheUnwritable(let folder, _) = error else {
                 return false
@@ -99,7 +119,7 @@ import Testing
         #expect {
             try ClaudeBundle.write(
                 original: Fixtures.sheet(width: 50, height: 50), edits: EditDocument(scale: 1),
-                name: "x", cache: Self.cache(), recognizer: Broken())
+                primary: ClaudeBundleTests.primary("x"), cache: Self.cache(), recognizer: Broken())
         } throws: { error in
             if case ClaudeBundleError.recognitionFailed = error { return true }
             return false
@@ -116,8 +136,11 @@ import Testing
             ofItemAtPath: old.path)
         _ = try ClaudeBundle.write(
             original: Fixtures.sheet(width: 50, height: 50), edits: EditDocument(scale: 1),
-            name: "new", cache: cache, recognizer: ColourWords(), now: now)
-        #expect(try FileManager.default.contentsOfDirectory(atPath: cache.root.path) == ["new"])
+            primary: ClaudeBundleTests.primary("new"), cache: cache, recognizer: ColourWords(),
+            now: now)
+        #expect(
+            try FileManager.default.contentsOfDirectory(atPath: cache.root.path)
+                == [ClaudeCache.folderName(for: ClaudeBundleTests.primary("new"))])
     }
 
     @Test func aBundleReportsWhatPruningCouldNotRemove() throws {
@@ -135,7 +158,8 @@ import Testing
             ofItemAtPath: stuck.path)
         let bundle = try ClaudeBundle.write(
             original: Fixtures.sheet(width: 50, height: 50), edits: EditDocument(scale: 1),
-            name: "x", cache: cache, recognizer: ColourWords(), now: now)
+            primary: ClaudeBundleTests.primary("x"), cache: cache, recognizer: ColourWords(),
+            now: now)
         #expect(manager.fileExists(atPath: bundle.textFile.path))
         #expect(bundle.pruneFailures.map(\.url.lastPathComponent) == ["stuck"])
     }
@@ -152,7 +176,7 @@ import Testing
         #expect {
             try ClaudeBundle.write(
                 original: Fixtures.sheet(width: 50, height: 50), edits: EditDocument(scale: 1),
-                name: "x", cache: cache, recognizer: ColourWords())
+                primary: ClaudeBundleTests.primary("x"), cache: cache, recognizer: ColourWords())
         } throws: { error in
             guard case ClaudeBundleError.cacheUnreadable(let folder, _) = error else {
                 return false
@@ -169,7 +193,7 @@ import Testing
         let manager = FileManager.default
         _ = try ClaudeBundle.write(
             original: Fixtures.sheet(width: 50, height: 50), edits: EditDocument(scale: 1),
-            name: "x", cache: cache, recognizer: ColourWords())
+            primary: ClaudeBundleTests.primary("x"), cache: cache, recognizer: ColourWords())
         try manager.setAttributes([.posixPermissions: 0o500], ofItemAtPath: cache.root.path)
         defer {
             try? manager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: cache.root.path)
@@ -177,9 +201,11 @@ import Testing
         #expect(throws: ClaudeBundleError.self) {
             try ClaudeBundle.write(
                 original: Fixtures.sheet(width: 50, height: 50), edits: EditDocument(scale: 1),
-                name: "x", cache: cache, recognizer: ColourWords())
+                primary: ClaudeBundleTests.primary("x"), cache: cache, recognizer: ColourWords())
         }
-        #expect(try manager.contentsOfDirectory(atPath: cache.root.path) == ["x"])
+        #expect(
+            try manager.contentsOfDirectory(atPath: cache.root.path)
+                == [ClaudeCache.folderName(for: ClaudeBundleTests.primary("x"))])
     }
 }
 
@@ -207,8 +233,7 @@ import Testing
         #expect(bundle.text == "alpha\n[⋯ 60 px hidden]\n")
         #expect(
             bundle.folder.lastPathComponent
-                == ClaudeCache.folderName(
-                    for: primary.deletingPathExtension().lastPathComponent))
+                == ClaudeCache.folderName(for: primary))
     }
 
     /// Review focus (privacy): a primary redacted after saving exports as itself; the master's
@@ -245,7 +270,8 @@ import Testing
         try PNGCodec.encode(pixels.makeImage(), scale: 1).write(to: primary)
         let capture = try LibraryStore(folder: primary.deletingLastPathComponent()).load(primary)
         let bundle = try ClaudeBundle.write(
-            original: capture.original, edits: capture.edits, name: "x",
+            original: capture.original, edits: capture.edits,
+            primary: ClaudeBundleTests.primary("x"),
             cache: ClaudeBundleTests.cache(), recognizer: ColourWords())
         #expect(!bundle.text.contains("alpha"))
         #expect(!bundle.text.contains("secret"))

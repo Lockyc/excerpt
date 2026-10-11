@@ -9,37 +9,43 @@ import Testing
             .appendingPathComponent("excerpt-cache-\(UUID().uuidString)")
     }
 
-    @Test func folderNamesCarryNoSpacesOrSeparators() {
-        let name = ClaudeCache.folderName(for: "Excerpt 2026-10-10 at 09.43.29")
-        #expect(name.hasPrefix("Excerpt-2026-10-10-at-09.43.29-"))
-        #expect(!name.contains(" ") && !name.contains("/") && !name.contains(":"))
-        #expect(ClaudeCache.folderName(for: "ok-name_1.2") == "ok-name_1.2")
-        #expect(ClaudeCache.folderName(for: "a b").hasPrefix("a-b-"))
-        #expect(ClaudeCache.folderName(for: "..").hasPrefix("..-") == false)
-        #expect(ClaudeCache.folderName(for: "").hasPrefix("capture-"))
-        #expect(ClaudeCache.folderName(for: "..").hasPrefix("-"))
-        #expect(!ClaudeCache.folderName(for: ".hidden").hasPrefix("."))
-        #expect(ClaudeCache.folderName(for: String(repeating: "x", count: 300)).count <= 100)
+    private func folderName(_ name: String, in folder: String = "/captures") -> String {
+        ClaudeCache.folderName(for: URL(fileURLWithPath: folder).appendingPathComponent(name))
     }
 
-    @Test func distinctNamesGetDistinctFolders() {
+    @Test func folderNamesCarryNoSpacesOrSeparators() {
+        let name = folderName("Excerpt 2026-10-10 at 09.43.29.png")
+        #expect(name.hasPrefix("Excerpt-2026-10-10-at-09.43.29-"))
+        #expect(!name.contains(" ") && !name.contains("/") && !name.contains(":"))
+        #expect(folderName("ok-name_1.2.png").hasPrefix("ok-name_1.2-"))
+        #expect(folderName("a b.png").hasPrefix("a-b-"))
+        #expect(folderName(".png").hasPrefix("-"))
+        #expect(folderName("..x.png").hasPrefix("-.x-"))
+        #expect(!folderName(".hidden").hasPrefix("."))
+        #expect(folderName(String(repeating: "x", count: 250) + ".png").count <= 100)
+    }
+
+    @Test func eachPrimaryGetsItsOwnFolder() {
         let prefix = String(repeating: "x", count: 120)
         let names = [
-            "a b", "a-b", "日本語", "ñandú", "A", "a", "", "capture", "..", ".", "-",
-            prefix + "1", prefix + "2", ".x", "-x",
+            "a b", "a-b", "日本語", "ñandú", "A", "a", "capture", "-",
+            prefix + "1", prefix + "2", "-x",
         ]
-        let folders = names.map(ClaudeCache.folderName(for:))
+        let folders = names.map { folderName($0 + ".png") }
         #expect(Set(folders).count == names.count)
         #expect(Set(folders.map { $0.lowercased() }).count == names.count)
-        #expect(ClaudeCache.folderName(for: "a b") == ClaudeCache.folderName(for: "a b"))
+        #expect(folderName("shot.png", in: "/a") != folderName("shot.png", in: "/b"))
+        #expect(folderName("shot.png", in: "/a") == folderName("shot.png", in: "/a/x/.."))
         #expect(folders.allSatisfy { !$0.hasPrefix(".") && $0.count <= 100 })
     }
 
     @Test func folderNamesNeverEscapeTheRoot() {
         let root = URL(fileURLWithPath: "/cache/claude", isDirectory: true)
         let cache = ClaudeCache(root: root)
-        for name in ["..", "../x", "/", "", "a/../..", "\0", String(repeating: "/", count: 500)] {
-            let folder = cache.folder(for: name)
+        for path in [
+            "/..", "/a/..", "/", "/a/b/../..", "/\0", "/" + String(repeating: ".", count: 500),
+        ] {
+            let folder = cache.folder(for: URL(fileURLWithPath: path))
             #expect(folder.deletingLastPathComponent().path == root.path)
             #expect(!folder.lastPathComponent.contains("/"))
             #expect(folder.lastPathComponent != "..")

@@ -30,8 +30,8 @@ final class ClaudeExporter {
     /// The stuck entries already named this launch, each set as its sorted paths.
     private var reportedStuck: Set<[String]> = []
     private var reportedUnlistable = false
-    /// Told a capture's name when its export starts and when it ends.
-    var onBusyChange: ((String) -> Void)?
+    /// Told a capture's primary when its export starts and when it ends.
+    var onBusyChange: ((URL) -> Void)?
 
     init(cache: ClaudeCache = .standard) {
         self.cache = cache
@@ -39,18 +39,21 @@ final class ClaudeExporter {
 
     /// The name an export of the capture at `primary` goes by: its file name without the
     /// extension.
-    static func name(of primary: URL) -> String {
+    private static func name(of primary: URL) -> String {
         primary.deletingPathExtension().lastPathComponent
     }
 
-    /// Whether the capture called `name` is being prepared now.
-    func isExporting(_ name: String) -> Bool { running[cache.folder(for: name)] != nil }
+    /// Whether the capture whose primary is at `primary` is being prepared now.
+    func isExporting(_ primary: URL) -> Bool { running[cache.folder(for: primary)] != nil }
+
+    /// Whether `a` and `b` are one capture's primary: they share a cache folder.
+    func isSameCapture(_ a: URL, _ b: URL) -> Bool { cache.folder(for: a) == cache.folder(for: b) }
 
     /// The editor's export: what it shows, unsaved edits included.
-    func export(original: CGImage, edits: EditDocument, name: String) {
-        run(name: name) { cache, recognizer in
+    func export(original: CGImage, edits: EditDocument, primary: URL) {
+        run(primary: primary) { cache, recognizer in
             try ClaudeBundle.write(
-                original: original, edits: edits, name: name, cache: cache,
+                original: original, edits: edits, primary: primary, cache: cache,
                 recognizer: recognizer)
         }
     }
@@ -58,7 +61,7 @@ final class ClaudeExporter {
     /// A thumbnail's export: the primary at `url` as `excerpt read` takes it, loaded off the
     /// main thread while the note is already up.
     func export(primary url: URL) {
-        run(name: Self.name(of: url)) { cache, recognizer in
+        run(primary: url) { cache, recognizer in
             do {
                 return try ClaudeBundle.write(contentsOf: url, cache: cache, recognizer: recognizer)
             } catch let error as ImageInputError {
@@ -68,23 +71,24 @@ final class ClaudeExporter {
     }
 
     private func run(
-        name: String,
+        primary: URL,
         write: @escaping @Sendable (ClaudeCache, any TextRecognizer) throws -> ClaudeBundle
     ) {
-        let folder = cache.folder(for: name)
+        let folder = cache.folder(for: primary)
+        let name = Self.name(of: primary)
         guard running[folder] == nil else {
             NSSound.beep()
             return
         }
         running[folder] = Job(name: name, note: Self.showPreparing(name))
-        onBusyChange?(name)
+        onBusyChange?(primary)
         let cache = cache
         Task {
             let result = await Task.detached(priority: .userInitiated) {
                 Result { try write(cache, VisionTextRecognizer()) }
             }.value
             let note = running.removeValue(forKey: folder)?.note
-            onBusyChange?(name)
+            onBusyChange?(primary)
             switch result {
             case .success(let bundle):
                 do {

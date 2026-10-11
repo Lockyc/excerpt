@@ -36,10 +36,10 @@ final class ThumbnailStack {
         panel.orderFrontRegardless()
     }
 
-    /// Shows For Claude as busy on the thumbnails of the capture called `name` while its
+    /// Shows For Claude as busy on the thumbnails whose capture `isCapture` picks while its
     /// export runs.
-    func setPreparingForClaude(_ busy: Bool, name: String) {
-        for panel in panels where ClaudeExporter.name(of: panel.url) == name {
+    func setPreparingForClaude(_ busy: Bool, isCapture: (URL) -> Bool) {
+        for panel in panels where isCapture(panel.url) {
             panel.setPreparingForClaude(busy)
         }
     }

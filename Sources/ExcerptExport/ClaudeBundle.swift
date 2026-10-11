@@ -44,15 +44,15 @@ public struct ClaudeBundle: Sendable {
         (tiles + [textFile]).map { "@" + $0.path }.joined(separator: " ")
     }
 
-    /// Renders `original` with `edits`, reads its text and tiles it, then replaces the capture's
-    /// cache folder with the result. Tiles and text come from the render alone, which is the
+    /// Renders `original` with `edits`, reads its text and tiles it, then replaces the cache
+    /// folder of the capture whose primary is at `primary` with the result. Tiles and text come from the render alone, which is the
     /// primary's pixels: a cut band is in neither, and a blurred area is only `BlurRenderer`'s
     /// blocks, which hold no readable text. Expired folders
     /// are pruned first; entries that could not be removed are reported in `pruneFailures`.
     /// The bundle is built in a hidden staging folder (a dot-name, which `folderName` never
     /// yields) and swapped in atomically, so a failure leaves the previous bundle in place.
     public static func write(
-        original: CGImage, edits: EditDocument, name: String, cache: ClaudeCache,
+        original: CGImage, edits: EditDocument, primary: URL, cache: ClaudeCache,
         recognizer: any TextRecognizer, now: Date = Date()
     ) throws -> ClaudeBundle {
         let pruned: ClaudeCache.Pruned
@@ -80,7 +80,7 @@ public struct ClaudeBundle: Sendable {
         }
 
         let manager = FileManager.default
-        let folder = cache.folder(for: name)
+        let folder = cache.folder(for: primary)
         let staging = cache.root.appendingPathComponent(
             ".\(folder.lastPathComponent)-\(UUID().uuidString)", isDirectory: true)
         let digits = String(tiles.count).count
@@ -116,7 +116,7 @@ public struct ClaudeBundle: Sendable {
     ) throws -> ClaudeBundle {
         let input = try ImageInput.load(url)
         return try write(
-            original: input.original, edits: input.edits, name: input.name, cache: cache,
+            original: input.original, edits: input.edits, primary: input.primary, cache: cache,
             recognizer: recognizer, now: now)
     }
 

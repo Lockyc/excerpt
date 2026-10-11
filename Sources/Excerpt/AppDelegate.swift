@@ -36,7 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             openLibrary: { [weak self] in self?.openLibrary() },
             openSettings: { [weak self] in self?.openSettings() },
             hotKeyStates: { [weak self] in self?.hotKeyStates() ?? [:] })
-        claude.onBusyChange = { [weak self] name in self?.showPreparingForClaude(name) }
+        claude.onBusyChange = { [weak self] primary in self?.showPreparingForClaude(primary) }
         claude.startPruning()
     }
 
@@ -137,15 +137,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             },
             forClaude: { [weak self] original, document in
                 self?.claude.export(
-                    original: original, edits: document,
-                    name: ClaudeExporter.name(of: capture.primary))
+                    original: original, edits: document, primary: capture.primary)
             },
             onClose: { [weak self] in
                 // The window is still mid-close; release it on the next turn, not under itself.
                 DispatchQueue.main.async { self?.editors[primary] = nil }
             })
         editors[primary] = editor
-        editor.isPreparingForClaude = claude.isExporting(ClaudeExporter.name(of: primary))
+        editor.isPreparingForClaude = claude.isExporting(primary)
         editor.show()
     }
 
@@ -155,11 +154,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         claude.export(primary: url)
     }
 
-    /// Brings every For Claude button of the capture called `name` in line with its export.
-    private func showPreparingForClaude(_ name: String) {
-        let busy = claude.isExporting(name)
-        thumbnails.setPreparingForClaude(busy, name: name)
-        for (primary, editor) in editors where ClaudeExporter.name(of: primary) == name {
+    /// Brings every For Claude button of the capture at `capture` in line with its export.
+    private func showPreparingForClaude(_ capture: URL) {
+        let busy = claude.isExporting(capture)
+        thumbnails.setPreparingForClaude(busy) { self.claude.isSameCapture($0, capture) }
+        for (primary, editor) in editors where claude.isSameCapture(primary, capture) {
             editor.isPreparingForClaude = busy
         }
     }

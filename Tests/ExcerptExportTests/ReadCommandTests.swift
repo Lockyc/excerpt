@@ -70,7 +70,7 @@ import Testing
             path: "tall.png", directory: folder, cache: cache, recognizer: ColourWords())
         #expect(output.status == 0)
         #expect(output.stdout == "alpha\n")
-        let tiles = cache.root.appendingPathComponent("tall")
+        let tiles = cache.folder(for: folder.appendingPathComponent("tall.png"))
         #expect(
             output.stderr == "\(tiles.path)/tile-1-of-2.png\n\(tiles.path)/tile-2-of-2.png\n")
     }

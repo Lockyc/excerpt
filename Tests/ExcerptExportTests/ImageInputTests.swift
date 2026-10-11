@@ -75,7 +75,7 @@ import UniformTypeIdentifiers
         try Self.write(Fixtures.sheet(width: 80, height: 60), as: .png, dpi: 144, to: url)
         let input = try ImageInput.load(url)
         #expect(input.edits == EditDocument(scale: 2, salt: input.edits.salt))
-        #expect(input.name == "Screenshot 2026-10-10")
+        #expect(input.primary == url)
         #expect(input.original.width == 80)
     }
 
@@ -86,7 +86,7 @@ import UniformTypeIdentifiers
         let input = try ImageInput.load(url)
         #expect(input.edits.scale == 1)
         #expect(input.edits.cuts.isEmpty)
-        #expect(input.name == "photo")
+        #expect(input.primary == url)
     }
 
     /// A phone photo stores its pixels sideways with an EXIF orientation; it reads upright.
@@ -107,7 +107,7 @@ import UniformTypeIdentifiers
             let input = try ImageInput.load(url)
             #expect(input.edits == edits)
             #expect(input.original.height == 300)
-            #expect(input.name == primary.deletingPathExtension().lastPathComponent)
+            #expect(input.primary.standardizedFileURL == primary.standardizedFileURL)
         }
     }
 

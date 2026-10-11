@@ -64,8 +64,8 @@ public struct ImageInput {
 
     public let original: CGImage
     public let edits: EditDocument
-    /// The capture's name: the primary's file name without its extension.
-    public let name: String
+    /// The capture's primary: the file itself, or for a master the primary beside it.
+    public let primary: URL
 
     /// Checks the file before decoding any pixels: it is a regular file (symlinks followed), no
     /// larger than `maximumBytes`, an image, and its header gives no more than `maximumPixels`
@@ -75,7 +75,6 @@ public struct ImageInput {
         _ url: URL, maximumPixels: Int = maximumPixels, maximumSide: Int = maximumSide
     ) throws -> ImageInput {
         let limits = Limits(pixels: maximumPixels, side: maximumSide)
-        let name = url.deletingPathExtension().lastPathComponent
         // The primary's bytes and decoded image end with this closure, before any master is
         // rendered against them.
         let step: Step = try {
@@ -98,8 +97,8 @@ public struct ImageInput {
                 return .done(
                     ImageInput(
                         original: try file.image(path, upright: false), edits: edits,
-                        name: URL(fileURLWithPath: primaryName).deletingPathExtension()
-                            .lastPathComponent))
+                        primary: url.deletingLastPathComponent()
+                            .appendingPathComponent(primaryName)))
             case .none: break
             }
             let scale = PNGCodec.scale(dpi: file.dpi)
@@ -116,17 +115,17 @@ public struct ImageInput {
             return .done(
                 ImageInput(
                     original: try file.image(path, upright: true),
-                    edits: EditDocument(scale: scale), name: name))
+                    edits: EditDocument(scale: scale), primary: url))
         }()
         switch step {
         case .done(let input):
             return input
         case .verify(let primary, let master, let scale):
             if let original = master.original(ifItRenders: primary) {
-                return ImageInput(original: original, edits: master.edits, name: name)
+                return ImageInput(original: original, edits: master.edits, primary: url)
             }
             return ImageInput(
-                original: primary.makeImage(), edits: EditDocument(scale: scale), name: name)
+                original: primary.makeImage(), edits: EditDocument(scale: scale), primary: url)
         }
     }
 
