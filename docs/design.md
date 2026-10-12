@@ -152,12 +152,30 @@ Opens from the thumbnail's Edit, from the menu bar's Recent Captures (the librar
 other), or by opening a capture (registered as an Open With handler for PNG, not the default). Fits to width; tall captures scroll. Floats above other windows; no
 Dock icon.
 
-Tools: `V` select · `A` arrow · `R` rectangle · `T` text · `H` highlight · `B` blur · `K` crop ·
-`C` cut. A new editor starts on the arrow. A drawing tool pressed on an annotation it draws
-selects and moves it rather than drawing over it; other kinds are drawn over. Six colours,
-three sizes (one control sets stroke and text). Whatever `⌫` would delete — the selection, or
-the crop under `K` — has a delete button floating beside it. The arrow drag **starts at the
-head**. Crop snaps using the same gap detection as cuts.
+Tools: `V` select · `A` arrow · `R` rectangle · `T` text · `N` step · `H` highlight · `B` blur ·
+`K` crop · `C` cut. A new editor starts on the arrow. A drawing tool pressed on an annotation it
+draws selects and moves it rather than drawing over it; other kinds are drawn over. The arrow drag
+**starts at the head**. Crop snaps using the same gap detection as cuts.
+
+**The item bar** floats above whatever is selected (below it when there is no room, kept on the
+canvas, hidden during a drag) and carries that item's options and nothing else: delete for every
+item, and colour (six), size (three; one control sets stroke, text and step size) and the
+kind's own options where they apply — text adds its background, a step adds Move earlier / Move
+later (disabled at either end of the sequence). The options per kind are one pure mapping. The
+crop under `K` gets a bar with delete. A new annotation takes the colour, size and text background
+last chosen, remembered across launches, and stays selected after it is drawn so its bar is
+showing.
+
+**Text** is drawn either plain in its colour or on a **background**: a rounded pill in its colour
+with the text in `Palette.contrastingInk` (black on yellow, white otherwise). New text starts
+with the background on. Typing previews through Core's renderer on every keystroke — the text view
+under it supplies only input, caret and selection, its own glyphs transparent — so what is typed
+is what saves. Return commits; ⌥Return adds a line.
+
+**Steps** (`N`): each click places a numbered circle in its colour, the number in
+`Palette.contrastingInk`, ringed in white. The number is not stored: it is the step's rank among
+the document's steps in annotation order, so steps always read 1…n, a delete closes the gap and
+Move earlier / later reorder them.
 
 **Border** turns the border on and off, and its chevron drops down an on/off switch, the six
 colours and three widths (2, 4, 8pt); it frames the render in a solid line drawn inside its edge,
@@ -173,7 +191,7 @@ known strings. The noise is seeded from a per-document salt stored in the master
 shows the true result.
 
 **The edit document** holds the cuts, an optional crop, the annotations (arrow, rectangle,
-text, highlight, blur), all in original pixels, an optional border, plus the blur salt, so
+text, step, highlight, blur), all in original pixels, an optional border, plus the blur salt, so
 every edit stays adjustable from the master.
 Render order: blur (from original pixels) → crop → cuts and their labels → annotations, placed
 through the coordinate map → border. The canvas caches the render up to the cuts and draws annotations
