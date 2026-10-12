@@ -48,6 +48,7 @@ import Testing
         #expect(
             bundle.references.split(separator: " ").map(String.init)
                 == (bundle.tiles + [bundle.textFile]).map { "@" + $0.path })
+        #expect(bundle.references.hasSuffix(".md "))
     }
 
     /// Review focus: a 1× capture and a 2× capture of the same content give the same tiles.

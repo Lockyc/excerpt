@@ -39,9 +39,11 @@ public struct ClaudeBundle: Sendable {
     public let pruneFailures: [(url: URL, error: ClaudeCacheError)]
 
     /// `@` references to every tile, then `text.md`, on one line: what the clipboard gets. One
-    /// line, because a terminal may fold a pasted block of many lines into a placeholder.
+    /// line, because a terminal may fold a pasted block of many lines into a placeholder; a
+    /// trailing space, so a paste into Claude Code doesn't leave its file picker open on the
+    /// last path.
     public var references: String {
-        (tiles + [textFile]).map { "@" + $0.path }.joined(separator: " ")
+        (tiles + [textFile]).map { "@" + $0.path }.joined(separator: " ") + " "
     }
 
     /// Renders `original` with `edits`, reads its text and tiles it, then replaces the cache
