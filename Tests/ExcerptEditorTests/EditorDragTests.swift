@@ -205,24 +205,92 @@ import Testing
     @Test func typingAddsEditsAndRemovesText() {
         let m = model()
         m.tool = .text
-        let target = m.textTarget(at: pointer(m, 40, 60), map: map(m))
-        #expect(target.id == nil)
-        m.commitText(target, string: "Total")
+        m.beginTyping(at: pointer(m, 40, 60), map: map(m))
+        m.updateTyping("Total")
+        m.endTyping()
         #expect(
             m.document.annotations.map(\.shape) == [
-                .text(origin: CGPoint(x: 40, y: 60), string: "Total")
+                .text(origin: CGPoint(x: 40, y: 60), string: "Total", background: true)
             ])
-        let again = m.textTarget(at: pointer(m, 45, 70), map: map(m))
-        #expect(again.id == 1 && again.string == "Total")
-        m.commitText(again, string: "Grand total")
+        #expect(m.selection == .annotation(1))
+        m.beginTyping(at: pointer(m, 45, 70), map: map(m))
+        #expect(m.typedString == "Total")
+        m.updateTyping("Grand total")
+        m.endTyping()
         #expect(
             m.document.annotations.map(\.shape) == [
-                .text(origin: CGPoint(x: 40, y: 60), string: "Grand total")
+                .text(origin: CGPoint(x: 40, y: 60), string: "Grand total", background: true)
             ])
-        m.commitText(m.textTarget(at: pointer(m, 45, 70), map: map(m)), string: "  ")
+        m.beginTyping(at: pointer(m, 45, 70), map: map(m))
+        m.updateTyping("  ")
+        m.endTyping()
+        #expect(m.document.annotations.isEmpty && m.selection == nil)
+        m.beginTyping(at: pointer(m, 200, 200), map: map(m))
+        m.endTyping()
         #expect(m.document.annotations.isEmpty)
-        m.commitText(m.textTarget(at: pointer(m, 200, 200), map: map(m)), string: "")
+    }
+
+    @Test func theTypedTextShowsLiveWithoutChangingTheDocument() {
+        let m = model()
+        m.tool = .text
+        m.beginTyping(at: pointer(m, 40, 60), map: map(m))
+        m.updateTyping("Hi")
+        #expect(m.document.annotations.isEmpty && !m.isDirty)
+        #expect(
+            m.displayDocument.annotations.map(\.shape) == [
+                .text(origin: CGPoint(x: 40, y: 60), string: "Hi", background: true)
+            ])
+    }
+
+    @Test func typingCommitsOnceAsOneStep() {
+        let m = model()
+        m.tool = .text
+        m.beginTyping(at: pointer(m, 40, 60), map: map(m))
+        m.updateTyping("One")
+        m.endTyping()
+        m.endTyping()  // a second end, as focus loss after Return sends, records nothing
+        m.undo()
+        #expect(m.document.annotations.isEmpty && !m.canUndo)
+        m.beginTyping(at: pointer(m, 40, 60), map: map(m))
+        m.updateTyping("Two")
+        m.tool = .arrow  // leaving the tool commits
+        #expect(
+            m.document.annotations.map(\.shape) == [
+                .text(origin: CGPoint(x: 40, y: 60), string: "Two", background: true)
+            ])
+    }
+
+    @Test func restylingWhileTypingChangesTheTypedText() {
+        let m = model()
+        m.tool = .text
+        m.beginTyping(at: pointer(m, 40, 60), map: map(m))
+        m.updateTyping("Note")
+        m.setColor(.yellow)
+        m.setBackground(false)
+        #expect(!m.canUndo)  // nothing recorded until the text commits
+        m.endTyping()
+        #expect(
+            m.document.annotations == [
+                Annotation(
+                    id: 1,
+                    shape: .text(
+                        origin: CGPoint(x: 40, y: 60), string: "Note", background: false),
+                    color: .yellow)
+            ])
+        m.undo()
         #expect(m.document.annotations.isEmpty)
+    }
+
+    @Test func deletingWhileTypingRemovesTheText() {
+        let m = model()
+        m.apply {
+            $0.annotations.append(
+                Annotation(id: 1, shape: .text(origin: CGPoint(x: 40, y: 60), string: "Old")))
+        }
+        m.beginTyping(at: pointer(m, 45, 70), map: map(m))
+        m.updateTyping("Changed")
+        m.deleteTyping()
+        #expect(m.document.annotations.isEmpty && m.typing == nil && m.selection == nil)
     }
 
     @Test func previewThenCommitRecordsOneStepFromTheOriginal() {

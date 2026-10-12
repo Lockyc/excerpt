@@ -16,13 +16,16 @@ final class EditorModel {
     private(set) var document: EditDocument { didSet { onChange?() } }
     /// Called after anything the editor shows changed: the document, tool, selection, a drag.
     var onChange: (() -> Void)?
-    /// The text annotation being retyped in place; the display hides it while the field is up.
-    var editingID: Int? { didSet { onChange?() } }
+    /// The text being typed: shown live by `displayDocument`, written to the document only by
+    /// `endTyping`. Its id is the document annotation it retypes, or the next free id for new
+    /// text.
+    private(set) var typing: Annotation? { didSet { onChange?() } }
     private var saved: EditDocument
     private var history = UndoStack<EditDocument>()
 
     var tool: Tool = .arrow {
         didSet {
+            endTyping()
             cancelDrag()
             selection = nil
             onChange?()
@@ -70,11 +73,18 @@ final class EditorModel {
     var canRedo: Bool { history.canRedo }
 
     /// What the canvas shows: the whole capture while the crop tool is active, so a crop can
-    /// be redrawn; otherwise the document, less the text being retyped.
+    /// be redrawn; otherwise the document, with the text being typed in place of the text it
+    /// retypes, or added.
     var displayDocument: EditDocument {
         var shown = document
         if tool == .crop { shown.crop = nil }
-        if let editingID { shown.annotations.removeAll { $0.id == editingID } }
+        if let typing {
+            if let i = shown.annotations.firstIndex(where: { $0.id == typing.id }) {
+                shown.annotations[i] = typing
+            } else {
+                shown.annotations.append(typing)
+            }
+        }
         return shown
     }
 
@@ -195,13 +205,88 @@ final class EditorModel {
         return !annotation.shape.isBlur
     }
 
+    /// Restyles the text being typed, else the selected annotation (one undoable step).
     private func restyleSelection(_ change: (inout Annotation) -> Void) {
+        if var typed = typing {
+            change(&typed)
+            typing = typed
+            return
+        }
         guard case .annotation(let id) = selection, selectionTakesStyle else { return }
         apply { doc in
             if let i = doc.annotations.firstIndex(where: { $0.id == id }) {
                 change(&doc.annotations[i])
             }
         }
+    }
+
+    /// The text annotation under `pointer`, if any.
+    func textID(at pointer: Pointer, map: RenderMap) -> Int? {
+        guard
+            let id = HitTest.annotation(
+                at: pointer.original, in: document.annotations, scale: document.scale, slop: 0,
+                map: map),
+            let annotation = document.annotations.first(where: { $0.id == id }),
+            case .text = annotation.shape
+        else { return nil }
+        return id
+    }
+
+    /// Starts typing into the text under `pointer`, or new text there in the current style.
+    /// Whatever was being typed commits first.
+    func beginTyping(at pointer: Pointer, map: RenderMap) {
+        endTyping()
+        if let id = textID(at: pointer, map: map),
+            let annotation = document.annotations.first(where: { $0.id == id })
+        {
+            selection = .annotation(id)
+            typing = annotation
+            return
+        }
+        selection = nil
+        typing = Annotation(
+            id: document.nextAnnotationID,
+            shape: .text(origin: pointer.original, string: "", background: style.background),
+            color: style.color, width: style.width)
+    }
+
+    var typedString: String { typing.map(Self.string(of:)) ?? "" }
+
+    func updateTyping(_ string: String) {
+        guard var typed = typing, case .text(let origin, _, let background) = typed.shape else {
+            return
+        }
+        typed.shape = .text(origin: origin, string: string, background: background)
+        typing = typed
+    }
+
+    /// Ends typing as one undoable step: new text is added, retyped text replaced, and text
+    /// emptied removed. The text stays selected. Does nothing when nothing is being typed.
+    func endTyping() {
+        guard let typed = typing else { return }
+        typing = nil
+        let empty = Self.string(of: typed).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        apply { doc in
+            if let i = doc.annotations.firstIndex(where: { $0.id == typed.id }) {
+                if empty { doc.annotations.remove(at: i) } else { doc.annotations[i] = typed }
+            } else if !empty {
+                doc.annotations.append(typed)
+            }
+        }
+        selection = empty ? nil : .annotation(typed.id)
+    }
+
+    /// Drops the text being typed, removing it from the document if it was already there.
+    func deleteTyping() {
+        guard let typed = typing else { return }
+        typing = nil
+        apply { $0.annotations.removeAll { $0.id == typed.id } }
+        selection = nil
+    }
+
+    private static func string(of annotation: Annotation) -> String {
+        guard case .text(_, let string, _) = annotation.shape else { return "" }
+        return string
     }
 
     /// Whether `deleteSelection` would remove something: the selection, or under the crop tool

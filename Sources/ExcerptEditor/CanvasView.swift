@@ -33,7 +33,6 @@ final class CanvasView: NSView, NSTextFieldDelegate {
     /// Floats beside whatever ⌫ would delete: the selection, or the crop under the crop tool.
     private let deleteButton = NSButton()
     private static let deleteButtonSize: CGFloat = 28
-    private var textTarget: TextTarget?
 
     init(model: EditorModel) {
         self.model = model
@@ -295,15 +294,12 @@ final class CanvasView: NSView, NSTextFieldDelegate {
         window?.makeFirstResponder(self)
         let p = pointer(event)
         if model.tool == .text {
-            beginText(model.textTarget(at: p, map: base.map))
+            beginText(at: p)
             return
         }
-        if model.tool == .select, event.clickCount == 2 {
-            let target = model.textTarget(at: p, map: base.map)
-            if target.id != nil {
-                beginText(target)
-                return
-            }
+        if model.tool == .select, event.clickCount == 2, model.textID(at: p, map: base.map) != nil {
+            beginText(at: p)
+            return
         }
         model.mouseDown(p, map: base.map)
     }
@@ -359,12 +355,16 @@ final class CanvasView: NSView, NSTextFieldDelegate {
 
     // MARK: Text
 
-    private func beginText(_ target: TextTarget) {
+    private func beginText(at p: Pointer) {
         endText()
+        model.beginTyping(at: p, map: base.map)
+        guard let target = model.typing, case .text(let at, let string, _) = target.shape else {
+            return
+        }
         let map = base.map
-        let origin = viewPoint(map.point(target.origin, bias: .after))
+        let origin = viewPoint(map.point(at, bias: .after))
         let size = CGFloat(target.width.textPoints * model.document.scale) * zoom
-        let field = NSTextField(string: target.string)
+        let field = NSTextField(string: string)
         field.font = TextLayout.font(pixelSize: Double(size)) as NSFont
         field.textColor = NSColor(cgColor: target.color.rgba.cgColor)
         field.isBordered = false
@@ -377,7 +377,7 @@ final class CanvasView: NSView, NSTextFieldDelegate {
         field.delegate = self
         field.frame = CGRect(
             x: origin.x, y: origin.y, width: max(240, size * 8),
-            height: size * 1.4 * CGFloat(max(1, target.string.components(separatedBy: "\n").count)))
+            height: size * 1.4 * CGFloat(max(1, string.components(separatedBy: "\n").count)))
         // The cell insets its text, so the field moves back by that much and the typed text sits
         // where the committed text will be drawn.
         if let inset = field.cell?.titleRect(forBounds: field.bounds).origin {
@@ -385,21 +385,17 @@ final class CanvasView: NSView, NSTextFieldDelegate {
         }
         addSubview(field)
         textField = field
-        textTarget = target
-        model.editingID = target.id
         window?.makeFirstResponder(field)
         onChange()
     }
 
     /// Commits whatever is typed; safe to call when no text is being edited.
     func endText() {
-        guard let field = textField, let target = textTarget else { return }
+        guard let field = textField else { return }
         textField = nil
-        textTarget = nil
-        let string = field.stringValue
+        model.updateTyping(field.stringValue)
         field.removeFromSuperview()
-        model.editingID = nil
-        model.commitText(target, string: string)
+        model.endTyping()
         window?.makeFirstResponder(self)
     }
 

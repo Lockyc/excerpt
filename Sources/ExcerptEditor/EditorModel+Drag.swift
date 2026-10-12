@@ -24,15 +24,6 @@ enum Pending: Equatable {
     case edge(Seam, SeamEdge, Int)
 }
 
-/// Text being typed: a new annotation when `id` is nil.
-struct TextTarget: Equatable {
-    let id: Int?
-    let origin: CGPoint
-    let string: String
-    let color: Palette
-    let width: StrokeWidth
-}
-
 /// A drag in progress. Shape and move drags have already previewed into the document; `before`
 /// is what to record from, or restore on cancel.
 enum Drag {
@@ -247,44 +238,6 @@ extension EditorModel {
         }
         setDrag(nil)
         setPending(nil)
-    }
-
-    /// What typing at `pointer` edits: the text annotation under it, or new text.
-    func textTarget(at pointer: Pointer, map: RenderMap) -> TextTarget {
-        let p = pointer.original
-        if let id = HitTest.annotation(
-            at: p, in: document.annotations, scale: document.scale, slop: 0, map: map),
-            let annotation = document.annotations.first(where: { $0.id == id }),
-            case .text(let origin, let string, _) = annotation.shape
-        {
-            selection = .annotation(id)
-            return TextTarget(
-                id: id, origin: origin, string: string, color: annotation.color,
-                width: annotation.width)
-        }
-        return TextTarget(
-            id: nil, origin: p, string: "", color: style.color, width: style.width)
-    }
-
-    /// Ends typing: new text is added, edited text replaced, and text emptied removed.
-    func commitText(_ target: TextTarget, string: String) {
-        let empty = string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        apply { doc in
-            if let id = target.id {
-                if empty {
-                    doc.annotations.removeAll { $0.id == id }
-                } else if let i = doc.annotations.firstIndex(where: { $0.id == id }) {
-                    doc.annotations[i].shape = .text(origin: target.origin, string: string)
-                }
-            } else if !empty {
-                doc.annotations.append(
-                    Annotation(
-                        id: doc.nextAnnotationID,
-                        shape: .text(origin: target.origin, string: string), color: target.color,
-                        width: target.width))
-            }
-        }
-        if empty { selection = nil }
     }
 
     /// The new annotation for a drag: an arrow's head is where the drag started.
