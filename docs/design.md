@@ -147,8 +147,9 @@ Accessibility for auto-scroll only.
 
 ## Editor
 
-Opens from the thumbnail's Edit, or by opening a capture (registered as an Open With handler
-for PNG, not the default). Fits to width; tall captures scroll. Floats above other windows; no
+Opens from the thumbnail's Edit, from the menu bar's Recent Captures (the library's newest
+`StatusMenu.recentLimit` PNGs by creation date, masters left out, then Open Capture… for any
+other), or by opening a capture (registered as an Open With handler for PNG, not the default). Fits to width; tall captures scroll. Floats above other windows; no
 Dock icon.
 
 Tools: `V` select · `A` arrow · `R` rectangle · `T` text · `H` highlight · `B` blur · `K` crop ·

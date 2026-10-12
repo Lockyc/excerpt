@@ -33,6 +33,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         applyHotKeys()
         statusMenu = StatusMenu(
             perform: { [weak self] in self?.perform($0) },
+            recentCaptures: { [weak self] in
+                try self?.preferences.store.recentCaptures(limit: StatusMenu.recentLimit) ?? []
+            },
+            openCapture: { [weak self] in self?.openEditor($0) },
+            chooseCapture: { [weak self] in self?.chooseCapture() },
             openLibrary: { [weak self] in self?.openLibrary() },
             openSettings: { [weak self] in self?.openSettings() },
             hotKeyStates: { [weak self] in self?.hotKeyStates() ?? [:] })
@@ -171,6 +176,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         for editor in editors.values where !editor.confirmClose() { return .terminateCancel }
         return .terminateNow
+    }
+
+    /// Open Capture…: a panel at the library folder; each PNG chosen opens in the editor.
+    func chooseCapture() {
+        let panel = NSOpenPanel()
+        panel.directoryURL = preferences.libraryFolder
+        panel.allowedContentTypes = [.png]
+        panel.allowsMultipleSelection = true
+        panel.prompt = "Edit"
+        NSApp.activate()
+        panel.begin { [weak self] response in
+            guard response == .OK else { return }
+            for url in panel.urls { self?.openEditor(url) }
+        }
     }
 
     func openLibrary() {
