@@ -6,6 +6,7 @@ public enum Tool: CaseIterable {
     case arrow
     case rectangle
     case text
+    case step
     case highlight
     case blur
     case crop
@@ -17,6 +18,7 @@ public enum Tool: CaseIterable {
         case .arrow: "a"
         case .rectangle: "r"
         case .text: "t"
+        case .step: "n"
         case .highlight: "h"
         case .blur: "b"
         case .crop: "k"
@@ -30,6 +32,7 @@ public enum Tool: CaseIterable {
         case .arrow: "Arrow"
         case .rectangle: "Rectangle"
         case .text: "Text"
+        case .step: "Step"
         case .highlight: "Highlight"
         case .blur: "Blur"
         case .crop: "Crop"
@@ -44,6 +47,7 @@ public enum Tool: CaseIterable {
         case .arrow: "arrow.up.right"
         case .rectangle: "rectangle"
         case .text: "textformat"
+        case .step: "1.circle"
         case .highlight: "highlighter"
         case .blur: "square.grid.3x3.fill"
         case .crop: "crop"
@@ -64,7 +68,7 @@ extension Tool {
     func draws(_ shape: Shape) -> Bool {
         switch (self, shape) {
         case (.arrow, .arrow), (.rectangle, .rectangle), (.text, .text), (.highlight, .highlight),
-            (.blur, .blur):
+            (.blur, .blur), (.step, .step):
             true
         default: false
         }

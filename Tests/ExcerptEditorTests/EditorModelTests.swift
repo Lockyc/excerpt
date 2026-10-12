@@ -7,7 +7,7 @@ import Testing
 
 @Suite struct ToolTests {
     @Test func everyToolHasItsKey() {
-        #expect(Tool.allCases.map(\.key) == ["v", "a", "r", "t", "h", "b", "k", "c"])
+        #expect(Tool.allCases.map(\.key) == ["v", "a", "r", "t", "n", "h", "b", "k", "c"])
         #expect(Tool(key: "K") == .crop)
         #expect(Tool(key: "x") == nil)
     }
@@ -139,21 +139,78 @@ import Testing
         m.undo()
         #expect(m.document.annotations.isEmpty)  // the only step is the blur's own
         #expect(!m.canUndo)
-        #expect(m.color == .blue && m.width == .thick)  // new annotations still get the style
+        #expect(m.style.color == .blue && m.style.width == .thick)  // new annotations get it
     }
 
     @Test func aSeamSelectionIsNotABlurSelection() {
         let m = model()
         m.apply { $0.cuts = [Cut(axis: .horizontal, lower: 100, upper: 200)] }
         m.selection = .seam(.horizontal, 100..<200)
-        #expect(!m.selectedAnnotationIsBlur && !m.selectionTakesStyle)
+        #expect(!m.selectionTakesStyle)
         m.setColor(.blue)
-        #expect(m.color == .blue)
+        #expect(m.style.color == .blue)
     }
 
-    @Test func newAnnotationsStartWithTheInitialStyle() {
+    @Test func newAnnotationsStartWithTheGivenStyle() {
+        #expect(model().style == .initial && AnnotationStyle.initial.background)
+        let m = EditorModel(
+            original: Fixtures.sheet(width: 360, height: 400),
+            document: EditDocument(scale: 2, salt: 7),
+            style: AnnotationStyle(color: .blue, width: .thick, background: false))
+        #expect(m.style == AnnotationStyle(color: .blue, width: .thick, background: false))
+    }
+
+    @Test func choosingAStyleIsRemembered() {
         let m = model()
-        #expect(m.color == Palette.initial && m.width == StrokeWidth.initial)
+        var told: [AnnotationStyle] = []
+        m.onStyleChange = { told.append($0) }
+        m.setColor(.green)
+        m.setBackground(false)
+        m.setBackground(false)  // unchanged: not told again
+        #expect(told.map(\.color) == [.green, .green])
+        #expect(told.last?.background == false)
+    }
+
+    @Test func backgroundRestylesSelectedTextOnly() {
+        let m = model()
+        m.apply {
+            $0.annotations.append(
+                Annotation(id: 1, shape: .text(origin: .zero, string: "a", background: true)))
+            $0.annotations.append(note(2, CGRect(x: 0, y: 50, width: 10, height: 10)))
+        }
+        m.selection = .annotation(1)
+        m.setBackground(false)
+        #expect(
+            m.document.annotations[0].shape == .text(origin: .zero, string: "a", background: false))
+        m.selection = .annotation(2)
+        let before = m.document
+        m.setBackground(true)
+        #expect(m.document == before)
+    }
+
+    @Test func stepsReorderAndDeleteAsOneUndoableStep() {
+        let m = model()
+        m.apply { doc in
+            for i in 1...3 {
+                doc.annotations.append(
+                    Annotation(id: i, shape: .step(center: CGPoint(x: i * 20, y: 20))))
+            }
+            doc.annotations.insert(note(9, CGRect(x: 0, y: 100, width: 10, height: 10)), at: 1)
+        }
+        m.selection = .annotation(1)
+        #expect(!m.canMoveStepEarlier && m.canMoveStepLater)
+        m.moveStep(earlier: false)
+        #expect(AnnotationGeometry.stepNumbers(m.document.annotations) == [2: 1, 1: 2, 3: 3])
+        #expect(m.selection == .annotation(1) && m.canMoveStepEarlier && m.canMoveStepLater)
+        m.undo()
+        #expect(AnnotationGeometry.stepNumbers(m.document.annotations) == [1: 1, 2: 2, 3: 3])
+        m.selection = .annotation(3)
+        #expect(m.canMoveStepEarlier && !m.canMoveStepLater)
+        m.selection = .annotation(2)
+        m.deleteSelection()
+        #expect(AnnotationGeometry.stepNumbers(m.document.annotations) == [1: 1, 3: 2])
+        m.undo()
+        #expect(AnnotationGeometry.stepNumbers(m.document.annotations)[3] == 3)
     }
 
     @Test func canDeleteFollowsTheSelectionAndTheCrop() {

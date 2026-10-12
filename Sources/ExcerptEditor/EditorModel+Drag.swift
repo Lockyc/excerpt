@@ -82,8 +82,8 @@ extension EditorModel {
             var next = document
             next.annotations.append(
                 Annotation(
-                    id: id, shape: shape(from: p.original, to: p.original), color: color,
-                    width: width))
+                    id: id, shape: shape(from: p.original, to: p.original), color: style.color,
+                    width: style.width))
             preview(next)
             selection = nil
             setDrag(.shape(id: id, start: p.original, before: before))
@@ -91,6 +91,19 @@ extension EditorModel {
             if tool == .blur, grabAnnotation(at: p, map: map) { return }
             selection = nil
             setDrag(.region(start: p.original))
+        case .step:
+            if grabAnnotation(at: p, map: map) { return }
+            let before = document
+            let id = document.nextAnnotationID
+            var next = document
+            next.annotations.append(
+                Annotation(
+                    id: id, shape: .step(center: p.original), color: style.color,
+                    width: style.width))
+            preview(next)
+            selection = .annotation(id)
+            // Placed on press; a drag before release moves it, and release records one step.
+            setDrag(.move(id: id, last: p.original, before: before))
         case .text:
             break
         }
@@ -165,8 +178,8 @@ extension EditorModel {
                 apply { doc in
                     doc.annotations.append(
                         Annotation(
-                            id: doc.nextAnnotationID, shape: .blur(rect: rect), color: color,
-                            width: width))
+                            id: doc.nextAnnotationID, shape: .blur(rect: rect),
+                            color: style.color, width: style.width))
                 }
             case (.crop, .region(let rect)?):
                 apply {
@@ -249,7 +262,8 @@ extension EditorModel {
                 id: id, origin: origin, string: string, color: annotation.color,
                 width: annotation.width)
         }
-        return TextTarget(id: nil, origin: p, string: "", color: color, width: width)
+        return TextTarget(
+            id: nil, origin: p, string: "", color: style.color, width: style.width)
     }
 
     /// Ends typing: new text is added, edited text replaced, and text emptied removed.

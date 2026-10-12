@@ -183,6 +183,25 @@ import Testing
         #expect(m.document.cuts == [Cut(axis: .horizontal, lower: 100, upper: 200)])
     }
 
+    @Test func theStepToolPlacesTheNextNumberAndDragsIt() {
+        let m = model()
+        m.tool = .step
+        m.setColor(.blue)
+        drag(m, CGPoint(x: 50, y: 50), CGPoint(x: 50, y: 50))
+        drag(m, CGPoint(x: 150, y: 150), CGPoint(x: 170, y: 160))
+        #expect(
+            m.document.annotations == [
+                Annotation(id: 1, shape: .step(center: CGPoint(x: 50, y: 50)), color: .blue),
+                Annotation(id: 2, shape: .step(center: CGPoint(x: 170, y: 160)), color: .blue),
+            ])
+        #expect(m.selection == .annotation(2))
+        m.undo()  // placing and dragging step 2 was one step
+        #expect(m.document.annotations.count == 1)
+        // Pressing on an existing step moves it rather than placing another.
+        drag(m, CGPoint(x: 52, y: 50), CGPoint(x: 80, y: 50))
+        #expect(m.document.annotations.map(\.shape) == [.step(center: CGPoint(x: 78, y: 50))])
+    }
+
     @Test func typingAddsEditsAndRemovesText() {
         let m = model()
         m.tool = .text

@@ -305,8 +305,8 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
     /// Brings the toolbar, title and note in line with the model.
     private func update() {
         tools.selectedSegment = Tool.allCases.firstIndex(of: model.tool) ?? 0
-        colors.selectedSegment = Palette.allCases.firstIndex(of: model.color) ?? 0
-        widths.selectedSegment = StrokeWidth.allCases.firstIndex(of: model.width) ?? 0
+        colors.selectedSegment = Palette.allCases.firstIndex(of: model.style.color) ?? 0
+        widths.selectedSegment = StrokeWidth.allCases.firstIndex(of: model.style.width) ?? 0
         borderControl.setSelected(model.document.border != nil, forSegment: 0)
         borderPanel.refresh()
         hiddenNote.stringValue = model.hiddenNote(map: canvas.base.map)
@@ -314,7 +314,12 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         snapHint.stringValue =
             !limit.isEmpty ? limit : model.tool == .cut || model.tool == .crop ? Self.snapHint : ""
 
-        let blurSelected = model.selectedAnnotationIsBlur
+        let blurSelected: Bool
+        if case .annotation? = model.selection {
+            blurSelected = !model.selectionTakesStyle
+        } else {
+            blurSelected = false
+        }
         colors.isEnabled = !blurSelected
         widths.isEnabled = !blurSelected
         if blurSelected {

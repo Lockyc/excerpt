@@ -28,8 +28,12 @@ final class EditorModel {
             onChange?()
         }
     }
-    private(set) var color: Palette = .initial
-    private(set) var width: StrokeWidth = .initial
+    /// What new annotations get; choosing a colour, size or background sets it.
+    private(set) var style: AnnotationStyle {
+        didSet { if style != oldValue { onStyleChange?(style) } }
+    }
+    /// Called when the style changes, so the next editor starts with it.
+    var onStyleChange: ((AnnotationStyle) -> Void)?
     /// What the border is, or becomes when turned on: the document's own while it has one,
     /// else the one last chosen.
     private(set) var borderStyle: Border {
@@ -49,8 +53,12 @@ final class EditorModel {
     /// The original's pixels, for snapping; read on first use.
     private(set) lazy var pixels = PixelBuffer(original)
 
-    init(original: CGImage, document: EditDocument, borderStyle: Border = .initial) {
+    init(
+        original: CGImage, document: EditDocument, borderStyle: Border = .initial,
+        style: AnnotationStyle = .initial
+    ) {
         self.original = original
+        self.style = style
         self.document = document
         self.saved = document
         self.borderStyle = document.border ?? borderStyle
@@ -158,14 +166,24 @@ final class EditorModel {
 
     /// Sets the colour new annotations get, and recolours the selected annotation.
     func setColor(_ color: Palette) {
-        self.color = color
+        style.color = color
         restyleSelection { $0.color = color }
     }
 
-    /// Sets the width new annotations get, and restyles the selected annotation.
+    /// Sets the size new annotations get, and resizes the selected annotation.
     func setWidth(_ width: StrokeWidth) {
-        self.width = width
+        style.width = width
         restyleSelection { $0.width = width }
+    }
+
+    /// Sets whether new text gets a background, and sets it on the selected text.
+    func setBackground(_ on: Bool) {
+        style.background = on
+        restyleSelection { annotation in
+            if case .text(let origin, let string, _) = annotation.shape {
+                annotation.shape = .text(origin: origin, string: string, background: on)
+            }
+        }
     }
 
     /// Whether colour and size apply to the selection: an annotation other than a blur, which
@@ -175,14 +193,6 @@ final class EditorModel {
             let annotation = document.annotations.first(where: { $0.id == id })
         else { return false }
         return !annotation.shape.isBlur
-    }
-
-    /// Whether the selection is a blur annotation (not a seam, not nothing).
-    var selectedAnnotationIsBlur: Bool {
-        guard case .annotation(let id) = selection,
-            let annotation = document.annotations.first(where: { $0.id == id })
-        else { return false }
-        return annotation.shape.isBlur
     }
 
     private func restyleSelection(_ change: (inout Annotation) -> Void) {
@@ -210,6 +220,31 @@ final class EditorModel {
             if tool == .crop { apply { $0.crop = nil } }
         }
         selection = nil
+    }
+
+    /// The selected step's index in the document and the indices of the steps either side of it
+    /// in step order; nil unless a step is selected.
+    private var selectedStep: (index: Int, earlier: Int?, later: Int?)? {
+        guard case .annotation(let id) = selection,
+            let index = document.annotations.firstIndex(where: { $0.id == id }),
+            document.annotations[index].shape.isStep
+        else { return nil }
+        let steps = document.annotations.indices.filter { document.annotations[$0].shape.isStep }
+        let rank = steps.firstIndex(of: index)!
+        return (
+            index, rank > 0 ? steps[rank - 1] : nil, rank + 1 < steps.count ? steps[rank + 1] : nil
+        )
+    }
+
+    var canMoveStepEarlier: Bool { selectedStep?.earlier != nil }
+    var canMoveStepLater: Bool { selectedStep?.later != nil }
+
+    /// Swaps the selected step with the one numbered before or after it, as one undoable step.
+    func moveStep(earlier: Bool) {
+        guard let step = selectedStep, let other = earlier ? step.earlier : step.later else {
+            return
+        }
+        apply { $0.annotations.swapAt(step.index, other) }
     }
 
     /// Whether `axis` already has `EditDocument.maximumCutsPerAxis` cuts: another would save a
