@@ -331,4 +331,31 @@ import Testing
             try store.saveCapture(Fixtures.sheet(width: 60, height: 40), scale: 1, at: date)
         }
     }
+
+    @Test func recentCapturesAreTheNewestPrimariesFirst() throws {
+        let folder = tempFolder()
+        #expect(try LibraryStore(folder: folder).recentCaptures(limit: 5) == [])
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let names = [
+            "Excerpt 2026-10-10 at 09.00.00.png", "Excerpt 2026-10-10 at 09.00.00 original.png",
+            "Screenshot 2026-10-11 at 10.00.00.png", "notes.txt",
+            "Excerpt 2026-10-12 at 11.00.00.png",
+        ]
+        for (index, name) in names.enumerated() {
+            let url = folder.appendingPathComponent(name)
+            try Data().write(to: url)
+            try FileManager.default.setAttributes(
+                [.creationDate: date.addingTimeInterval(Double(index) * 60)], ofItemAtPath: url.path
+            )
+        }
+        try FileManager.default.createDirectory(
+            at: folder.appendingPathComponent("Archive.png"), withIntermediateDirectories: false)
+        let store = LibraryStore(folder: folder)
+        #expect(
+            try store.recentCaptures(limit: 5).map(\.lastPathComponent) == [
+                "Excerpt 2026-10-12 at 11.00.00.png", "Screenshot 2026-10-11 at 10.00.00.png",
+                "Excerpt 2026-10-10 at 09.00.00.png",
+            ])
+        #expect(try store.recentCaptures(limit: 1).count == 1)
+    }
 }

@@ -62,6 +62,33 @@ public struct LibraryStore: Sendable {
         }
     }
 
+    /// The newest `limit` PNGs in the folder by creation date, masters left out (opening a
+    /// primary loads its master's edits). Ordered by creation, not modification, because every
+    /// save re-renders the primary. A missing folder has none.
+    public func recentCaptures(limit: Int) throws -> [URL] {
+        let keys: [URLResourceKey] = [.creationDateKey, .isRegularFileKey]
+        let contents: [URL]
+        do {
+            contents = try FileManager.default.contentsOfDirectory(
+                at: folder, includingPropertiesForKeys: keys, options: .skipsHiddenFiles)
+        } catch CocoaError.fileReadNoSuchFile {
+            return []
+        }
+        let dated = try contents.compactMap { url -> (URL, Date)? in
+            let name = url.lastPathComponent
+            guard name.lowercased().hasSuffix(".png"),
+                LibraryNaming.primaryName(forOriginal: name) == nil
+            else { return nil }
+            let values = try url.resourceValues(forKeys: Set(keys))
+            guard values.isRegularFile == true else { return nil }
+            return (url, values.creationDate ?? .distantPast)
+        }
+        return
+            dated
+            .sorted { $0.1 != $1.1 ? $0.1 > $1.1 : $0.0.lastPathComponent > $1.0.lastPathComponent }
+            .prefix(limit).map(\.0)
+    }
+
     /// Writes the master first, then re-renders the primary, so a failure part-way never leaves
     /// an edited primary without its original. An existing master keeps its pixels: only its
     /// edits chunk is rewritten; the first edit, and every save `replacingMaster` (a primary
