@@ -28,7 +28,7 @@ public enum CaptureTextError: Error, Equatable, LocalizedError {
 /// is only `BlurRenderer`'s blocks, which hold no readable text.
 public enum CaptureText {
     /// A part of the render read on its own: one kept span of rows by one kept span of columns,
-    /// sliced like the tiles when tall, so a recogniser never sees a seam or its label.
+    /// sliced by `sliceLength` when tall, so a recogniser never sees a seam or its label.
     public struct Region: Equatable, Sendable {
         /// In rendered pixels.
         public let rect: PixelRect
@@ -90,17 +90,24 @@ public enum CaptureText {
         }
     }
 
+    /// How tall a region is sliced, in points, and the tallest left whole. Vision misses small
+    /// text in a region much taller than this, so regions keep this length whatever size the
+    /// tiles are.
+    public static let sliceLength = 1_500
+    public static let wholeLength = 1_568
+
     /// Regions too thin to hold a line of text are not read.
     public static let minimumRegionSide = 8
 
     /// Every region to read, top to bottom, then left to right.
     public static func regions(of map: RenderMap, scale: Double) -> [Region] {
-        let points = Tiling.points(map.renderedWidth, scale: scale)
-        let tile = Int((Double(Tiling.tileLength(width: points)) * scale).rounded())
+        let tile = Int((Double(sliceLength) * scale).rounded())
         let overlap = Int((Double(Tiling.overlap) * scale).rounded())
+        let fits = Int((Double(wholeLength) * scale).rounded())
         var regions: [Region] = []
         for rows in map.rows.segments where rows.source.count >= minimumRegionSide {
-            let slices = Tiling.spans(length: rows.source.count, tile: tile, overlap: overlap)
+            let slices = Tiling.spans(
+                length: rows.source.count, tile: tile, overlap: overlap, fits: fits)
             for (slice, owned) in zip(slices, Tiling.ownedBands(slices)) {
                 for columns in map.columns.segments where columns.source.count >= minimumRegionSide
                 {

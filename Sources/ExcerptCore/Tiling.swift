@@ -27,14 +27,17 @@ public enum Tiling {
 
     /// Only the height is ever split; width is never tiled.
     ///
-    /// The spans of `0..<length` the tiles cover. A length up to `tile` is one span. A longer
+    /// The spans of `0..<length` the tiles cover. A length up to `fits` is one span. A longer
     /// one is cut into spans exactly `tile` long, each starting `tile - overlap` after the one
     /// before, with the last pulled back to end at `length`, so it shares more than `overlap`
     /// with its neighbour and never less. Empty for a length of zero or less.
-    public static func spans(length: Int, tile: Int, overlap: Int = overlap) -> [Range<Int>] {
-        precondition(tile > overlap && overlap >= 0, "tile geometry")
+    public static func spans(
+        length: Int, tile: Int, overlap: Int = overlap, fits: Int? = nil
+    ) -> [Range<Int>] {
+        let fits = fits ?? tile
+        precondition(tile > overlap && overlap >= 0 && fits >= tile, "tile geometry")
         guard length > 0 else { return [] }
-        guard length > tile else { return [0..<length] }
+        guard length > fits else { return [0..<length] }
         let stride = tile - overlap
         let count = (length - overlap + stride - 1) / stride
         return (0..<count).map { i in
@@ -71,17 +74,12 @@ public enum Tiling {
     /// so a CMYK, 16-bit or indexed source cannot make a later PNG encode fail. Pixel size is
     /// unchanged at 1× or below.
     public static func atPoints(_ image: CGImage, scale: Double) -> CGImage {
-        let width = points(image.width, scale: scale)
-        let height = points(image.height, scale: scale)
+        let factor = scale.isFinite ? max(scale, 1) : 1
+        let width = max(1, Int((Double(image.width) / factor).rounded()))
+        let height = max(1, Int((Double(image.height) / factor).rounded()))
         let context = PixelBuffer.makeContext(width: width, height: height)
         context.interpolationQuality = .high
         context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
         return context.makeImage()!
-    }
-
-    /// `pixels` at `scale` in whole points, at least one: `atPoints`' size along that side.
-    public static func points(_ pixels: Int, scale: Double) -> Int {
-        let factor = scale.isFinite ? max(scale, 1) : 1
-        return max(1, Int((Double(pixels) / factor).rounded()))
     }
 }
