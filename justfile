@@ -44,23 +44,31 @@ app:
 [group("app")]
 [doc("Build and launch the app from build/")]
 run: app quit
-    open {{app_dir}}
+    @just launch {{app_dir}}
 
 [group("app")]
 [doc("Build, install to /Applications, launch")]
 deploy: app quit
     rm -rf /Applications/Excerpt.app
     ditto {{app_dir}} /Applications/Excerpt.app
-    open /Applications/Excerpt.app
+    @just launch /Applications/Excerpt.app
 
-# Quits a running Excerpt and waits up to 5s for it to exit: `open` while the old process is
-# still exiting fails with LaunchServices error -600.
+# Quits any running Excerpt, force-killing one still alive after 3s.
 [private]
 quit:
     #!/usr/bin/env bash
     killall Excerpt 2>/dev/null || exit 0
-    for _ in {1..50}; do pgrep -x Excerpt >/dev/null || exit 0; sleep 0.1; done
-    echo "Excerpt did not quit within 5s" >&2; exit 1
+    for _ in {1..30}; do pgrep -x Excerpt >/dev/null || exit 0; sleep 0.1; done
+    killall -9 Excerpt 2>/dev/null
+    while pgrep -x Excerpt >/dev/null; do sleep 0.1; done
+
+# Opens the app at `path`, retrying for up to 5s: LaunchServices keeps a quit Excerpt on its
+# books briefly after the process is gone, and `open` fails with error -600 until it lets go.
+[private]
+launch path:
+    #!/usr/bin/env bash
+    for _ in {1..20}; do open "{{path}}" 2>/dev/null && exit 0; sleep 0.25; done
+    open "{{path}}"
 
 [group("release")]
 [doc("Build, notarize and staple the app; zip it to build/Excerpt.zip")]
