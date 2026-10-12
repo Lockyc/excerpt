@@ -43,17 +43,24 @@ app:
 
 [group("app")]
 [doc("Build and launch the app from build/")]
-run: app
-    -killall Excerpt 2>/dev/null
+run: app quit
     open {{app_dir}}
 
 [group("app")]
 [doc("Build, install to /Applications, launch")]
-deploy: app
-    -killall Excerpt 2>/dev/null
+deploy: app quit
     rm -rf /Applications/Excerpt.app
     ditto {{app_dir}} /Applications/Excerpt.app
     open /Applications/Excerpt.app
+
+# Quits a running Excerpt and waits up to 5s for it to exit: `open` while the old process is
+# still exiting fails with LaunchServices error -600.
+[private]
+quit:
+    #!/usr/bin/env bash
+    killall Excerpt 2>/dev/null || exit 0
+    for _ in {1..50}; do pgrep -x Excerpt >/dev/null || exit 0; sleep 0.1; done
+    echo "Excerpt did not quit within 5s" >&2; exit 1
 
 [group("release")]
 [doc("Build, notarize and staple the app; zip it to build/Excerpt.zip")]
