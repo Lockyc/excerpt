@@ -1,5 +1,6 @@
 import ExcerptCapture
 import ExcerptCore
+import ExcerptEditor
 import Foundation
 
 /// User settings, backed by UserDefaults. Defaults match the workflow excerpt replaces.
@@ -56,6 +57,16 @@ final class Preferences {
             } ?? .initial
         }
         set { defaults.set(try? JSONEncoder().encode(newValue), forKey: "editorBorder") }
+    }
+    /// The colour, size and text background new annotations get; the initial style until one
+    /// is picked, or when what is stored can't be read.
+    var editorStyle: AnnotationStyle {
+        get {
+            defaults.data(forKey: "editorStyle").flatMap {
+                try? JSONDecoder().decode(AnnotationStyle.self, from: $0)
+            } ?? .initial
+        }
+        set { defaults.set(try? JSONEncoder().encode(newValue), forKey: "editorStyle") }
     }
     var thumbnailSeconds: Double { max(1, defaults.double(forKey: "thumbnailSeconds")) }
     var thumbnailAtPointer: Bool {

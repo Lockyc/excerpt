@@ -57,12 +57,15 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
     /// reports any failure, the render's included, and returns whether it worked; `forClaude`
     /// exports the original with the current edits; `borderStyle` is the border a capture
     /// without one gets when turned on, and `rememberBorder` is told each colour or width the
-    /// user picks; `onClose` runs once the window has closed.
+    /// user picks; `annotationStyle` is what new annotations start with, and `rememberStyle` is
+    /// told each colour, size or background the user picks; `onClose` runs once the window has
+    /// closed.
     public init(
         capture: LoadedCapture, save: @escaping (EditDocument) throws -> Void,
         copy: @escaping (() throws -> Data) -> Bool,
         forClaude: @escaping (CGImage, EditDocument) -> Void, borderStyle: Border,
-        rememberBorder: @escaping (Border) -> Void, onClose: @escaping () -> Void
+        rememberBorder: @escaping (Border) -> Void, annotationStyle: AnnotationStyle,
+        rememberStyle: @escaping (AnnotationStyle) -> Void, onClose: @escaping () -> Void
     ) {
         self.capture = capture
         self.save = save
@@ -70,8 +73,10 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         self.forClaude = forClaude
         self.onClose = onClose
         model = EditorModel(
-            original: capture.original, document: capture.edits, borderStyle: borderStyle)
+            original: capture.original, document: capture.edits, borderStyle: borderStyle,
+            style: annotationStyle)
         model.onBorderStyleChange = rememberBorder
+        model.onStyleChange = rememberStyle
         canvas = CanvasView(model: model)
         borderPanel = BorderPanel(model: model)
         let window = EditorWindow(

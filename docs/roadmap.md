@@ -26,7 +26,7 @@ Each phase is a shippable slice with an acceptance gate. The design behind every
 
 | Item | What | Next action |
 |---|---|---|
-| Item bar, steps, text background | The selection's options float beside it; numbered step markers; text on a contrasting pill, previewed through the renderer while typed | Build — in progress |
+| Item bar, steps, text background | The selection's options float beside it; numbered step markers; text on a contrasting pill, previewed through the renderer while typed | Built — hand checks pending |
 | Smart redaction | On-device OCR finds emails, tokens, IPs, names; one-click destructive redaction, toggleable per region before save | Design the detector set and the review UI |
 | Live-text editing | Click text in a capture and retype it, matching font and background | Spike Vision text bounds + font matching on a UI screenshot |
 | Horizontal scrolling capture | The stitcher along the x axis, for wide sheets | Generalise the stitcher's axis once vertical is proven |
