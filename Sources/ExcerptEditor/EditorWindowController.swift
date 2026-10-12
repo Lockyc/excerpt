@@ -189,6 +189,9 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         scrollView.drawsBackground = true
         scrollView.backgroundColor = .underPageBackgroundColor
         scrollView.documentView = canvas
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(clipResized), name: NSView.frameDidChangeNotification,
+            object: clip)
 
         for view in [bar, scrollView] as [NSView] {
             view.translatesAutoresizingMaskIntoConstraints = false
@@ -261,7 +264,9 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         scrollView.reflectScrolledClipView(clip)
     }
 
-    public func windowDidResize(_ notification: Notification) { fitWidth() }
+    /// The width to fit changes with the window, and also without it: the scroller style can
+    /// settle after the window shows, and a legacy scroller takes its width from the view.
+    @objc private func clipResized() { fitWidth() }
 
     /// Brings the toolbar, title and note in line with the model.
     private func update() {
