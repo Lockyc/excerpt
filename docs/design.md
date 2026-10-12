@@ -188,10 +188,12 @@ any other way with unsaved edits asks.
 
 - **Copy** — every capture is copied as it lands, and the editor's Save copies its render.
   **Drag** from the thumbnail or the editor's title bar.
-- **For Claude** (`⌘⇧C`), shaped for Claude's ~1568px long-edge downscale:
+- **For Claude** (`⌘⇧C`), shaped so Claude reads every tile unscaled:
   - tiles render at **1× (points)** — Retina doubles pixels without adding legible text;
-  - a capture that fits is one image; taller ones split into ~1500px tiles overlapping ~100px,
-    so every line appears whole in some tile;
+  - a capture that fits is one image; taller ones split into tiles overlapping ~100px, so every
+    line appears whole in some tile, each as tall as `Tiling.tileLength(width:)` allows: within
+    the 2000px side limit Claude enforces once a conversation holds over 20 images, and within
+    its visual-token budget;
   - `text.md` holds Vision OCR in reading order, panes on different backgrounds one after the
     other (`ReadingOrder.blocks`), each cut written in as `[⋯ 1,240 px hidden]`;
   - the clipboard receives `@<path>` references to every tile and `text.md`, then a space, so
@@ -216,7 +218,7 @@ any other way with unsaved edits asks.
 
   Known limits: `text.md` reads columns that share a background row by row; `@path` references
   assume a home folder without spaces; Vision can miss text on busy synthetic backgrounds. Tiles
-  split on height only, so a wide capture reaches Claude downscaled.
+  split on height only, so a capture over 2000pt wide reaches Claude downscaled.
 
 ## Install and release
 

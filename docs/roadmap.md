@@ -29,7 +29,7 @@ Each phase is a shippable slice with an acceptance gate. The design behind every
 | Smart redaction | On-device OCR finds emails, tokens, IPs, names; one-click destructive redaction, toggleable per region before save | Design the detector set and the review UI |
 | Live-text editing | Click text in a capture and retype it, matching font and background | Spike Vision text bounds + font matching on a UI screenshot |
 | Horizontal scrolling capture | The stitcher along the x axis, for wide sheets | Generalise the stitcher's axis once vertical is proven |
-| Tiling wide captures | Tiles split on height only, so a wide capture arrives downscaled and its text shrinks | Split tiles on width too and teach `text.md` the tile grid |
+| Tiling wide captures | Tiles split on height only, so a capture over 2000pt wide arrives downscaled and its text shrinks | Split tiles on width too and teach `text.md` the tile grid |
 | In-app updates | Re-running the installer is the update path | Decide between Sparkle and a release check |
 
 ## Sequencing

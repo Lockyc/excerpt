@@ -69,7 +69,7 @@ Code. The same works for any image file from the command line:
 excerpt read shot.png   # text on stdout, tile paths on stderr
 ```
 
-Known limits: tiles split on height only, so a very wide capture reaches Claude downscaled;
+Known limits: tiles split on height only, so a capture over 2000pt wide reaches Claude downscaled;
 `text.md` reads columns that share a background row by row; scrolling capture stops rather than
 guess on pages with large animations or video.
 
