@@ -95,13 +95,12 @@ public enum CaptureText {
 
     /// Every region to read, top to bottom, then left to right.
     public static func regions(of map: RenderMap, scale: Double) -> [Region] {
-        let tile = Int((Double(Tiling.tileLength) * scale).rounded())
+        let points = Tiling.points(map.renderedWidth, scale: scale)
+        let tile = Int((Double(Tiling.tileLength(width: points)) * scale).rounded())
         let overlap = Int((Double(Tiling.overlap) * scale).rounded())
-        let fits = Int((Double(Tiling.readerLongEdge) * scale).rounded())
         var regions: [Region] = []
         for rows in map.rows.segments where rows.source.count >= minimumRegionSide {
-            let slices = Tiling.spans(
-                length: rows.source.count, tile: tile, overlap: overlap, fits: fits)
+            let slices = Tiling.spans(length: rows.source.count, tile: tile, overlap: overlap)
             for (slice, owned) in zip(slices, Tiling.ownedBands(slices)) {
                 for columns in map.columns.segments where columns.source.count >= minimumRegionSide
                 {

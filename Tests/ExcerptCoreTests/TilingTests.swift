@@ -5,25 +5,42 @@ import Testing
 @testable import ExcerptCore
 
 @Suite struct TilingTests {
+    @Test func tilesAreAsTallAsTheEdgeAndTokenLimitsAllow() {
+        #expect(Tiling.tileLength(width: 0) == 2_000)
+        #expect(Tiling.tileLength(width: 1_440) == 2_000)
+        // 69 patches across leave 69 rows of the 4,784-token budget.
+        #expect(Tiling.tileLength(width: 1_920) == 1_932)
+        #expect(Tiling.tileLength(width: 2_000) == 1_848)
+        #expect(Tiling.tileLength(width: 5_000) == 1_848)
+        for width in 1...6_000 {
+            let tile = Tiling.tileLength(width: width)
+            let read = min(width, Tiling.maximumEdge)
+            let tokens = ((read + 27) / 28) * ((tile * read / width + 27) / 28)
+            #expect(tile <= Tiling.maximumEdge && tile > Tiling.overlap)
+            #expect(tile == Tiling.maximumEdge || tile % Tiling.patch == 0)
+            #expect(tokens <= Tiling.maximumTokens, "width \(width)")
+        }
+    }
+
     @Test func aCaptureThatFitsIsOneSpan() {
-        #expect(Tiling.spans(length: 900) == [0..<900])
-        #expect(Tiling.spans(length: 1568) == [0..<1568])
-        #expect(Tiling.spans(length: 0).isEmpty)
+        #expect(Tiling.spans(length: 900, tile: 1_500) == [0..<900])
+        #expect(Tiling.spans(length: 1_500, tile: 1_500) == [0..<1_500])
+        #expect(Tiling.spans(length: 0, tile: 1_500).isEmpty)
     }
 
     @Test func aTallCaptureSplitsIntoFullTilesOverlappingAtLeastTheOverlap() {
-        #expect(Tiling.spans(length: 1569) == [0..<1500, 69..<1569])
-        #expect(Tiling.spans(length: 2900) == [0..<1500, 1400..<2900])
+        #expect(Tiling.spans(length: 1_501, tile: 1_500) == [0..<1500, 1..<1501])
+        #expect(Tiling.spans(length: 2900, tile: 1_500) == [0..<1500, 1400..<2900])
         #expect(
-            Tiling.spans(length: 10_000) == [
+            Tiling.spans(length: 10_000, tile: 1_500) == [
                 0..<1500, 1400..<2900, 2800..<4300, 4200..<5700, 5600..<7100, 7000..<8500,
                 8400..<9900, 8500..<10_000,
             ])
-        for length in stride(from: 1569, through: 40_000, by: 37) {
-            let spans = Tiling.spans(length: length)
+        for length in stride(from: 1501, through: 40_000, by: 37) {
+            let spans = Tiling.spans(length: length, tile: 1_500)
             #expect(spans.first?.lowerBound == 0)
             #expect(spans.last?.upperBound == length)
-            #expect(spans.allSatisfy { $0.count == Tiling.tileLength })
+            #expect(spans.allSatisfy { $0.count == 1_500 })
             for (a, b) in zip(spans, spans.dropFirst()) {
                 #expect(b.lowerBound > a.lowerBound)
                 #expect(a.upperBound - b.lowerBound >= Tiling.overlap)
@@ -33,8 +50,8 @@ import Testing
 
     /// Review focus: a line split across one tile boundary appears whole in the next tile.
     @Test func everyLineNoTallerThanTheOverlapIsWholeInSomeTile() {
-        for length in [1569, 2900, 2901, 4321, 10_000] {
-            let spans = Tiling.spans(length: length)
+        for length in [1501, 2900, 2901, 4321, 10_000] {
+            let spans = Tiling.spans(length: length, tile: 1_500)
             for top in 0...(length - Tiling.overlap) {
                 let line = top..<(top + Tiling.overlap)
                 #expect(
@@ -47,8 +64,8 @@ import Testing
     }
 
     @Test func ownedBandsPartitionTheLengthAndHoldWholeLines() {
-        for length in [900, 1569, 2900, 2901, 4300, 4301, 10_000] {
-            let spans = Tiling.spans(length: length)
+        for length in [900, 1501, 2900, 2901, 4300, 4301, 10_000] {
+            let spans = Tiling.spans(length: length, tile: 1_500)
             let bands = Tiling.ownedBands(spans)
             #expect(bands.first?.lowerBound == 0)
             #expect(bands.last?.upperBound == length)
@@ -65,8 +82,8 @@ import Testing
     @Test func tilesAreAtOnePixelPerPoint() {
         let image = Fixtures.sheet(width: 400, height: 6_000)
         let tiles = Tiling.tiles(of: image, scale: 2)
-        #expect(tiles.count == 3)
-        #expect(tiles.allSatisfy { $0.width == 200 && $0.height == Tiling.tileLength })
+        #expect(tiles.count == 2)
+        #expect(tiles.allSatisfy { $0.width == 200 && $0.height == Tiling.tileLength(width: 200) })
         #expect(Tiling.atPoints(image, scale: 2).height == 3_000)
     }
 
@@ -107,7 +124,7 @@ import Testing
             Fixtures.rowColor(y / scale)
         }
         let tiles = Tiling.tiles(of: image, scale: Double(scale))
-        let spans = Tiling.spans(length: points)
+        let spans = Tiling.spans(length: points, tile: Tiling.tileLength(width: 12 / scale))
         #expect(tiles.count == spans.count && spans.count > 2)
         for (tile, span) in zip(tiles, spans) {
             let buffer = PixelBuffer(tile)

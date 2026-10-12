@@ -236,18 +236,18 @@ import Testing
                 !$0.rect.cgRect.intersects(
                     CGRect(x: 0, y: gap.lowerBound, width: 300, height: gap.count))
             })
-        // 1,000 rows above the cut fit; the 5,900 below are three 3,000-row slices.
-        #expect(regions.map(\.rect.height) == [1_000, 3_000, 3_000, 3_000])
+        // 1,000 rows above the cut fit; the 5,900 below are two 4,000-row slices.
+        #expect(regions.map(\.rect.height) == [1_000, 4_000, 4_000])
         #expect(regions[1].owned.lowerBound == gap.upperBound)
         #expect(regions.last?.owned.upperBound == map.renderedHeight)
     }
 
-    /// Slices are 0..<1500, 1400..<2900 and 1900..<3400, owning 0..<1450, 1450..<2400 and the
-    /// rest. `alpha` lies wholly in the first two slices; `beta` straddles the first slice's bottom
+    /// Slices are 0..<2000 and 1400..<3400, owning 0..<1700 and the rest. `alpha` lies wholly in
+    /// both slices; `beta` straddles the first slice's bottom
     /// edge, so that slice reads only its top rows and the second reads it whole.
     @Test func aRunTwoSlicesShareIsReadOnce() throws {
         let image = ColourWords.page(
-            width: 200, height: 3_400, words: ["alpha": (20, 1_440), "beta": (20, 1_495)])
+            width: 200, height: 3_400, words: ["alpha": (20, 1_440), "beta": (20, 1_995)])
         let render = Renderer.render(image, edits: EditDocument(scale: 1))
         let text = try CaptureText.read(
             render.image, map: render.map, scale: 1, recognizer: ColourWords())

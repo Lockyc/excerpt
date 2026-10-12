@@ -64,7 +64,7 @@ import Testing
 
     @Test func readPrintsTheTextAndTheTilePaths() throws {
         let (folder, cache) = try Self.scratch()
-        let image = ColourWords.page(width: 200, height: 3_400, words: ["alpha": (20, 40)])
+        let image = ColourWords.page(width: 200, height: 4_400, words: ["alpha": (20, 40)])
         try PNGCodec.encode(image, scale: 2).write(to: folder.appendingPathComponent("tall.png"))
         let output = ReadCommand.run(
             path: "tall.png", directory: folder, cache: cache, recognizer: ColourWords())

@@ -18,7 +18,7 @@ import Testing
         URL(fileURLWithPath: folder).appendingPathComponent(name + ".png")
     }
 
-    /// The roadmap gate's shape: a 10,000-point capture at 2× becomes eight 1× tiles and the
+    /// The roadmap gate's shape: a 10,000-point capture at 2× becomes six 1× tiles and the
     /// text, with the cut written in.
     @Test func aTallCaptureBecomesOneTimesTilesAndText() throws {
         let name = "Excerpt 2026-10-10 at 09.43.29"
@@ -35,12 +35,12 @@ import Testing
                 == ClaudeCache.folderName(for: ClaudeBundleTests.primary(name)))
         #expect(bundle.folder.lastPathComponent.hasPrefix("Excerpt-2026-10-10-at-09.43.29-"))
         // 20,000 rows less 36 cut plus the 36-pixel seam is 20,000 pixels: 10,000 points.
-        #expect(bundle.tiles.count == 8)
-        #expect(bundle.tiles.first?.lastPathComponent == "tile-1-of-8.png")
+        #expect(bundle.tiles.count == 6)
+        #expect(bundle.tiles.first?.lastPathComponent == "tile-1-of-6.png")
         for tile in bundle.tiles {
             let decoded = try PNGCodec.decode(Data(contentsOf: tile))
             #expect(decoded.image.width == 50)
-            #expect(decoded.image.height == Tiling.tileLength)
+            #expect(decoded.image.height == Tiling.tileLength(width: 50))
             #expect(decoded.scale == 1)
         }
         #expect(bundle.text == "alpha\n[⋯ 18 px hidden]\nomega\n")
