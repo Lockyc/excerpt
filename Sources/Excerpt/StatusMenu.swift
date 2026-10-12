@@ -15,7 +15,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     /// How many captures Recent Captures lists.
     static let recentLimit = 10
     /// The thumbnail box each recent capture shows in, so titles line up whatever its shape.
-    static let thumbnailSize = NSSize(width: 40, height: 28)
+    static let thumbnailSize = NSSize(width: 96, height: 64)
 
     init(
         perform: @escaping (HotKeyAction) -> Void,
