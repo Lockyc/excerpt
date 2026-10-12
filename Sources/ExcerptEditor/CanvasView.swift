@@ -6,7 +6,7 @@ import ExcerptCore
 /// editor's own chrome
 /// (selection, handles, a drag in progress). Input goes to the model in rendered pixels.
 @MainActor
-final class CanvasView: NSView, NSTextFieldDelegate {
+final class CanvasView: NSView, NSTextViewDelegate {
     let model: EditorModel
     /// Called after anything the window shows might have changed.
     var onChange: () -> Void = {}
@@ -29,10 +29,11 @@ final class CanvasView: NSView, NSTextFieldDelegate {
 
     private(set) var base: RenderResult
     private var baseDocument: EditDocument
-    private var textField: NSTextField?
-    /// Floats beside whatever ⌫ would delete: the selection, or the crop under the crop tool.
-    private let deleteButton = NSButton()
-    private static let deleteButtonSize: CGFloat = 28
+    /// Takes the typing: input, caret and selection only. Its glyphs are transparent, since the
+    /// canvas draws the text being typed through Core like any other annotation.
+    private var textView: NSTextView?
+    /// Floats beside the item being typed or selected, with that item's options.
+    private let itemBar = ItemBar()
 
     init(model: EditorModel) {
         self.model = model
@@ -40,15 +41,13 @@ final class CanvasView: NSView, NSTextFieldDelegate {
         base = Renderer.renderBase(model.original, edits: baseDocument)
         super.init(frame: .zero)
         model.onChange = { [weak self] in self?.refresh() }
-        deleteButton.image = NSImage(systemSymbolName: "trash", accessibilityDescription: "Delete")
-        deleteButton.bezelStyle = .circular
-        deleteButton.contentTintColor = .systemRed
-        deleteButton.toolTip = "Delete (⌫)"
-        deleteButton.refusesFirstResponder = true
-        deleteButton.target = self
-        deleteButton.action = #selector(deletePressed)
-        deleteButton.isHidden = true
-        addSubview(deleteButton)
+        itemBar.onColor = { [weak self] in self?.model.setColor($0) }
+        itemBar.onSize = { [weak self] in self?.model.setWidth($0) }
+        itemBar.onBackground = { [weak self] in self?.model.setBackground($0) }
+        itemBar.onMove = { [weak self] in self?.model.moveStep(earlier: $0) }
+        itemBar.onDelete = { [weak self] in self?.deletePressed() }
+        itemBar.isHidden = true
+        addSubview(itemBar)
         resize()
     }
 
@@ -69,7 +68,8 @@ final class CanvasView: NSView, NSTextFieldDelegate {
             resize()
         }
         needsDisplay = true
-        placeDeleteButton()
+        syncTextView()
+        placeItemBar()
         onChange()
     }
 
@@ -77,19 +77,25 @@ final class CanvasView: NSView, NSTextFieldDelegate {
         setFrameSize(
             CGSize(width: renderedSize.width * zoom, height: renderedSize.height * zoom))
         needsDisplay = true
-        placeDeleteButton()
+        syncTextView()
+        placeItemBar()
     }
 
-    /// What ⌫ would delete, in rendered pixels; nil when nothing, or while a drag or text edit
-    /// is under way.
-    private var deletionTarget: CGRect? {
-        guard model.canDelete, model.drag == nil, textField == nil else { return nil }
+    /// What the item bar sits beside, in rendered pixels: the text being typed, the selection,
+    /// or the crop under the crop tool; nil during a drag.
+    private var barTarget: CGRect? {
+        guard model.drag == nil else { return nil }
         let map = base.map
+        let scale = model.document.scale
+        if let typing = model.typing {
+            let bounds = AnnotationGeometry.bounds(of: typing, scale: scale)
+            return CGRect(origin: map.point(bounds.origin, bias: .after), size: bounds.size)
+        }
         switch model.selection {
         case .annotation(let id):
             guard let annotation = model.document.annotations.first(where: { $0.id == id })
             else { return nil }
-            return map.rect(AnnotationGeometry.bounds(of: annotation, scale: model.document.scale))
+            return map.rect(AnnotationGeometry.bounds(of: annotation, scale: scale))
         case .seam(let axis, let band):
             return map.seams(axis).first(where: { $0.band == band }).map(gapRect)
         case nil:
@@ -98,23 +104,34 @@ final class CanvasView: NSView, NSTextFieldDelegate {
         }
     }
 
-    /// Above the target's top-right corner, kept on the canvas.
-    private func placeDeleteButton() {
-        guard let target = deletionTarget else {
-            deleteButton.isHidden = true
+    /// The bar's frame in view points while it shows.
+    var itemBarFrame: CGRect? { itemBar.isHidden ? nil : itemBar.frame }
+
+    /// Above the target, left-aligned with it; below it when there is no room above; kept on
+    /// the canvas.
+    private func placeItemBar() {
+        guard let options = model.itemOptions, let target = barTarget else {
+            itemBar.isHidden = true
             return
         }
-        let size = Self.deleteButtonSize
+        itemBar.show(options)
+        let size = itemBar.frame.size
         let rect = viewRect(target)
-        let x = min(max(rect.maxX + 4, 4), bounds.width - size - 4)
-        let y = min(max(rect.minY - size - 4, 4), bounds.height - size - 4)
-        deleteButton.frame = CGRect(x: x, y: y, width: size, height: size)
-        deleteButton.isHidden = false
+        let gap: CGFloat = 6
+        let above = rect.minY - size.height - gap
+        let y = above >= 4 ? above : min(rect.maxY + gap, bounds.height - size.height - 4)
+        let x = min(max(rect.minX, 4), max(4, bounds.width - size.width - 4))
+        itemBar.frame.origin = CGPoint(x: x, y: max(4, y))
+        itemBar.isHidden = false
     }
 
-    @objc private func deletePressed() {
-        endText()
-        model.deleteSelection()
+    private func deletePressed() {
+        if model.typing != nil {
+            dropTextView()
+            model.deleteTyping()
+        } else {
+            model.deleteSelection()
+        }
     }
 
     // MARK: Drawing
@@ -175,7 +192,7 @@ final class CanvasView: NSView, NSTextFieldDelegate {
         }
 
         switch model.selection {
-        case .annotation(let id):
+        case .annotation(let id) where model.typing == nil:
             if let annotation = model.document.annotations.first(where: { $0.id == id }),
                 let rect = map.rect(
                     AnnotationGeometry.bounds(of: annotation, scale: model.document.scale))
@@ -187,7 +204,7 @@ final class CanvasView: NSView, NSTextFieldDelegate {
             if let seam = map.seams(axis).first(where: { $0.band == band }) {
                 drawSeamSelection(seam, in: context)
             }
-        case nil:
+        case .annotation, nil:
             break
         }
 
@@ -358,56 +375,92 @@ final class CanvasView: NSView, NSTextFieldDelegate {
     private func beginText(at p: Pointer) {
         endText()
         model.beginTyping(at: p, map: base.map)
-        guard let target = model.typing, case .text(let at, let string, _) = target.shape else {
-            return
-        }
-        let map = base.map
-        let origin = viewPoint(map.point(at, bias: .after))
-        let size = CGFloat(target.width.textPoints * model.document.scale) * zoom
-        let field = NSTextField(string: string)
-        field.font = TextLayout.font(pixelSize: Double(size)) as NSFont
-        field.textColor = NSColor(cgColor: target.color.rgba.cgColor)
-        field.isBordered = false
-        field.drawsBackground = true
-        field.backgroundColor = NSColor(white: 1, alpha: 0.85)
-        field.focusRingType = .none
-        field.usesSingleLineMode = false
-        field.cell?.wraps = false
-        field.cell?.isScrollable = true
-        field.delegate = self
-        field.frame = CGRect(
-            x: origin.x, y: origin.y, width: max(240, size * 8),
-            height: size * 1.4 * CGFloat(max(1, string.components(separatedBy: "\n").count)))
-        // The cell insets its text, so the field moves back by that much and the typed text sits
-        // where the committed text will be drawn.
-        if let inset = field.cell?.titleRect(forBounds: field.bounds).origin {
-            field.frame.origin = CGPoint(x: origin.x - inset.x, y: origin.y - inset.y)
-        }
-        addSubview(field)
-        textField = field
-        window?.makeFirstResponder(field)
-        onChange()
+        let view = NSTextView(frame: .zero)
+        view.drawsBackground = false
+        view.isRichText = false
+        view.allowsUndo = true
+        view.isHorizontallyResizable = true
+        view.textContainerInset = .zero
+        view.textContainer?.lineFragmentPadding = 0
+        view.textContainer?.widthTracksTextView = false
+        view.textContainer?.containerSize = CGSize(
+            width: CGFloat.greatestFiniteMagnitude, height: .greatestFiniteMagnitude)
+        view.string = model.typedString
+        view.delegate = self
+        addSubview(view, positioned: .below, relativeTo: itemBar)
+        textView = view
+        syncTextView()
+        window?.makeFirstResponder(view)
     }
 
-    /// Commits whatever is typed; safe to call when no text is being edited.
+    /// Lays the text view over the rendered text being typed: the same font and line height at
+    /// this zoom, transparent glyphs, and the caret in the ink the render uses.
+    private func syncTextView() {
+        guard let view = textView, let typing = model.typing,
+            case .text(let origin, _, let background) = typing.shape,
+            let rect = AnnotationGeometry.textRect(of: typing, scale: model.document.scale)
+        else { return }
+        let pixelSize =
+            AnnotationGeometry.textPixelSize(typing, scale: model.document.scale) * Double(zoom)
+        let font = TextLayout.font(pixelSize: pixelSize) as NSFont
+        let lineHeight = font.ascender - font.descender + font.leading
+        if view.typingAttributes[.font] as? NSFont != font {
+            let paragraph = NSMutableParagraphStyle()
+            paragraph.minimumLineHeight = lineHeight
+            paragraph.maximumLineHeight = lineHeight
+            let attributes: [NSAttributedString.Key: Any] = [
+                .font: font, .foregroundColor: NSColor.clear, .paragraphStyle: paragraph,
+            ]
+            view.typingAttributes = attributes
+            view.textStorage?.setAttributes(
+                attributes, range: NSRange(location: 0, length: view.textStorage?.length ?? 0))
+        }
+        let ink = background == true ? typing.color.contrastingInk : typing.color.rgba
+        view.insertionPointColor = NSColor(cgColor: ink.cgColor) ?? .textColor
+        let topLeft = viewPoint(base.map.point(origin, bias: .after))
+        view.frame = CGRect(
+            x: topLeft.x, y: topLeft.y,
+            width: rect.width * zoom + CGFloat(pixelSize),  // room for the caret past the end
+            height: max(rect.height * zoom, lineHeight))
+    }
+
+    /// Commits whatever is typed; safe to call when nothing is being typed.
     func endText() {
-        guard let field = textField else { return }
-        textField = nil
-        model.updateTyping(field.stringValue)
-        field.removeFromSuperview()
+        guard textView != nil else {
+            model.endTyping()
+            return
+        }
+        dropTextView()
         model.endTyping()
         window?.makeFirstResponder(self)
     }
 
-    func controlTextDidEndEditing(_ notification: Notification) { endText() }
+    /// Removes the text view without letting its end of editing call back in.
+    private func dropTextView() {
+        guard let view = textView else { return }
+        textView = nil
+        view.delegate = nil
+        view.removeFromSuperview()
+    }
 
-    /// Return commits; ⌥Return adds a line.
-    func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool
-    {
-        if selector == #selector(NSResponder.insertNewline(_:)),
-            NSApp.currentEvent?.modifierFlags.contains(.option) == true
-        {
-            textView.insertNewlineIgnoringFieldEditor(nil)
+    func textDidChange(_ notification: Notification) {
+        model.updateTyping(textView?.string ?? "")
+    }
+
+    func textDidEndEditing(_ notification: Notification) { endText() }
+
+    /// Return and Esc commit; ⌥Return adds a line.
+    func textView(_ textView: NSTextView, doCommandBy selector: Selector) -> Bool {
+        if selector == #selector(NSResponder.insertNewline(_:)) {
+            if NSApp.currentEvent?.modifierFlags.contains(.option) == true {
+                textView.insertNewlineIgnoringFieldEditor(nil)
+            } else {
+                endText()
+            }
+            return true
+        }
+        if selector == #selector(NSResponder.cancelOperation(_:)) {
+            endText()
             return true
         }
         return false

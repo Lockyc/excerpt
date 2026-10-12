@@ -1,17 +1,6 @@
 import AppKit
 import ExcerptCore
 
-extension StrokeWidth {
-    /// The size control's segment label.
-    var label: String {
-        switch self {
-        case .thin: "S"
-        case .medium: "M"
-        case .thick: "L"
-        }
-    }
-}
-
 /// Keeps a document narrower than the window centred horizontally, and (being flipped) sits a
 /// document shorter than the window at the top.
 @MainActor
@@ -27,8 +16,9 @@ private final class CenteringClipView: NSClipView {
     }
 }
 
-/// One capture's editor: a floating window fitted to the capture's width, with every tool,
-/// colour, size and action on a toolbar that is always visible, and the canvas in a scroll view.
+/// One capture's editor: a floating window fitted to the capture's width, with every tool and
+/// action on a toolbar that is always visible, and the canvas in a scroll view; each item's
+/// colour, size and own options float beside it on the canvas.
 @MainActor
 public final class EditorWindowController: NSWindowController, NSWindowDelegate {
     static let toolbarHeight: CGFloat = 92
@@ -44,8 +34,6 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
     private let canvas: CanvasView
     private let scrollView = NSScrollView()
     private let tools = NSSegmentedControl()
-    private let colors = NSSegmentedControl()
-    private let widths = NSSegmentedControl()
     /// A split control: "Border" turns the border on and off, the chevron drops down its
     /// settings.
     private let borderControl = NSSegmentedControl()
@@ -128,24 +116,6 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         tools.target = self
         tools.action = #selector(toolChosen)
 
-        colors.segmentCount = Palette.allCases.count
-        colors.trackingMode = .selectOne
-        for (i, color) in Palette.allCases.enumerated() {
-            colors.setImage(Self.swatch(color), forSegment: i)
-            colors.setWidth(36, forSegment: i)
-        }
-        colors.target = self
-        colors.action = #selector(colorChosen)
-
-        widths.segmentCount = StrokeWidth.allCases.count
-        widths.trackingMode = .selectOne
-        for (i, width) in StrokeWidth.allCases.enumerated() {
-            widths.setLabel(width.label, forSegment: i)
-            widths.setWidth(38, forSegment: i)
-        }
-        widths.target = self
-        widths.action = #selector(widthChosen)
-
         borderControl.segmentCount = 2
         borderControl.trackingMode = .selectAny
         borderControl.setLabel("Border", forSegment: 0)
@@ -181,7 +151,7 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         saveButton.action = #selector(saveDocument)
 
         for control in [
-            tools, colors, widths, borderControl, undoButton, redoButton, discardButton,
+            tools, borderControl, undoButton, redoButton, discardButton,
             claudeButton, saveButton,
         ] as [NSControl] {
             control.refusesFirstResponder = true
@@ -190,7 +160,7 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
 
         let spacer = NSView()
         spacer.setContentHuggingPriority(.fittingSizeCompression, for: .horizontal)
-        let styleRow = Self.row([tools, colors, widths, borderControl])
+        let styleRow = Self.row([tools, borderControl])
         let actionRow = Self.row(
             [
                 snapHint, hiddenNote, spacer, undoButton, redoButton, discardButton, claudeButton,
@@ -254,20 +224,6 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         button.setAccessibilityLabel(label)
     }
 
-    private static func widthTip(_ width: StrokeWidth) -> String {
-        "\(Int(width.points))pt stroke · \(Int(width.textPoints))pt text"
-    }
-
-    static func swatch(_ color: Palette) -> NSImage {
-        NSImage(size: CGSize(width: 18, height: 18), flipped: false) { rect in
-            NSColor(cgColor: color.rgba.cgColor)?.setFill()
-            NSBezierPath(ovalIn: rect.insetBy(dx: 1, dy: 1)).fill()
-            NSColor.separatorColor.setStroke()
-            NSBezierPath(ovalIn: rect.insetBy(dx: 1, dy: 1)).stroke()
-            return true
-        }
-    }
-
     /// Opens at the capture's size in points, shrunk to fit 90% of the screen; tall captures
     /// scroll.
     private func sizeToFit(_ window: NSWindow) {
@@ -305,38 +261,12 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
     /// Brings the toolbar, title and note in line with the model.
     private func update() {
         tools.selectedSegment = Tool.allCases.firstIndex(of: model.tool) ?? 0
-        colors.selectedSegment = Palette.allCases.firstIndex(of: model.style.color) ?? 0
-        widths.selectedSegment = StrokeWidth.allCases.firstIndex(of: model.style.width) ?? 0
         borderControl.setSelected(model.document.border != nil, forSegment: 0)
         borderPanel.refresh()
         hiddenNote.stringValue = model.hiddenNote(map: canvas.base.map)
         let limit = model.tool == .cut ? model.cutLimitNote : ""
         snapHint.stringValue =
             !limit.isEmpty ? limit : model.tool == .cut || model.tool == .crop ? Self.snapHint : ""
-
-        let blurSelected: Bool
-        if case .annotation? = model.selection {
-            blurSelected = !model.selectionTakesStyle
-        } else {
-            blurSelected = false
-        }
-        colors.isEnabled = !blurSelected
-        widths.isEnabled = !blurSelected
-        if blurSelected {
-            for i in 0..<colors.segmentCount {
-                colors.setToolTip("A blur has no colour", forSegment: i)
-            }
-            for i in 0..<widths.segmentCount {
-                widths.setToolTip("A blur has no size", forSegment: i)
-            }
-        } else {
-            for (i, color) in Palette.allCases.enumerated() {
-                colors.setToolTip(color.rawValue.capitalized, forSegment: i)
-            }
-            for (i, width) in StrokeWidth.allCases.enumerated() {
-                widths.setToolTip(Self.widthTip(width), forSegment: i)
-            }
-        }
 
         undoButton.isEnabled = model.canUndo
         undoButton.toolTip = model.canUndo ? "Undo (⌘Z)" : "Nothing to undo"
@@ -359,14 +289,6 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
     @objc private func toolChosen() {
         canvas.endText()
         model.tool = Tool.allCases[tools.selectedSegment]
-    }
-
-    @objc private func colorChosen() {
-        model.setColor(Palette.allCases[colors.selectedSegment])
-    }
-
-    @objc private func widthChosen() {
-        model.setWidth(StrokeWidth.allCases[widths.selectedSegment])
     }
 
     /// "Border" turns the border on or off; the chevron drops down its settings.

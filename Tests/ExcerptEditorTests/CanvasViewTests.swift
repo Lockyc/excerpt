@@ -48,6 +48,50 @@ import Testing
 
     func sheet() -> CGImage { Fixtures.sheet(width: 360, height: 400) }
 
+    @Test func theItemBarFloatsAboveTheSelectionWithItsOptions() {
+        let model = EditorModel(
+            original: sheet(),
+            document: EditDocument(
+                scale: 1,
+                annotations: [
+                    Annotation(
+                        id: 1,
+                        shape: .rectangle(rect: CGRect(x: 100, y: 200, width: 80, height: 40)))
+                ]))
+        let canvas = CanvasView(model: model)
+        canvas.zoom = 1
+        #expect(canvas.itemBarFrame == nil)
+        model.selection = .annotation(1)
+        guard let bar = canvas.itemBarFrame else {
+            Issue.record("no bar")
+            return
+        }
+        #expect(bar.maxY < 200)  // above the rectangle (the canvas is flipped)
+        #expect(bar.minX >= 0 && bar.maxX <= canvas.bounds.width)
+        // A selection at the very top puts the bar below it.
+        model.apply {
+            $0.annotations[0].shape = .rectangle(rect: CGRect(x: 100, y: 2, width: 80, height: 40))
+        }
+        #expect((canvas.itemBarFrame?.minY ?? 0) > 42)
+    }
+
+    @Test func typedTextIsDrawnByTheRenderer() {
+        let model = EditorModel(original: sheet(), document: EditDocument(scale: 1, salt: 7))
+        let canvas = CanvasView(model: model)
+        canvas.zoom = 1
+        model.tool = .text
+        let map = canvas.base.map
+        model.beginTyping(at: Pointer(rendered: CGPoint(x: 40, y: 60), map: map), map: map)
+        model.updateTyping("Total")
+        // The bar and the text view float over the canvas; what is under them is the render.
+        for view in canvas.subviews { view.isHidden = true }
+        let shown = snapshot(canvas)
+        var committed = model.document
+        committed.annotations.append(model.typing!)
+        let exported = PixelBuffer(Renderer.render(model.original, edits: committed).image)
+        #expect(shown.fractionDiffering(from: exported, tolerance: 16) <= 0.005)
+    }
+
     /// A fit-to-width canvas against the export scaled the same way: shapes land where the
     /// export puts them: measured 0.0001 differing when placed right, 0.011 when one original
     /// pixel off, so the bounds below fail a one-pixel misplacement.

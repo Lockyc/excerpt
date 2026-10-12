@@ -33,7 +33,7 @@ final class BorderPanel: NSViewController {
         colors.segmentCount = Palette.allCases.count
         colors.trackingMode = .selectOne
         for (i, color) in Palette.allCases.enumerated() {
-            colors.setImage(EditorWindowController.swatch(color), forSegment: i)
+            colors.setImage(color.swatch, forSegment: i)
             colors.setWidth(36, forSegment: i)
             colors.setToolTip(color.rawValue.capitalized, forSegment: i)
         }
