@@ -32,8 +32,13 @@ final class CanvasView: NSView, NSTextViewDelegate {
     /// Takes the typing: input, caret and selection only. Its glyphs are transparent, since the
     /// canvas draws the text being typed through Core like any other annotation.
     private var textView: NSTextView?
-    /// Floats beside the item being typed or selected, with that item's options.
+    /// Floats beside the item being typed or selected, with that item's options. It lives over
+    /// the scroll view rather than in the canvas, so on a capture narrower than the bar it can
+    /// still be seen and clicked in full.
     private let itemBar = ItemBar()
+    /// The text view's undo, separate from the window's, so a removed text view leaves nothing
+    /// for ⌘Z to undo; a new one for each text typed.
+    private var typingUndo = UndoManager()
 
     init(model: EditorModel) {
         self.model = model
@@ -45,15 +50,35 @@ final class CanvasView: NSView, NSTextViewDelegate {
         itemBar.onSize = { [weak self] in self?.model.setWidth($0) }
         itemBar.onBackground = { [weak self] in self?.model.setBackground($0) }
         itemBar.onMove = { [weak self] in self?.model.moveStep(earlier: $0) }
-        itemBar.onDelete = { [weak self] in self?.deletePressed() }
+        itemBar.onDelete = { [weak self] in self?.deleteItem() }
         itemBar.isHidden = true
-        addSubview(itemBar)
         resize()
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
 
     override var isFlipped: Bool { true }
+
+    /// Hosts the item bar over the scroll view, and moves it with the scroll.
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard window != nil else {
+            itemBar.removeFromSuperview()
+            return
+        }
+        if let clip = enclosingScrollView?.contentView {
+            clip.postsBoundsChangedNotifications = true
+            NotificationCenter.default.addObserver(
+                self, selector: #selector(clipScrolled), name: NSView.boundsDidChangeNotification,
+                object: clip)
+        }
+        placeItemBar()
+    }
+
+    @objc private func clipScrolled() { placeItemBar() }
+
+    /// The view the item bar sits in: beside the scroll view when there is one.
+    private var barHost: NSView { enclosingScrollView?.superview ?? self }
     override var acceptsFirstResponder: Bool { true }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
@@ -104,31 +129,46 @@ final class CanvasView: NSView, NSTextViewDelegate {
         }
     }
 
-    /// The bar's frame in view points while it shows.
-    var itemBarFrame: CGRect? { itemBar.isHidden ? nil : itemBar.frame }
+    var itemBarView: NSView { itemBar }
 
-    /// Above the target, left-aligned with it; below it when there is no room above; kept on
-    /// the canvas.
+    /// The bar's frame in this view's points while it shows.
+    var itemBarFrame: CGRect? {
+        itemBar.isHidden || itemBar.superview == nil
+            ? nil : convert(itemBar.frame, from: itemBar.superview)
+    }
+
+    /// Above the target, left-aligned with it; below it when there is no room above; kept
+    /// within what the scroll view shows (the canvas itself when there is no scroll view).
     private func placeItemBar() {
+        let host = barHost
+        if itemBar.superview !== host { host.addSubview(itemBar) }
         guard let options = model.itemOptions, let target = barTarget else {
             itemBar.isHidden = true
             return
         }
         itemBar.show(options)
         let size = itemBar.frame.size
+        let area =
+            enclosingScrollView.map { convert($0.contentView.bounds, from: $0.contentView) }
+            ?? bounds
         let rect = viewRect(target)
         let gap: CGFloat = 6
         let above = rect.minY - size.height - gap
-        let y = above >= 4 ? above : min(rect.maxY + gap, bounds.height - size.height - 4)
-        let x = min(max(rect.minX, 4), max(4, bounds.width - size.width - 4))
-        itemBar.frame.origin = CGPoint(x: x, y: max(4, y))
+        let y =
+            above >= area.minY + 4
+            ? above : min(rect.maxY + gap, area.maxY - size.height - 4)
+        let x = min(max(rect.minX, area.minX + 4), max(area.minX + 4, area.maxX - size.width - 4))
+        let frame = CGRect(origin: CGPoint(x: x, y: max(area.minY + 4, y)), size: size)
+        itemBar.frame = host.convert(frame, from: self)
         itemBar.isHidden = false
     }
 
-    private func deletePressed() {
+    /// The bar's delete: drops the text being typed, else deletes the selection.
+    func deleteItem() {
         if model.typing != nil {
             dropTextView()
             model.deleteTyping()
+            window?.makeFirstResponder(self)
         } else {
             model.deleteSelection()
         }
@@ -372,9 +412,10 @@ final class CanvasView: NSView, NSTextViewDelegate {
 
     // MARK: Text
 
-    private func beginText(at p: Pointer) {
+    func beginText(at p: Pointer) {
         endText()
         model.beginTyping(at: p, map: base.map)
+        typingUndo = UndoManager()
         let view = NSTextView(frame: .zero)
         view.drawsBackground = false
         view.isRichText = false
@@ -387,7 +428,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
             width: CGFloat.greatestFiniteMagnitude, height: .greatestFiniteMagnitude)
         view.string = model.typedString
         view.delegate = self
-        addSubview(view, positioned: .below, relativeTo: itemBar)
+        addSubview(view)
         textView = view
         syncTextView()
         window?.makeFirstResponder(view)
@@ -448,6 +489,8 @@ final class CanvasView: NSView, NSTextViewDelegate {
     }
 
     func textDidEndEditing(_ notification: Notification) { endText() }
+
+    func undoManager(for view: NSTextView) -> UndoManager? { typingUndo }
 
     /// Return and Esc commit; ⌥Return adds a line.
     func textView(_ textView: NSTextView, doCommandBy selector: Selector) -> Bool {

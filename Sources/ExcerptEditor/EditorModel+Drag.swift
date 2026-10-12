@@ -166,12 +166,14 @@ extension EditorModel {
             case (.cut, .cut(let cut)?):
                 apply { $0.cuts.append(cut) }
             case (.blur, .region(let rect)?):
+                let id = document.nextAnnotationID
                 apply { doc in
                     doc.annotations.append(
                         Annotation(
-                            id: doc.nextAnnotationID, shape: .blur(rect: rect),
+                            id: id, shape: .blur(rect: rect),
                             color: style.color, width: style.width))
                 }
+                selection = .annotation(id)
             case (.crop, .region(let rect)?):
                 apply {
                     $0.crop = PixelRect(

@@ -67,6 +67,10 @@ final class ItemBar: NSVisualEffectView {
 
     required init?(coder: NSCoder) { fatalError("not used") }
 
+    /// A disabled control passes its click up the responder chain; the bar ends it here, so the
+    /// click never reaches the canvas underneath.
+    override func mouseDown(with event: NSEvent) {}
+
     /// Rebuilds the controls when the options change, and sizes the bar to fit them.
     func show(_ options: [ItemOption]) {
         guard options != shown else { return }

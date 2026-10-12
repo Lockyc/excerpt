@@ -202,6 +202,13 @@ import Testing
         #expect(m.document.annotations.map(\.shape) == [.step(center: CGPoint(x: 78, y: 50))])
     }
 
+    @Test func aNewBlurIsSelected() {
+        let m = model()
+        m.tool = .blur
+        drag(m, CGPoint(x: 20, y: 20), CGPoint(x: 120, y: 80))
+        #expect(m.document.annotations.map(\.id) == [1] && m.selection == .annotation(1))
+    }
+
     @Test func typingAddsEditsAndRemovesText() {
         let m = model()
         m.tool = .text

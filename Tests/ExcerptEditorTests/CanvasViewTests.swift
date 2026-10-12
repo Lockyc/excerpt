@@ -189,3 +189,86 @@ import Testing
         #expect(model.viewScale == 0.5)
     }
 }
+
+/// The item bar and the text view as they sit in a window.
+@MainActor
+@Suite struct ItemBarInWindowTests {
+    /// A clipped scroll view over a canvas, in a window, like the editor's.
+    func editor(_ document: EditDocument, width: Int = 360, height: Int = 400) -> (
+        NSWindow, NSScrollView, CanvasView
+    ) {
+        let model = EditorModel(
+            original: Fixtures.sheet(width: width, height: height), document: document)
+        let canvas = CanvasView(model: model)
+        canvas.zoom = 1
+        let window = NSWindow(
+            contentRect: CGRect(x: 0, y: 0, width: 800, height: 600), styleMask: [.titled],
+            backing: .buffered, defer: false)
+        let scroll = NSScrollView(frame: window.contentView!.bounds)
+        scroll.documentView = canvas
+        window.contentView!.addSubview(scroll)
+        return (window, scroll, canvas)
+    }
+
+    @Test func aClickOnTheBarNeverReachesTheCanvas() {
+        final class Recorder: NSResponder {
+            var clicks = 0
+            override func mouseDown(with event: NSEvent) { clicks += 1 }
+        }
+        let bar = ItemBar()
+        let recorder = Recorder()
+        bar.nextResponder = recorder
+        let click = NSEvent.mouseEvent(
+            with: .leftMouseDown, location: .zero, modifierFlags: [], timestamp: 0,
+            windowNumber: 0, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
+        bar.mouseDown(with: click)  // what a disabled control forwards
+        #expect(recorder.clicks == 0)
+    }
+
+    @Test func onASmallCaptureTheBarStaysClickable() {
+        let (window, _, canvas) = editor(
+            EditDocument(
+                scale: 1,
+                annotations: [
+                    Annotation(
+                        id: 1,
+                        shape: .text(origin: CGPoint(x: 4, y: 4), string: "a", background: true))
+                ]),
+            width: 100, height: 30)
+        canvas.model.selection = .annotation(1)
+        guard let bar = canvas.itemBarFrame else {
+            Issue.record("no bar")
+            return
+        }
+        #expect(bar.width > canvas.bounds.width)  // wider than the capture itself
+        // Every point of the bar hit-tests to the bar, not past it.
+        let content = window.contentView!
+        for x in [bar.minX + 2, bar.midX, bar.maxX - 2] {
+            let point = content.convert(CGPoint(x: x, y: bar.midY), from: canvas)
+            let hit = content.hitTest(point)
+            #expect(hit != nil && hit!.isDescendant(of: canvas.itemBarView))
+        }
+    }
+
+    @Test func deletingWhileTypingHandsTheKeysBackToTheCanvas() {
+        let (window, _, canvas) = editor(EditDocument(scale: 1, salt: 7))
+        canvas.model.tool = .text
+        let map = canvas.base.map
+        canvas.beginText(at: Pointer(rendered: CGPoint(x: 40, y: 60), map: map))
+        #expect(window.firstResponder is NSTextView)
+        canvas.deleteItem()
+        #expect(window.firstResponder === canvas)
+    }
+
+    @Test func typingLeavesNothingOnTheWindowsUndo() {
+        let (window, _, canvas) = editor(EditDocument(scale: 1, salt: 7))
+        canvas.model.tool = .text
+        let map = canvas.base.map
+        canvas.beginText(at: Pointer(rendered: CGPoint(x: 40, y: 60), map: map))
+        (window.firstResponder as? NSTextView)?.insertText(
+            "abc", replacementRange: NSRange(location: NSNotFound, length: 0))
+        canvas.endText()
+        #expect(canvas.model.document.annotations.count == 1)
+        #expect(window.undoManager?.canUndo != true)
+    }
+}

@@ -61,7 +61,7 @@ public enum AnnotationGeometry {
         text.insetBy(dx: -pillPadding.x * pixelSize, dy: -pillPadding.y * pixelSize)
     }
 
-    /// The pill's corner radius: fully round for one line, capped for several.
+    /// The pill's corner radius: 0.3 of the text size, or half the pill's height if that is less.
     static func pillRadius(pixelSize: Double, height: Double) -> Double {
         min(height / 2, 0.3 * pixelSize)
     }
