@@ -26,12 +26,12 @@ import Testing
         let doc = EditDocument(scale: 2, cuts: [Cut(axis: .vertical, lower: 1, upper: 2)])
         #expect(try doc.encoded() == doc.encoded())
         let json = String(decoding: try doc.encoded(), as: UTF8.self)
-        #expect(json.contains("\"version\":3") && !json.contains("border"))
+        #expect(json.contains("\"version\":4") && !json.contains("border"))
     }
 
     @Test func rejectsANewerVersion() {
-        let json = Data(#"{"version":4,"scale":2,"cuts":[]}"#.utf8)
-        #expect(throws: EditDocumentError.unsupportedVersion(4)) { try EditDocument.decode(json) }
+        let json = Data(#"{"version":5,"scale":2,"cuts":[]}"#.utf8)
+        #expect(throws: EditDocumentError.unsupportedVersion(5)) { try EditDocument.decode(json) }
     }
 
     @Test func roundTripsCropAndEveryAnnotationKind() throws {
@@ -51,8 +51,37 @@ import Testing
                     id: 4, shape: .highlight(rect: CGRect(x: 0, y: 0, width: 50, height: 10)),
                     color: .yellow),
                 Annotation(id: 5, shape: .blur(rect: CGRect(x: 10, y: 10, width: 24, height: 24))),
+                Annotation(
+                    id: 6,
+                    shape: .text(origin: CGPoint(x: 7, y: 8), string: "On", background: true),
+                    color: .yellow),
+                Annotation(id: 7, shape: .step(center: CGPoint(x: 40, y: 50)), color: .blue),
             ])
         #expect(try EditDocument.decode(doc.encoded()) == doc)
+    }
+
+    @Test func readsVersion3TextAsPlain() throws {
+        let json = Data(
+            #"""
+            {"version":3,"scale":2,"cuts":[],"salt":1,"annotations":[
+            {"id":1,"color":"red","width":"medium","shape":{"text":{"origin":[5,6],"string":"a"}}}]}
+            """#.utf8)
+        let doc = try EditDocument.decode(json)
+        guard case .text(let origin, let string, let background) = doc.annotations.first?.shape
+        else {
+            Issue.record("not text")
+            return
+        }
+        #expect(origin == CGPoint(x: 5, y: 6) && string == "a" && background == nil)
+    }
+
+    @Test func rejectsAStepOutOfRange() {
+        let json = Data(
+            #"""
+            {"version":4,"scale":1,"cuts":[],"salt":1,"annotations":[
+            {"id":1,"color":"red","width":"medium","shape":{"step":{"center":[2000000,0]}}}]}
+            """#.utf8)
+        #expect(throws: EditDocumentError.invalidGeometry) { try EditDocument.decode(json) }
     }
 
     @Test func readsAVersion1Document() throws {
@@ -67,7 +96,7 @@ import Testing
         // A missing salt is random, not a public seed, and persists once saved.
         #expect(try EditDocument.decode(json).salt != doc.salt)
         #expect(try EditDocument.decode(doc.encoded()).salt == doc.salt)
-        #expect(String(decoding: try doc.encoded(), as: UTF8.self).contains("\"version\":3"))
+        #expect(String(decoding: try doc.encoded(), as: UTF8.self).contains("\"version\":4"))
     }
 
     @Test func borderRoundTripsAndReadsOffWhenAbsent() throws {

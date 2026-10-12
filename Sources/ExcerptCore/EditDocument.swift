@@ -59,9 +59,10 @@ public struct PixelRect: Codable, Hashable, Sendable {
 /// capture's pixels-per-point, which turns pixel lengths into the points shown on labels and sizes
 /// strokes and text.
 public struct EditDocument: Codable, Equatable, Sendable {
-    /// Version 2 carries `crop` and `annotations`, version 3 `border`; an older build rejects a
-    /// newer document rather than open it without them, so its next save can't erase them.
-    public static let currentVersion = 3
+    /// Version 2 carries `crop` and `annotations`, version 3 `border`, version 4 text
+    /// backgrounds and steps; an older build rejects a newer document rather than open it
+    /// without them, so its next save can't erase them.
+    public static let currentVersion = 4
 
     public var scale: Double
     public var cuts: [Cut]
@@ -194,7 +195,8 @@ public struct EditDocument: Codable, Equatable, Sendable {
             let ok: Bool
             switch note.shape {
             case .arrow(let tail, let head): ok = inRange(tail.x, tail.y, head.x, head.y)
-            case .text(let origin, _): ok = inRange(origin.x, origin.y)
+            case .text(let origin, _, _): ok = inRange(origin.x, origin.y)
+            case .step(let center): ok = inRange(center.x, center.y)
             case .rectangle(let r), .highlight(let r), .blur(let r): ok = rectOK(r)
             }
             guard ok else { throw EditDocumentError.invalidGeometry }

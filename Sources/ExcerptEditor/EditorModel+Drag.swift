@@ -242,7 +242,7 @@ extension EditorModel {
         if let id = HitTest.annotation(
             at: p, in: document.annotations, scale: document.scale, slop: 0, map: map),
             let annotation = document.annotations.first(where: { $0.id == id }),
-            case .text(let origin, let string) = annotation.shape
+            case .text(let origin, let string, _) = annotation.shape
         {
             selection = .annotation(id)
             return TextTarget(
@@ -310,7 +310,7 @@ extension EditorModel {
             return Double(hypot(head.x - tail.x, head.y - tail.y)) < minimumDrag
         case .rectangle(let rect), .highlight(let rect), .blur(let rect):
             return Double(max(rect.width, rect.height)) < minimumDrag
-        case .text:
+        case .text, .step:
             return false
         }
     }

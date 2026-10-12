@@ -194,6 +194,12 @@ import Testing
         #expect(
             Shape.text(origin: .zero, string: "a").offset(dx: 2, dy: 3)
                 == .text(origin: CGPoint(x: 2, y: 3), string: "a"))
+        #expect(
+            Shape.text(origin: .zero, string: "a", background: true).offset(dx: 2, dy: 3)
+                == .text(origin: CGPoint(x: 2, y: 3), string: "a", background: true))
+        #expect(
+            Shape.step(center: CGPoint(x: 1, y: 1)).offset(dx: 2, dy: 3)
+                == .step(center: CGPoint(x: 3, y: 4)))
     }
 
     @Test func dragsUpAndLeftStandardise() {

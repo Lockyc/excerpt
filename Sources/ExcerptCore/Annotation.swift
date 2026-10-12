@@ -22,9 +22,16 @@ public enum Palette: String, Codable, CaseIterable, Sendable {
         case .black: RGBA(r: 0, g: 0, b: 0, a: 255)
         }
     }
+
+    /// The ink for text and numbers drawn on a fill of this colour: black on yellow, white on
+    /// the rest.
+    public var contrastingInk: RGBA {
+        self == .yellow ? RGBA(r: 0, g: 0, b: 0, a: 255) : RGBA(r: 255, g: 255, b: 255, a: 255)
+    }
 }
 
-/// The editor's three sizes. One control sets both the stroke of shapes and the size of text.
+/// The editor's three sizes. One control sets the stroke of shapes, the size of text and the
+/// size of steps.
 public enum StrokeWidth: String, Codable, CaseIterable, Sendable {
     case thin
     case medium
@@ -50,6 +57,15 @@ public enum StrokeWidth: String, Codable, CaseIterable, Sendable {
         case .thick: 45
         }
     }
+
+    /// Step circle diameter in points.
+    public var stepPoints: Double {
+        switch self {
+        case .thin: 28
+        case .medium: 40
+        case .thick: 56
+        }
+    }
 }
 
 /// What an annotation draws, in original pixels with the origin at the top left.
@@ -57,11 +73,16 @@ public enum Shape: Codable, Equatable, Sendable {
     /// The head is where the arrow points.
     case arrow(tail: CGPoint, head: CGPoint)
     case rectangle(rect: CGRect)
-    /// `origin` is the top-left of the first line.
-    case text(origin: CGPoint, string: String)
+    /// `origin` is the top-left of the first line, with or without a background. `background`
+    /// true sets the text on a pill of its colour; nil, which text saved before backgrounds
+    /// has, draws plain like false.
+    case text(origin: CGPoint, string: String, background: Bool? = nil)
     case highlight(rect: CGRect)
     /// Destructive: pixelated over noise in the render, before crop and cuts.
     case blur(rect: CGRect)
+    /// A numbered circle. The number is not stored: it is the step's rank among the document's
+    /// steps (`AnnotationGeometry.stepNumbers`).
+    case step(center: CGPoint)
 
     /// The same shape moved by `dx`, `dy`.
     public func offset(dx: Double, dy: Double) -> Shape {
@@ -70,14 +91,21 @@ public enum Shape: Codable, Equatable, Sendable {
         switch self {
         case .arrow(let tail, let head): return .arrow(tail: move(tail), head: move(head))
         case .rectangle(let rect): return .rectangle(rect: move(rect))
-        case .text(let origin, let string): return .text(origin: move(origin), string: string)
+        case .text(let origin, let string, let background):
+            return .text(origin: move(origin), string: string, background: background)
         case .highlight(let rect): return .highlight(rect: move(rect))
         case .blur(let rect): return .blur(rect: move(rect))
+        case .step(let center): return .step(center: move(center))
         }
     }
 
     public var isBlur: Bool {
         if case .blur = self { return true }
+        return false
+    }
+
+    public var isStep: Bool {
+        if case .step = self { return true }
         return false
     }
 }

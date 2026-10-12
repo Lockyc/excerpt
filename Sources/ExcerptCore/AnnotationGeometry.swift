@@ -37,6 +37,49 @@ public enum AnnotationGeometry {
         annotation.width.points * scale
     }
 
+    /// The space around text on its background, as fractions of the text size: across, then
+    /// down.
+    static let pillPadding = (x: 0.35, y: 0.15)
+
+    /// Text size in pixels.
+    public static func textPixelSize(_ annotation: Annotation, scale: Double) -> Double {
+        annotation.width.textPoints * scale
+    }
+
+    /// Where a text annotation's lines sit, in original pixels, without its background; nil
+    /// for other kinds.
+    public static func textRect(of annotation: Annotation, scale: Double) -> CGRect? {
+        guard case .text(let origin, let string, _) = annotation.shape else { return nil }
+        let size = TextLayout(
+            string, pixelSize: textPixelSize(annotation, scale: scale), color: .black
+        ).size
+        return CGRect(origin: origin, size: size)
+    }
+
+    /// The background pill around text occupying `text`.
+    public static func pill(around text: CGRect, pixelSize: Double) -> CGRect {
+        text.insetBy(dx: -pillPadding.x * pixelSize, dy: -pillPadding.y * pixelSize)
+    }
+
+    /// The pill's corner radius: fully round for one line, capped for several.
+    static func pillRadius(pixelSize: Double, height: Double) -> Double {
+        min(height / 2, 0.3 * pixelSize)
+    }
+
+    /// Step circle diameter in pixels.
+    public static func stepDiameter(_ annotation: Annotation, scale: Double) -> Double {
+        annotation.width.stepPoints * scale
+    }
+
+    /// Each step's number by id: its rank, from 1, among the steps in annotation order.
+    public static func stepNumbers(_ annotations: [Annotation]) -> [Int: Int] {
+        var numbers: [Int: Int] = [:]
+        for annotation in annotations where annotation.shape.isStep {
+            numbers[annotation.id] = numbers.count + 1
+        }
+        return numbers
+    }
+
     /// The original-pixel rect an annotation covers, stroke included.
     public static func bounds(of annotation: Annotation, scale: Double) -> CGRect {
         let w = lineWidth(annotation, scale: scale)
@@ -55,11 +98,14 @@ public enum AnnotationGeometry {
             return rect.standardized.insetBy(dx: -w / 2, dy: -w / 2)
         case .highlight(let rect), .blur(let rect):
             return rect.standardized
-        case .text(let origin, let string):
-            let size = TextLayout(
-                string, pixelSize: annotation.width.textPoints * scale, color: .black
-            ).size
-            return CGRect(origin: origin, size: size)
+        case .text(_, _, let background):
+            let text = textRect(of: annotation, scale: scale)!
+            return background == true
+                ? pill(around: text, pixelSize: textPixelSize(annotation, scale: scale)) : text
+        case .step(let center):
+            let r = stepDiameter(annotation, scale: scale) / 2
+            return CGRect(
+                x: Double(center.x) - r, y: Double(center.y) - r, width: 2 * r, height: 2 * r)
         }
     }
 
@@ -79,7 +125,7 @@ public enum AnnotationGeometry {
                 CGRect(
                     x: min(tail.x, head.x), y: min(tail.y, head.y),
                     width: abs(head.x - tail.x), height: abs(head.y - tail.y)))
-        case .text:
+        case .text, .step:
             return true
         }
     }
