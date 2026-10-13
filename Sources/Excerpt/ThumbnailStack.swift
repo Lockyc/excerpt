@@ -207,15 +207,12 @@ final class ThumbnailPanel: NSPanel {
     private func startTimer() {
         timer?.invalidate()
         timer = Timer.scheduledTimer(withTimeInterval: seconds, repeats: false) { [weak self] _ in
-            MainActor.assumeIsolated {
-                guard let self else { return }
-                if NSMouseInRect(NSEvent.mouseLocation, frame, false) {
-                    startTimer()
-                } else {
-                    dismiss()
-                }
-            }
+            MainActor.assumeIsolated { self?.delayEnded() }
         }
+    }
+
+    private func delayEnded() {
+        if NSMouseInRect(NSEvent.mouseLocation, frame, false) { startTimer() } else { dismiss() }
     }
 
     func release() {
