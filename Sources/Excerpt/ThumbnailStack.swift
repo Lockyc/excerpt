@@ -200,10 +200,21 @@ final class ThumbnailPanel: NSPanel {
             busy ? "Preparing for Claude…" : "Copy tiles and text Claude can read, as @ references"
     }
 
+    /// At the delay's end the pointer's position decides: over the panel, the delay starts
+    /// again; elsewhere, the panel closes. Leaving restarts the delay, but no exit event is
+    /// needed to close — one never comes when the stack moves a panel out from under a still
+    /// pointer.
     private func startTimer() {
         timer?.invalidate()
         timer = Timer.scheduledTimer(withTimeInterval: seconds, repeats: false) { [weak self] _ in
-            MainActor.assumeIsolated { self?.dismiss() }
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                if NSMouseInRect(NSEvent.mouseLocation, frame, false) {
+                    startTimer()
+                } else {
+                    dismiss()
+                }
+            }
         }
     }
 
@@ -212,7 +223,6 @@ final class ThumbnailPanel: NSPanel {
         startTimer()
     }
 
-    override func mouseEntered(with event: NSEvent) { timer?.invalidate() }
     override func mouseExited(with event: NSEvent) { if !held { startTimer() } }
 
     @objc private func editTapped() {
