@@ -39,7 +39,8 @@ public final class ScreenCapturer {
     public nonisolated static func requestPermission() -> Bool { CGRequestScreenCaptureAccess() }
 
     /// A full-resolution still of every display, without excerpt's own windows or the Finder's
-    /// desktop icons. Taken before the overlay appears: the frozen screen.
+    /// desktop icons. Taken before the overlay appears: the frozen screen. The displays are
+    /// captured at once, so each one added doesn't lengthen the wait for the overlay.
     public func stills() async throws -> [DisplayStill] {
         let content = try await SCShareableContent.excludingDesktopWindows(
             false, onScreenWindowsOnly: true)
@@ -50,24 +51,45 @@ public final class ScreenCapturer {
                 || (window.owningApplication?.bundleIdentifier == "com.apple.finder"
                     && window.windowLayer == iconLayer)
         }
-        var stills: [DisplayStill] = []
-        for display in content.displays {
+        let requests = content.displays.compactMap { display -> StillRequest? in
             guard let screen = NSScreen.screens.first(where: { $0.displayID == display.displayID })
-            else { continue }
+            else { return nil }
             let scale = screen.backingScaleFactor
             let configuration = SCStreamConfiguration()
             configuration.width = Int(CGFloat(display.width) * scale)
             configuration.height = Int(CGFloat(display.height) * scale)
             configuration.showsCursor = false
             configuration.captureResolution = .best
-            let filter = SCContentFilter(display: display, excludingWindows: excluded)
-            let image = try await SCScreenshotManager.captureImage(
-                contentFilter: filter, configuration: configuration)
-            stills.append(
-                DisplayStill(
-                    displayID: display.displayID, frame: screen.frame, scale: scale, image: image))
+            return StillRequest(
+                displayID: display.displayID, frame: screen.frame, scale: scale,
+                filter: SCContentFilter(display: display, excludingWindows: excluded),
+                configuration: configuration)
         }
-        return stills
+        return try await withThrowingTaskGroup(of: (Int, CGImage).self) { group in
+            for (index, request) in requests.enumerated() {
+                group.addTask {
+                    let image = try await SCScreenshotManager.captureImage(
+                        contentFilter: request.filter, configuration: request.configuration)
+                    return (index, image)
+                }
+            }
+            var images: [Int: CGImage] = [:]
+            for try await (index, image) in group { images[index] = image }
+            return requests.enumerated().map { index, request in
+                DisplayStill(
+                    displayID: request.displayID, frame: request.frame, scale: request.scale,
+                    image: images[index]!)
+            }
+        }
+    }
+
+    /// One display's still, as asked for on the main actor before the captures start.
+    private struct StillRequest {
+        let displayID: CGDirectDisplayID
+        let frame: CGRect
+        let scale: CGFloat
+        let filter: SCContentFilter
+        let configuration: SCStreamConfiguration
     }
 
     /// Normal-layer, on-screen windows of other apps, frontmost first (CGWindowList gives the
