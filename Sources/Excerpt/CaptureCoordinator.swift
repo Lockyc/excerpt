@@ -98,10 +98,17 @@ final class CaptureCoordinator {
                     await deliver(still.image, scale: still.scale)
                 }
             case .scrolling:
-                if case .area(let still, let rect) = await overlay.run(
+                switch await overlay.run(
                     mode: .scrollingArea(previous: lastScrollRegion), stills: stills)
                 {
-                    try await captureScrolling(still: still, pixelRect: rect)
+                case .area(let still, let rect):
+                    try await captureScrolling(
+                        still: still, pixelRect: rect, start: .auto, overlay: overlay)
+                case .scrolledArea(let still, let rect):
+                    try await captureScrolling(
+                        still: still, pixelRect: rect, start: .manual, overlay: overlay)
+                case .window, .cancelled:
+                    break
                 }
             case .text:
                 if case .area(let still, let rect) = await overlay.run(
@@ -165,8 +172,12 @@ final class CaptureCoordinator {
 
     /// Streams the selected region while the page scrolls under it, stitching as it goes, with
     /// the HUD over it and the live preview beside it. Saves like any capture. The region is
-    /// kept for the next scrolling capture to open on.
-    private func captureScrolling(still: DisplayStill, pixelRect: CGRect) async throws {
+    /// kept for the next scrolling capture to open on. A capture the user started by scrolling
+    /// keeps `overlay` up until its first frame.
+    private func captureScrolling(
+        still: DisplayStill, pixelRect: CGRect, start: ScrollStart, overlay: SelectionOverlay
+    ) async throws {
+        defer { overlay.dismiss() }
         let region = ScrollRegion(
             displayID: still.displayID, displayFrame: still.frame, scale: still.scale,
             pixelRect: pixelRect, primaryHeight: NSScreen.primaryHeight)
@@ -181,7 +192,7 @@ final class CaptureCoordinator {
             size: ScrollWindows.hudSize, region: region.appKitFrame, visible: visible)
         let capture = ScrollCapture(
             source: source, scroller: EventScroller(region: region, hud: hud),
-            stepPoints: region.stepPoints, scale: Double(region.scale))
+            stepPoints: region.stepPoints, scale: Double(region.scale), start: start)
         let windows = ScrollWindows(
             region: region.appKitFrame, hud: hud, visible: visible,
             onDone: { [weak self, weak capture] in
@@ -193,7 +204,20 @@ final class CaptureCoordinator {
                 capture?.cancel()
             },
             onOpenAccessibility: { Self.open(.accessibility) })
-        capture.onChange = { [weak windows] in windows?.update($0) }
+        capture.onChange = { [weak windows] in
+            overlay.dismiss()
+            windows?.update($0)
+        }
+        // The user's own wheel over the region hands scrolling to them; Excerpt's steps carry
+        // EventScroller.marker.
+        let quartzRegion = region.quartz(region.appKitFrame)
+        let wheel = NSEvent.addGlobalMonitorForEvents(matching: .scrollWheel) {
+            [weak capture] event in
+            guard let cg = event.cgEvent, !EventScroller.isOwn(cg),
+                quartzRegion.contains(cg.location)
+            else { return }
+            MainActor.assumeIsolated { capture?.userScrolled() }
+        }
         // A failed stream or a display change ends the capture with what is stitched so far,
         // including while it is halted and reading no frames.
         source.onFailure = { [weak self, weak capture] error in
@@ -210,6 +234,7 @@ final class CaptureCoordinator {
         }
         let outcome = await capture.run()
         NotificationCenter.default.removeObserver(observer)
+        if let wheel { NSEvent.removeMonitor(wheel) }
         source.onFailure = nil
         windows.close()
         var stopFailure: Error?

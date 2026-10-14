@@ -19,6 +19,8 @@ public enum SelectionMode {
 
 public enum SelectionResult {
     case area(DisplayStill, pixelRect: CGRect)
+    /// Scrolling-area mode, started by the user scrolling over the selection: they scroll.
+    case scrolledArea(DisplayStill, pixelRect: CGRect)
     case window(CapturableWindow)
     case cancelled
 }
@@ -97,8 +99,18 @@ public final class SelectionOverlay {
         }
     }
 
-    /// Takes the overlay down, cancelled; nothing once it has finished.
-    public func close() { finish(.cancelled) }
+    /// Takes the overlay down, cancelled once it hasn't finished.
+    public func close() {
+        finish(.cancelled)
+        dismiss()
+    }
+
+    /// Takes down windows a capture started by scrolling left up: it keeps them until its first
+    /// frame, so wheel events land on the frozen screen rather than moving the page first.
+    public func dismiss() {
+        for window in windows { window.orderOut(nil) }
+        windows.removeAll()
+    }
 
     /// One live selection: a drag starting on one display clears the others' settled rectangles.
     /// True when one of them was settled, so the press counts as clearing it.
@@ -116,8 +128,7 @@ public final class SelectionOverlay {
         if !windows.isEmpty { NSCursor.pop() }
         for observer in observers { NotificationCenter.default.removeObserver(observer) }
         observers.removeAll()
-        for window in windows { window.orderOut(nil) }
-        windows.removeAll()
+        if case .scrolledArea = result {} else { dismiss() }
         continuation?.resume(returning: result)
         continuation = nil
     }
@@ -330,12 +341,22 @@ final class OverlayView: NSView {
     }
 
     /// Finishes with the selection cropped from the still.
-    private func confirm() {
+    private func confirm(scrolled: Bool = false) {
         guard let still, let selection, SelectionMath.isCapturable(selection) else { return }
         let pixels = DisplayGeometry.pixelRect(
             forLocalPoints: selection, scale: still.scale,
             imageSize: CGSize(width: still.image.width, height: still.image.height))
-        finish(.area(still, pixelRect: pixels))
+        finish(scrolled ? .scrolledArea(still, pixelRect: pixels) : .area(still, pixelRect: pixels))
+    }
+
+    /// A wheel over a settled scrolling selection starts the capture with the user scrolling.
+    /// This first event lands on the overlay, so the page hasn't moved when the first frame is
+    /// taken.
+    override func scrollWheel(with event: NSEvent) {
+        guard settled, case .scrollingArea = mode, let selection,
+            selection.contains(convert(event.locationInWindow, from: nil))
+        else { return }
+        confirm(scrolled: true)
     }
 
     /// The screen's visible frame (clear of menu bar and Dock) in this view's top-left points:
