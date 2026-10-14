@@ -47,7 +47,10 @@ public enum ScrollCaptureError: Error, Equatable, LocalizedError {
 /// source stops it then.
 @MainActor
 public final class ScrollCapture {
-    /// The longest wait for a scroll step's frame to settle.
+    /// The longest wait for the page to answer a scroll step: an app can move it well after the
+    /// wheel event, and a step that shows no movement in time counts towards the page's end.
+    public static let responseTime: Duration = .seconds(2)
+    /// The longest wait for a moving page to settle once it has answered a step.
     public static let settleTime: Duration = .milliseconds(300)
     public static let firstFrameTimeout: Duration = .seconds(3)
     /// How long a manual-mode read waits before checking for Return or Esc again.
@@ -164,15 +167,28 @@ public final class ScrollCapture {
         }
     }
 
-    /// The frame once the page has settled after a step: two identical frames in a row, or the
-    /// newest frame when `settleTime` runs out. The first read is any frame that arrived since
-    /// the last one read: where a step that moved for longer than `settleTime` came to rest, so
-    /// the stitch catches up with it. No frame at all means nothing on screen changed:
-    /// `previous` again. A failing stream throws.
+    /// The frame once the page has settled after a step. First the page answers: reads run for
+    /// up to `responseTime` until a frame isn't still against `previous` (a caret's blink is);
+    /// none means the page didn't move: the newest frame read, else `previous` again. The first
+    /// read is any frame that arrived since the last one read: where a step that moved for
+    /// longer than `settleTime` came to rest, so the stitch catches up with it. Then it settles:
+    /// two identical frames in a row, or the newest frame when `settleTime` runs out. A failing
+    /// stream throws.
     func settledFrame(after previous: PixelBuffer) async throws -> PixelBuffer {
         let clock = ContinuousClock()
-        let deadline = clock.now + Self.settleTime
+        let ignored = StitchMatcher.ignoredRightColumns(width: previous.width, scale: scale)
+        let answered = clock.now + Self.responseTime
         var newest: PixelBuffer?
+        while true {
+            guard answered > clock.now,
+                let frame = try await read(timeout: answered - clock.now)
+            else { return newest ?? previous }
+            newest = frame
+            if StitchMatcher.match(previous, frame, ignoringRightColumns: ignored) != .still {
+                break
+            }
+        }
+        let deadline = clock.now + Self.settleTime
         while deadline > clock.now {
             guard let frame = try await read(timeout: deadline - clock.now) else { break }
             if frame == newest { return frame }

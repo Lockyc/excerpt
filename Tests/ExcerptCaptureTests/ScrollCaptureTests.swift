@@ -8,7 +8,8 @@ struct StreamBroke: Error {}
 
 /// A page under the region: scroll events move it (when `moves`), and each change shows two
 /// identical frames, the way a page that has settled does. In manual mode the "user" scrolls to
-/// each of `userOffsets` in turn; when nothing is left to show, `onIdle` runs.
+/// each of `userOffsets` in turn, once a read has found the screen idle, as a person takes over
+/// only after the page stops; when nothing is left to show, `onIdle` runs.
 @MainActor
 final class FakePage: FrameSource, Scroller {
     var page: PixelBuffer
@@ -30,6 +31,8 @@ final class FakePage: FrameSource, Scroller {
     var onIdle: (() -> Void)?
     /// Frames left to show before the page changes again: the first frame, then two per step.
     var fresh = 1
+    /// A read has found the screen idle since the page last changed.
+    private var idled = false
 
     init(page: PixelBuffer, viewport: Int, pixelsPerPoint: Int = 1) {
         self.page = page
@@ -52,6 +55,7 @@ final class FakePage: FrameSource, Scroller {
         }
         if let block = blockAfterScrolls, scrolls.count == block.count { blocker = block.reason }
         fresh = 2
+        idled = false
         return true
     }
 
@@ -60,6 +64,10 @@ final class FakePage: FrameSource, Scroller {
         if fresh > 0 {
             fresh -= 1
             return frame
+        }
+        if !userOffsets.isEmpty && !idled {
+            idled = true
+            return nil
         }
         if !userOffsets.isEmpty {
             offset = userOffsets.removeFirst()
@@ -416,9 +424,12 @@ final class AnimatedPage: FrameSource, Scroller {
 @MainActor
 final class ScriptedSource: FrameSource {
     var reads: [PixelBuffer?]
+    /// Each read's timeout, in order.
+    var timeouts: [Duration] = []
     init(_ reads: [PixelBuffer?]) { self.reads = reads }
     func nextFrame(timeout: Duration) async throws -> PixelBuffer? {
-        reads.isEmpty ? nil : reads.removeFirst()
+        timeouts.append(timeout)
+        return reads.isEmpty ? nil : reads.removeFirst()
     }
 }
 
@@ -445,6 +456,18 @@ final class ScriptedSource: FrameSource {
 
     @Test func noFrameMeansNothingChanged() async throws {
         #expect(try await settle([nil, a]) == c)
+    }
+
+    /// An app can move the page well after the wheel event: a still frame (a caret blinking) keeps
+    /// the wait for the page's answer going, past what settling a moving page takes.
+    @Test func aStillFrameKeepsWaitingForThePageToAnswer() async throws {
+        let source = ScriptedSource([c, a, a])
+        let fake = FakePage(page: a, viewport: 4)
+        let settled = try await ScrollCapture(
+            source: source, scroller: fake, stepPoints: 1, scale: 1
+        ).settledFrame(after: c)
+        #expect(settled == a)
+        #expect(source.timeouts.prefix(2).allSatisfy { $0 > ScrollCapture.settleTime })
     }
 
     @Test func aFailingStreamIsNeverReadAsNothingChanged() async {

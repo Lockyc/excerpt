@@ -114,7 +114,8 @@ holding one.
 
 1. Select the scrolling region, press `Return`.
 2. **Auto-scroll** posts scroll-wheel events at the region's centre, ~60% of its height per
-   step, then waits for the frame to settle (two identical `SCStream` frames, or ~300ms).
+   step, then waits up to `ScrollCapture.responseTime` for the page to answer (a caret blink
+   isn't an answer) and for the frame to settle (two identical `SCStream` frames, or ~300ms).
 3. **Stitching** (Core): frames reduce to row signatures; the offset from the previous frame is
    the one with the highest share of matching evidence rows (unique, non-uniform) in the overlap,
    clearly ahead of the others. **Sticky regions** — top/bottom rows unchanged while the rows
