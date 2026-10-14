@@ -24,20 +24,29 @@ import Testing
         #expect(!SelectionMath.isCapturable(edge))
     }
 
-    @Test func startButtonSitsBelowThenAboveThenInside() {
+    @Test func startButtonCentresOnATallSelection() {
         let bounds = CGRect(x: 0, y: 0, width: 1000, height: 800)
         let size = CGSize(width: 200, height: 28)
         #expect(
             SelectionMath.startButtonFrame(
                 for: CGRect(x: 100, y: 100, width: 400, height: 300), size: size, in: bounds)
-                == CGRect(x: 200, y: 412, width: 200, height: 28))
-        #expect(
-            SelectionMath.startButtonFrame(
-                for: CGRect(x: 100, y: 400, width: 400, height: 390), size: size, in: bounds)
-                == CGRect(x: 200, y: 360, width: 200, height: 28))
+                == CGRect(x: 200, y: 236, width: 200, height: 28))
         #expect(
             SelectionMath.startButtonFrame(for: bounds, size: size, in: bounds)
-                == CGRect(x: 400, y: 760, width: 200, height: 28))
+                == CGRect(x: 400, y: 386, width: 200, height: 28))
+    }
+
+    @Test func startButtonSitsBelowThenAboveAShortSelection() {
+        let bounds = CGRect(x: 0, y: 0, width: 1000, height: 800)
+        let size = CGSize(width: 200, height: 28)
+        #expect(
+            SelectionMath.startButtonFrame(
+                for: CGRect(x: 100, y: 100, width: 400, height: 100), size: size, in: bounds)
+                == CGRect(x: 200, y: 212, width: 200, height: 28))
+        #expect(
+            SelectionMath.startButtonFrame(
+                for: CGRect(x: 100, y: 690, width: 400, height: 100), size: size, in: bounds)
+                == CGRect(x: 200, y: 650, width: 200, height: 28))
         #expect(
             SelectionMath.startButtonFrame(
                 for: CGRect(x: 0, y: 100, width: 50, height: 50), size: size, in: bounds

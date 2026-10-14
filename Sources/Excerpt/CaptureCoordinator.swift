@@ -18,6 +18,8 @@ final class CaptureCoordinator {
     private var askedForAccessibility = false
     /// How the scrolling capture in progress was asked to end: the first request wins.
     private var scrollEnd: ScrollEnd?
+    /// The last scrolling capture's region, for the next to open on; held for this launch.
+    private var lastScrollRegion: ScrollRegion?
     static let shutter = NSSound(
         contentsOfFile:
             "/System/Library/Components/CoreAudio.component/Contents/SharedSupport/SystemSounds/system/Screen Capture.aif",
@@ -97,7 +99,7 @@ final class CaptureCoordinator {
                 }
             case .scrolling:
                 if case .area(let still, let rect) = await overlay.run(
-                    mode: .scrollingArea, stills: stills)
+                    mode: .scrollingArea(previous: lastScrollRegion), stills: stills)
                 {
                     try await captureScrolling(still: still, pixelRect: rect)
                 }
@@ -162,22 +164,26 @@ final class CaptureCoordinator {
     }
 
     /// Streams the selected region while the page scrolls under it, stitching as it goes, with
-    /// the HUD and live preview beside it. Saves like any capture.
+    /// the HUD over it and the live preview beside it. Saves like any capture. The region is
+    /// kept for the next scrolling capture to open on.
     private func captureScrolling(still: DisplayStill, pixelRect: CGRect) async throws {
         let region = ScrollRegion(
             displayID: still.displayID, displayFrame: still.frame, scale: still.scale,
             pixelRect: pixelRect, primaryHeight: NSScreen.primaryHeight)
+        lastScrollRegion = region
         let source = StreamFrameSource()
         try await source.start(region: region)
         scrollEnd = nil
-        let capture = ScrollCapture(
-            source: source, scroller: EventScroller(region: region),
-            stepPoints: region.stepPoints, scale: Double(region.scale))
         let visible =
             NSScreen.screens.first { $0.displayID == region.displayID }?.visibleFrame
             ?? region.appKitFrame
+        let hud = ScrollChromeLayout.hud(
+            size: ScrollWindows.hudSize, region: region.appKitFrame, visible: visible)
+        let capture = ScrollCapture(
+            source: source, scroller: EventScroller(region: region, hud: hud),
+            stepPoints: region.stepPoints, scale: Double(region.scale))
         let windows = ScrollWindows(
-            region: region.appKitFrame, visible: visible,
+            region: region.appKitFrame, hud: hud, visible: visible,
             onDone: { [weak self, weak capture] in
                 self?.endScrolling(.user)
                 capture?.finish()

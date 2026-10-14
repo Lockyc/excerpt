@@ -14,7 +14,9 @@ import Testing
         #expect(region.localPoints == CGRect(x: 100, y: 50, width: 400, height: 600))
         #expect(region.appKitFrame == CGRect(x: 2020, y: 250, width: 400, height: 600))
         // Quartz: the display's top is at 1080 - 900 = 180 below the primary's top.
-        #expect(region.quartzCentre == CGPoint(x: 2220, y: 180 + 350))
+        #expect(
+            region.quartz(region.appKitFrame)
+                == CGRect(x: 2020, y: 180 + 50, width: 400, height: 600))
         #expect(region.stepPoints == 360)
     }
 
@@ -23,7 +25,6 @@ import Testing
             displayID: 1, displayFrame: CGRect(x: 0, y: 0, width: 1920, height: 1080), scale: 1,
             pixelRect: CGRect(x: 0, y: 0, width: 500, height: 500), primaryHeight: 1080)
         #expect(region.stepPoints == 300)
-        #expect(region.quartzCentre == CGPoint(x: 250, y: 250))
     }
 
     @Test func localPointsUndoPixelRect() {
@@ -50,18 +51,47 @@ import Testing
                 == CGRect(x: 1248, y: 0, width: 180, height: 875))
     }
 
-    @Test func hudGoesBelowThenAboveThenInside() {
+    @Test func hudCentresOnATallRegion() {
         let size = CGSize(width: 460, height: 76)
         let middle = CGRect(x: 400, y: 200, width: 500, height: 500)
         #expect(
             ScrollChromeLayout.hud(size: size, region: middle, visible: visible)
-                == CGRect(x: 420, y: 112, width: 460, height: 76))
-        let low = CGRect(x: 400, y: 20, width: 500, height: 500)
-        #expect(ScrollChromeLayout.hud(size: size, region: low, visible: visible).minY == 532)
+                == CGRect(x: 420, y: 412, width: 460, height: 76))
         let full = CGRect(x: 0, y: 0, width: 1440, height: 875)
         #expect(
             ScrollChromeLayout.hud(size: size, region: full, visible: visible)
+                == CGRect(x: 490, y: 399.5, width: 460, height: 76))
+    }
+
+    /// Too short to leave `scrollBand` above and below the HUD.
+    @Test func hudGoesBelowThenAboveThenInsideAShortRegion() {
+        let size = CGSize(width: 460, height: 76)
+        let middle = CGRect(x: 400, y: 200, width: 500, height: 150)
+        #expect(
+            ScrollChromeLayout.hud(size: size, region: middle, visible: visible)
+                == CGRect(x: 420, y: 112, width: 460, height: 76))
+        let low = CGRect(x: 400, y: 20, width: 500, height: 150)
+        #expect(ScrollChromeLayout.hud(size: size, region: low, visible: visible).minY == 182)
+        let squeezed = CGRect(x: 0, y: 0, width: 1440, height: 150)
+        #expect(
+            ScrollChromeLayout.hud(size: size, region: squeezed, visible: squeezed)
                 == CGRect(x: 490, y: 12, width: 460, height: 76))
+    }
+
+    @Test func scrollEventsLandInTheRegionsTallerPartClearOfTheHUD() {
+        let region = CGRect(x: 400, y: 200, width: 500, height: 500)
+        let centred = CGRect(x: 420, y: 412, width: 460, height: 76)
+        #expect(
+            ScrollChromeLayout.scrollPoint(region: region, hud: centred)
+                == CGPoint(x: 650, y: 594))
+        let atBottom = CGRect(x: 420, y: 212, width: 460, height: 76)
+        #expect(
+            ScrollChromeLayout.scrollPoint(region: region, hud: atBottom)
+                == CGPoint(x: 650, y: 494))
+        let below = CGRect(x: 420, y: 112, width: 460, height: 76)
+        #expect(
+            ScrollChromeLayout.scrollPoint(region: region, hud: below)
+                == CGPoint(x: 650, y: 450))
     }
 
     @Test func hudStaysOnScreenBesideAnEdgeRegion() {

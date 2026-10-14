@@ -33,14 +33,13 @@ import Testing
         #expect(buffer.bytes == [3, 2, 1, 255, 6, 5, 4, 255, 9, 8, 7, 255, 12, 11, 10, 128])
     }
 
-    @Test func thePointerIsInsideTheRegionOnlyWithinItsBounds() {
-        let centre = CGPoint(x: 500, y: 400)
-        let size = CGSize(width: 200, height: 100)
-        #expect(EventScroller.region(centre: centre, size: size, contains: centre))
-        #expect(EventScroller.region(centre: centre, size: size, contains: CGPoint(x: 400, y: 350)))
-        #expect(
-            !EventScroller.region(centre: centre, size: size, contains: CGPoint(x: 399, y: 400)))
-        #expect(
-            !EventScroller.region(centre: centre, size: size, contains: CGPoint(x: 500, y: 451)))
+    @Test func aWheelEventReachesThePageOnlyOverTheRegionAndClearOfTheHUD() {
+        let region = CGRect(x: 400, y: 350, width: 200, height: 100)
+        let hud = CGRect(x: 450, y: 390, width: 100, height: 20)
+        #expect(EventScroller.scrollsPage(at: CGPoint(x: 500, y: 370), region: region, hud: hud))
+        #expect(EventScroller.scrollsPage(at: CGPoint(x: 400, y: 350), region: region, hud: hud))
+        #expect(!EventScroller.scrollsPage(at: CGPoint(x: 399, y: 400), region: region, hud: hud))
+        #expect(!EventScroller.scrollsPage(at: CGPoint(x: 500, y: 451), region: region, hud: hud))
+        #expect(!EventScroller.scrollsPage(at: CGPoint(x: 500, y: 400), region: region, hud: hud))
     }
 }

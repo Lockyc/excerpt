@@ -112,10 +112,14 @@ holding one.
 
 ### Scrolling capture (vertical)
 
-1. Select the scrolling region, press `Return`.
-2. **Auto-scroll** posts scroll-wheel events at the region's centre, ~60% of its height per
-   step, then waits up to `ScrollCapture.responseTime` for the page to answer (a caret blink
-   isn't an answer) and for the frame to settle (two identical `SCStream` frames, or ~300ms).
+1. Select the scrolling region, press `Return`. The overlay opens on the last scrolling region
+   of this launch, already waiting for `Return`, so the same area can be captured again.
+2. The Start button and the HUD (Done, Cancel) sit centred in the region when it is tall enough
+   to leave `ScrollChromeLayout.scrollBand` clear above and below them, else just outside it.
+   **Auto-scroll** posts scroll-wheel events in the region's taller part clear of the HUD, ~60%
+   of its height per step, then waits up to `ScrollCapture.responseTime` for the page to answer
+   (a caret blink isn't an answer) and for the frame to settle (two identical `SCStream` frames,
+   or ~300ms).
 3. **Stitching** (Core): frames reduce to row signatures; the offset from the previous frame is
    the one with the highest share of matching evidence rows (unique, non-uniform) in the overlap,
    clearly ahead of the others. **Sticky regions** — top/bottom rows unchanged while the rows
@@ -123,8 +127,8 @@ holding one.
 4. Stops on two consecutive no-movement steps, on `Return`, or at a maximum height (30,000
    image pixels; the stitch is truncated contiguously there).
 5. **Manual fallback** when steps produce no movement before the page has moved, Accessibility is
-   not granted, the pointer moved, the wheel event failed, or the page scrolled a different
-   distance than asked: the HUD reads "Scroll the page yourself · Return when done" and frames
+   not granted, the pointer left the region or rests on the HUD, the wheel event failed, or the
+   page scrolled a different distance than asked: the HUD reads "Scroll the page yourself · Return when done" and frames
    are sampled and stitched as the user scrolls, skipping any that don't match.
 6. A live preview of the stitch sits beside the region.
 7. An **uncertain stitch** (no offset clears the confidence threshold — video, animation) stops,

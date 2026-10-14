@@ -3,8 +3,9 @@ import AppKit
 public enum SelectionMode {
     case area
     /// An area that stays on screen after the drag until Return, Enter or the start button
-    /// confirms it, or a new drag replaces it: the region a scrolling capture follows.
-    case scrollingArea
+    /// confirms it, or a new drag replaces it: the region a scrolling capture follows. It opens
+    /// on `previous`, the last scrolling capture's region, already waiting to be started.
+    case scrollingArea(previous: ScrollRegion?)
     case window(windows: [CapturableWindow])
 
     /// Modes that drag a rectangle.
@@ -212,7 +213,20 @@ final class OverlayView: NSView {
             updateHover()  // highlight appears before the mouse moves
         } else if releasedEarly {
             endDrag()
+        } else if earlyPress == nil, case .scrollingArea(let previous?) = mode {
+            settle(previous, on: still)
         }
+    }
+
+    /// Shows the last scrolling region waiting to be started, when it was on this display and
+    /// still fits on it.
+    private func settle(_ previous: ScrollRegion, on still: DisplayStill) {
+        guard previous.displayID == still.displayID else { return }
+        let rect = previous.localPoints.intersection(bounds)
+        guard !rect.isNull, SelectionMath.isCapturable(rect) else { return }
+        anchor = rect.origin
+        current = CGPoint(x: rect.maxX, y: rect.maxY)
+        settled = true
     }
 
     override var isFlipped: Bool { true }  // top-left, matching the still's pixel rows

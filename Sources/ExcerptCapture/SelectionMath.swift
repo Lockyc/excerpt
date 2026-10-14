@@ -22,8 +22,9 @@ public enum SelectionMath {
 
 extension SelectionMath {
     /// Where the start button sits for `selection`, in the overlay's top-left points: the HUD's
-    /// own placement (centred below, else above, else inside the bottom edge), derived from
-    /// `ScrollChromeLayout.hud` on the selection flipped into AppKit's bottom-left space.
+    /// own placement (centred on a tall enough selection, else below, above or inside its bottom
+    /// edge), derived from `ScrollChromeLayout.hud` on the selection flipped into AppKit's
+    /// bottom-left space.
     public static func startButtonFrame(for selection: CGRect, size: CGSize, in bounds: CGRect)
         -> CGRect
     {

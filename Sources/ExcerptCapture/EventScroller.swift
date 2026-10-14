@@ -2,21 +2,25 @@ import ApplicationServices
 import CoreGraphics
 import ExcerptCore
 
-/// Posts scroll-wheel events at the region's centre. Needs Accessibility access; without it the
-/// events are dropped, so `blocker` is read before every step.
+/// Posts scroll-wheel events at the region's scroll point, clear of the HUD. Needs
+/// Accessibility access; without it the events are dropped, so `blocker` is read before every
+/// step.
 @MainActor
 public final class EventScroller: Scroller {
-    private let centre: CGPoint
-    private let size: CGSize
+    private let point: CGPoint
+    private let region: CGRect
+    private let hud: CGRect
     private let placed: Bool
 
-    /// Moves the pointer to the region's centre once, here: the window under the pointer takes
+    /// Moves the pointer to the scroll point once, here: the window under the pointer takes
     /// wheel events, and moving it every step would fight the user reaching for Done. A failed
-    /// move shows as `.pointerMoved`.
-    public init(region: ScrollRegion) {
-        centre = region.quartzCentre
-        size = region.localPoints.size
-        placed = CGWarpMouseCursorPosition(region.quartzCentre) == .success
+    /// move shows as `.pointerMoved`. `hud` is the HUD's AppKit frame.
+    public init(region: ScrollRegion, hud: CGRect) {
+        let at = ScrollChromeLayout.scrollPoint(region: region.appKitFrame, hud: hud)
+        point = region.quartz(CGRect(origin: at, size: .zero)).origin
+        self.region = region.quartz(region.appKitFrame)
+        self.hud = region.quartz(hud)
+        placed = CGWarpMouseCursorPosition(point) == .success
     }
 
     public nonisolated static var isTrusted: Bool { AXIsProcessTrusted() }
@@ -31,7 +35,7 @@ public final class EventScroller: Scroller {
     public var blocker: ManualReason? {
         guard Self.isTrusted else { return .accessibility }
         guard placed, let pointer = CGEvent(source: nil)?.location,
-            Self.region(centre: centre, size: size, contains: pointer)
+            Self.scrollsPage(at: pointer, region: region, hud: hud)
         else { return .pointerMoved }
         return nil
     }
@@ -42,12 +46,15 @@ public final class EventScroller: Scroller {
                 scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 1,
                 wheel1: -Int32(points.rounded()), wheel2: 0, wheel3: 0)
         else { return false }
-        event.location = centre
+        event.location = point
         event.post(tap: .cghidEventTap)
         return true
     }
 
-    nonisolated static func region(centre: CGPoint, size: CGSize, contains point: CGPoint) -> Bool {
-        abs(point.x - centre.x) <= size.width / 2 && abs(point.y - centre.y) <= size.height / 2
+    /// Whether a wheel event with the pointer at `pointer` reaches the page: over the region,
+    /// edges included, and not over the HUD, which would take it.
+    nonisolated static func scrollsPage(at pointer: CGPoint, region: CGRect, hud: CGRect) -> Bool {
+        pointer.x >= region.minX && pointer.x <= region.maxX && pointer.y >= region.minY
+            && pointer.y <= region.maxY && !hud.contains(pointer)
     }
 }

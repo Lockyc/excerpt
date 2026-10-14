@@ -6,7 +6,7 @@ import ExcerptCore
 /// capture never depends on where keyboard focus went.
 @MainActor
 public final class ScrollWindows {
-    static let hudSize = CGSize(width: 520, height: 128)
+    public static let hudSize = CGSize(width: 520, height: 128)
 
     private let hud: NSPanel
     private let preview: NSPanel
@@ -19,15 +19,14 @@ public final class ScrollWindows {
     private var shownHeight = -1
     private var activeObserver: NSObjectProtocol?
 
-    /// `region` and `visible` (its screen's visible frame) in AppKit points.
+    /// `region`, `hud` (the HUD's frame, from `ScrollChromeLayout.hud` at `hudSize`) and `visible`
+    /// (its screen's visible frame) in AppKit points.
     public init(
-        region: CGRect, visible: CGRect, onDone: @escaping () -> Void,
+        region: CGRect, hud hudFrame: CGRect, visible: CGRect, onDone: @escaping () -> Void,
         onCancel: @escaping () -> Void, onOpenAccessibility: @escaping () -> Void
     ) {
         actions = Actions(done: onDone, cancel: onCancel, accessibility: onOpenAccessibility)
-        hud = Self.panel(
-            frame: ScrollChromeLayout.hud(size: Self.hudSize, region: region, visible: visible),
-            keyable: true)
+        hud = Self.panel(frame: hudFrame, keyable: true)
         preview = Self.panel(
             frame: ScrollChromeLayout.preview(region: region, visible: visible), keyable: false)
         preview.ignoresMouseEvents = true
