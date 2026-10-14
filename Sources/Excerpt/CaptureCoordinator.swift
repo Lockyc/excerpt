@@ -34,6 +34,10 @@ final class CaptureCoordinator {
         defer { running = false }
         guard ensurePermission() else { return }
         if requested == .scrolling && !scrollingMayStart() { return }
+        // Up before the stills are taken, so a click made meanwhile lands on the overlay.
+        let overlay = SelectionOverlay()
+        defer { overlay.close() }
+        if requested.selects { overlay.cover() }
         do {
             let stills = try await capturer.stills()
             var action = requested
@@ -55,17 +59,18 @@ final class CaptureCoordinator {
                 }
                 if mode == .scrolling && !scrollingMayStart() { return }
                 action = mode
+                if action.selects { overlay.cover() }
             }
             switch action {
             case .area:
-                if case .area(let still, let rect) = await SelectionOverlay().run(
+                if case .area(let still, let rect) = await overlay.run(
                     mode: .area, stills: stills)
                 {
                     deliver(try Self.crop(still, to: rect), scale: still.scale)
                 }
             case .window:
                 let windows = try await capturer.windowsFrontToBack()
-                if case .window(let window) = await SelectionOverlay().run(
+                if case .window(let window) = await overlay.run(
                     mode: .window(windows: windows), stills: stills)
                 {
                     let still = stills.first { $0.frame.intersects(window.frame) }
@@ -91,13 +96,13 @@ final class CaptureCoordinator {
                     deliver(still.image, scale: still.scale)
                 }
             case .scrolling:
-                if case .area(let still, let rect) = await SelectionOverlay().run(
+                if case .area(let still, let rect) = await overlay.run(
                     mode: .scrollingArea, stills: stills)
                 {
                     try await captureScrolling(still: still, pixelRect: rect)
                 }
             case .text:
-                if case .area(let still, let rect) = await SelectionOverlay().run(
+                if case .area(let still, let rect) = await overlay.run(
                     mode: .area, stills: stills)
                 {
                     await copyText(of: try Self.crop(still, to: rect), scale: still.scale)

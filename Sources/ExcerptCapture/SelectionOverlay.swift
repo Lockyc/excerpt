@@ -25,47 +25,79 @@ public enum SelectionResult {
 /// One borderless window per display showing that display's frozen still. Area mode drags a
 /// rectangle (Space held moves it); scrolling-area mode keeps the rectangle until Return, Enter
 /// or its start button; window mode highlights the window under the cursor. Esc cancels.
+///
+/// `cover` puts the windows up clear before the stills exist, so a press made while they are
+/// taken lands on the overlay instead of the window beneath, where it would activate that app and
+/// cancel the capture; `run` fills them and honours that press.
 @MainActor
 public final class SelectionOverlay {
     private var windows: [OverlayWindow] = []
     private var continuation: CheckedContinuation<SelectionResult, Never>?
     private var observers: [NSObjectProtocol] = []
+    /// The outcome when the overlay finished before `run` waited on it.
+    private var result: SelectionResult?
 
     public init() {}
 
+    /// Shows the overlay clear on every display, catching the pointer; nothing once it
+    /// is up or finished.
+    public func cover() {
+        guard windows.isEmpty, result == nil else { return }
+        for screen in NSScreen.screens {
+            guard let displayID = screen.displayID else { continue }
+            let window = OverlayWindow(
+                displayID: displayID, frame: screen.frame,
+                finish: { [weak self] result in self?.finish(result) },
+                beginDrag: { [weak self] origin in
+                    self?.clearSelections(except: origin) ?? false
+                })
+            windows.append(window)
+            window.orderFrontRegardless()
+        }
+        NSCursor.crosshair.push()
+        // Losing activation (Esc would never arrive) or a display change (the stills no
+        // longer match the screens) must not strand the full-screen overlay.
+        for name in [
+            NSApplication.didResignActiveNotification,
+            NSApplication.didChangeScreenParametersNotification,
+        ] {
+            observers.append(
+                NotificationCenter.default.addObserver(
+                    forName: name, object: nil, queue: .main
+                ) { [weak self] _ in
+                    MainActor.assumeIsolated { self?.finish(.cancelled) }
+                })
+        }
+    }
+
+    /// Fills the overlay with `stills`, covering first if `cover` wasn't called, and waits for
+    /// the selection.
     public func run(mode: SelectionMode, stills: [DisplayStill]) async -> SelectionResult {
-        guard !stills.isEmpty else { return .cancelled }
+        guard !stills.isEmpty else {
+            close()
+            return .cancelled
+        }
+        cover()
+        if let result { return result }
+        // Activated only now, so the stills show the frontmost app as it was.
+        NSApp.activate(ignoringOtherApps: true)
+        let mouse = NSEvent.mouseLocation
+        (windows.first { $0.frame.contains(mouse) } ?? windows.first)?.makeKey()
         return await withCheckedContinuation { continuation in
             self.continuation = continuation
-            for still in stills {
-                let window = OverlayWindow(
-                    still: still, mode: mode,
-                    finish: { [weak self] result in self?.finish(result) },
-                    beginDrag: { [weak self] origin in
-                        self?.clearSelections(except: origin) ?? false
-                    })
-                windows.append(window)
-                window.orderFrontRegardless()
-            }
-            NSApp.activate(ignoringOtherApps: true)
-            let mouse = NSEvent.mouseLocation
-            (windows.first { $0.frame.contains(mouse) } ?? windows.first)?.makeKey()
-            NSCursor.crosshair.push()
-            // Losing activation (Esc would never arrive) or a display change (the stills no
-            // longer match the screens) must not strand the full-screen overlay.
-            for name in [
-                NSApplication.didResignActiveNotification,
-                NSApplication.didChangeScreenParametersNotification,
-            ] {
-                observers.append(
-                    NotificationCenter.default.addObserver(
-                        forName: name, object: nil, queue: .main
-                    ) { [weak self] _ in
-                        MainActor.assumeIsolated { self?.finish(.cancelled) }
-                    })
+            for window in windows {
+                if let still = stills.first(where: { $0.displayID == window.displayID }) {
+                    window.present(still: still, mode: mode)
+                } else {
+                    window.orderOut(nil)
+                }
+                if self.continuation == nil { break }  // a press made while covering finished it
             }
         }
     }
+
+    /// Takes the overlay down, cancelled; nothing once it has finished.
+    public func close() { finish(.cancelled) }
 
     /// One live selection: a drag starting on one display clears the others' settled rectangles.
     /// True when one of them was settled, so the press counts as clearing it.
@@ -78,33 +110,39 @@ public final class SelectionOverlay {
     }
 
     private func finish(_ result: SelectionResult) {
-        guard let continuation else { return }
-        self.continuation = nil
-        NSCursor.pop()
+        guard self.result == nil else { return }
+        self.result = result
+        if !windows.isEmpty { NSCursor.pop() }
         for observer in observers { NotificationCenter.default.removeObserver(observer) }
         observers.removeAll()
         for window in windows { window.orderOut(nil) }
         windows.removeAll()
-        continuation.resume(returning: result)
+        continuation?.resume(returning: result)
+        continuation = nil
     }
 }
 
 final class OverlayWindow: NSWindow {
+    let displayID: CGDirectDisplayID
     let overlayView: OverlayView
 
     init(
-        still: DisplayStill, mode: SelectionMode, finish: @escaping (SelectionResult) -> Void,
+        displayID: CGDirectDisplayID, frame: CGRect,
+        finish: @escaping (SelectionResult) -> Void,
         beginDrag: @escaping (OverlayView) -> Bool
     ) {
-        overlayView = OverlayView(still: still, mode: mode, finish: finish, beginDrag: beginDrag)
-        super.init(
-            contentRect: still.frame, styleMask: .borderless, backing: .buffered, defer: false)
+        self.displayID = displayID
+        overlayView = OverlayView(size: frame.size, finish: finish, beginDrag: beginDrag)
+        super.init(contentRect: frame, styleMask: .borderless, backing: .buffered, defer: false)
         level = .screenSaver
-        isOpaque = true
+        // Clear until the still arrives; set explicitly, so the clear window still takes clicks.
+        isOpaque = false
+        backgroundColor = .clear
+        ignoresMouseEvents = false
         hasShadow = false
         acceptsMouseMovedEvents = true
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        setFrame(still.frame, display: false)
+        setFrame(frame, display: false)
         isReleasedWhenClosed = false
         contentView = overlayView
         initialFirstResponder = overlayView
@@ -112,14 +150,25 @@ final class OverlayWindow: NSWindow {
     }
 
     override var canBecomeKey: Bool { true }
+
+    /// Shows `still` in `mode`, on the display's frame as the still saw it.
+    func present(still: DisplayStill, mode: SelectionMode) {
+        setFrame(still.frame, display: false)
+        overlayView.present(still: still, mode: mode)
+    }
 }
 
 final class OverlayView: NSView {
-    private let still: DisplayStill
-    private let mode: SelectionMode
+    /// Nil while covering, before the still arrives.
+    private var still: DisplayStill?
+    private var mode: SelectionMode?
+    private var image: NSImage?
     private let finish: (SelectionResult) -> Void
     private let beginDrag: (OverlayView) -> Bool
-    private let image: NSImage
+    /// A press made while covering, in global points: window mode takes the window under it.
+    private var earlyPress: CGPoint?
+    /// That press was released while covering too, so area modes end its drag once presented.
+    private var releasedEarly = false
     private var anchor: CGPoint?
     private var current: CGPoint?
     private var cursor: CGPoint?
@@ -134,21 +183,37 @@ final class OverlayView: NSView {
     static let startButtonSize = CGSize(width: 220, height: 28)
 
     init(
-        still: DisplayStill, mode: SelectionMode, finish: @escaping (SelectionResult) -> Void,
+        size: CGSize, finish: @escaping (SelectionResult) -> Void,
         beginDrag: @escaping (OverlayView) -> Bool
     ) {
-        self.still = still
-        self.mode = mode
         self.finish = finish
         self.beginDrag = beginDrag
-        self.image = NSImage(cgImage: still.image, size: still.frame.size)
-        super.init(frame: CGRect(origin: .zero, size: still.frame.size))
+        super.init(frame: CGRect(origin: .zero, size: size))
         addTrackingArea(
             NSTrackingArea(
                 rect: .zero, options: [.mouseMoved, .activeAlways, .inVisibleRect], owner: self))
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
+
+    /// Shows `still` in `mode`, then settles a press made while covering: window mode takes the
+    /// window it landed on; area modes end its drag if it was already released.
+    func present(still: DisplayStill, mode: SelectionMode) {
+        self.still = still
+        self.mode = mode
+        image = NSImage(cgImage: still.image, size: still.frame.size)
+        needsDisplay = true
+        if case .window(let list) = mode {
+            if let earlyPress {
+                finish(
+                    list.first { $0.frame.contains(earlyPress) }.map { .window($0) } ?? .cancelled)
+                return
+            }
+            updateHover()  // highlight appears before the mouse moves
+        } else if releasedEarly {
+            endDrag()
+        }
+    }
 
     override var isFlipped: Bool { true }  // top-left, matching the still's pixel rows
     override var acceptsFirstResponder: Bool { true }
@@ -168,13 +233,6 @@ final class OverlayView: NSView {
         hovered = list.first { $0.frame.contains(global) }
     }
 
-    override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        guard window != nil else { return }
-        updateHover()  // highlight appears before the mouse moves
-        needsDisplay = true
-    }
-
     // MARK: Events
 
     override func mouseMoved(with event: NSEvent) {
@@ -185,6 +243,7 @@ final class OverlayView: NSView {
 
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
+        if still == nil { earlyPress = NSEvent.mouseLocation }  // tracked as a drag meanwhile
         if case .window = mode {
             updateHover()
             finish(hovered.map { .window($0) } ?? .cancelled)  // a click on nothing cancels
@@ -230,7 +289,16 @@ final class OverlayView: NSView {
     }
 
     override func mouseUp(with event: NSEvent) {
-        guard mode.isArea, !settled else { return }
+        guard still != nil else {
+            releasedEarly = earlyPress != nil
+            return
+        }
+        endDrag()
+    }
+
+    /// Releases the drag: a capturable selection confirms, or settles in scrolling-area mode.
+    private func endDrag() {
+        guard mode?.isArea == true, !settled else { return }
         guard let selection, SelectionMath.isCapturable(selection) else {
             if case .scrollingArea = mode, pressClearedSelection {
                 clearSelection()  // a click on a settled selection clears it
@@ -249,7 +317,7 @@ final class OverlayView: NSView {
 
     /// Finishes with the selection cropped from the still.
     private func confirm() {
-        guard let selection, SelectionMath.isCapturable(selection) else { return }
+        guard let still, let selection, SelectionMath.isCapturable(selection) else { return }
         let pixels = DisplayGeometry.pixelRect(
             forLocalPoints: selection, scale: still.scale,
             imageSize: CGSize(width: still.image.width, height: still.image.height))
@@ -259,7 +327,7 @@ final class OverlayView: NSView {
     /// The screen's visible frame (clear of menu bar and Dock) in this view's top-left points:
     /// the space the HUD is laid out in, so the button sits where the HUD will.
     private var visibleBounds: CGRect {
-        guard let visible = window?.screen?.visibleFrame else { return bounds }
+        guard let still, let visible = window?.screen?.visibleFrame else { return bounds }
         let local = DisplayGeometry.localPoints(forAppKitRect: visible, displayFrame: still.frame)
         let clipped = local.intersection(bounds)
         return clipped.isNull || clipped.isEmpty ? bounds : clipped
@@ -288,6 +356,7 @@ final class OverlayView: NSView {
     // MARK: Drawing
 
     override func draw(_ dirtyRect: NSRect) {
+        guard let still, let image, let mode else { return }  // clear while covering
         image.draw(
             in: bounds, from: .zero, operation: .copy, fraction: 1, respectFlipped: true, hints: nil
         )
@@ -321,7 +390,7 @@ final class OverlayView: NSView {
         if let startButton { drawStartButton(in: startButton) }
         if mode.isArea, !settled, let cursor {
             if selection == nil { drawCrosshair(at: cursor) }
-            drawLoupe(at: cursor)
+            drawLoupe(at: cursor, in: still)
         }
     }
 
@@ -373,7 +442,7 @@ final class OverlayView: NSView {
     }
 
     /// 8× magnification of the frozen pixels around the cursor, beside it.
-    private func drawLoupe(at point: CGPoint) {
+    private func drawLoupe(at point: CGPoint, in still: DisplayStill) {
         let diameter: CGFloat = 120
         let sourcePoints: CGFloat = diameter / 8
         let source = DisplayGeometry.pixelRect(

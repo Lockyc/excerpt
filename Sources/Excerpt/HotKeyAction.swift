@@ -58,3 +58,13 @@ extension HotKeyAction {
         }, uniquingKeysWith: { first, _ in first }
     ).merging(HotKeyRules.appShortcuts) { editor, _ in editor }
 }
+
+extension HotKeyAction {
+    /// Whether the action selects on the overlay: an area, a window or a scrolling region.
+    var selects: Bool {
+        switch self {
+        case .area, .window, .scrolling, .text: true
+        case .fullscreen, .selector: false
+        }
+    }
+}
