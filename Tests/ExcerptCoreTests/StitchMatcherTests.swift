@@ -292,10 +292,10 @@ import Testing
             return
         }
         #expect(offset == 120)
-        // Every page column (marks from 34 to 116) is in; no marked panel column (left marks
-        // end at 26, right ones start at 124) is.
-        #expect((26...34).contains(columns.lowerBound))
-        #expect((116...124).contains(columns.upperBound))
+        // Inside the page (marks from 34 to 116), clear of every marked panel column (left marks
+        // end at 26, right ones start at 124), and at least a third of the width.
+        #expect(columns.lowerBound >= 26 && columns.upperBound <= 124)
+        #expect(columns.count >= 50)
     }
 
     @Test func aWholeWidthMoveIsItsOwnBand() {

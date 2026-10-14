@@ -256,4 +256,65 @@ import Testing
         #expect(stitcher.add(unstuck) == .uncertain)
         #expect(stitcher.image == before)
     }
+
+    /// `panel` (30 columns), the 90-column page, and a 20-column blank margin.
+    func panelled(_ panel: PixelBuffer, page: PixelBuffer, offset: Int) -> PixelBuffer {
+        let margin = ScrollFixtures.paint(width: 20, height: 200) { _, _ in ScrollFixtures.paper }
+        return ScrollFixtures.beside(
+            ScrollFixtures.beside(panel, ScrollFixtures.frame(page, offset: offset, viewport: 200)),
+            margin)
+    }
+
+    @Test func aStickySidePanelShowsOnceAndTheBackgroundRunsOnUnderIt() {
+        // The panel moves 40 rows on the first step while pinning, then stays put.
+        let page = ScrollFixtures.page(width: 90, height: 1000)
+        let panelPage = ScrollFixtures.page(width: 30, height: 400, seed: 2)
+        let first = ScrollFixtures.frame(panelPage, offset: 0, viewport: 200)
+        let pinned = ScrollFixtures.frame(panelPage, offset: 40, viewport: 200)
+        var stitcher = Stitcher(first: panelled(first, page: page, offset: 0), scale: 1)
+        for offset in Array(stride(from: 120, through: 800, by: 120)) + [800] {
+            _ = stitcher.add(panelled(pinned, page: page, offset: offset))
+        }
+        let paper = { (w: Int, h: Int) in
+            ScrollFixtures.paint(width: w, height: h) { _, _ in ScrollFixtures.paper }
+        }
+        let expected = ScrollFixtures.beside(
+            ScrollFixtures.beside(ScrollFixtures.stack([first, paper(30, 800)]), page),
+            paper(20, 1000))
+        #expect(stitcher.image == expected)
+    }
+
+    @Test func theScrollBarStripIsCopiedNotFilled() {
+        // Page content reaches the right edge, inside the ignored scroll-bar strip.
+        let page = ScrollFixtures.paint(width: 90, height: 1000) { x, y in
+            ScrollFixtures.mix(5, UInt64(y), UInt64(x / 2)) % 4 == 0
+                ? ScrollFixtures.ink : ScrollFixtures.paper
+        }
+        let (stitcher, _) = scroll(page, viewport: 200, step: 120)
+        #expect(stitcher.image == page)
+    }
+
+    @Test func fillIsTheCommonestColourWithTiesBrokenByValue() {
+        // Sampled every fourth row (0, 4, 8). Column 0: ink, ink, paper → ink. Column 1: ink,
+        // paper, paper → paper. Column 2: ink, paper and a tint, a three-way tie won by the
+        // smallest packed value: ink (RGBA 30,30,40,255 is 0xFF28_1E1E little-endian).
+        let tint = RGBA(r: 200, g: 200, b: 200, a: 255)
+        let frame = ScrollFixtures.paint(width: 4, height: 12) { x, y in
+            switch (x, y / 4) {
+            case (0, 0), (0, 1), (1, 0), (2, 0): ScrollFixtures.ink
+            case (2, 2): tint
+            default: ScrollFixtures.paper
+            }
+        }
+        // Against an all-tint previous frame no column moved with the page, so all three fill.
+        let previous = ScrollFixtures.paint(width: 4, height: 12) { _, _ in tint }
+        let filled = PixelBuffer(
+            width: 4, height: 2,
+            bytes: Stitcher.content(
+                frame, rows: 0..<2, band: 3..<4, matched: 4, previous: previous, offset: 1,
+                overlap: 0..<8))
+        #expect(filled[x: 0, y: 1] == ScrollFixtures.ink)
+        #expect(filled[x: 1, y: 1] == ScrollFixtures.paper)
+        #expect(filled[x: 2, y: 1] == ScrollFixtures.ink)
+    }
 }

@@ -159,7 +159,7 @@ public enum ScrollFixtures {
     }
 
     /// SplitMix64 over three inputs: a stable pseudo-random pattern.
-    static func mix(_ a: UInt64, _ b: UInt64, _ c: UInt64) -> UInt64 {
+    public static func mix(_ a: UInt64, _ b: UInt64, _ c: UInt64) -> UInt64 {
         var z =
             a &* 0x9E37_79B9_7F4A_7C15 &+ b &* 0xBF58_476D_1CE4_E5B9 &+ c &* 0x94D0_49BB_1331_11EB
         z = (z ^ (z >> 30)) &* 0xBF58_476D_1CE4_E5B9

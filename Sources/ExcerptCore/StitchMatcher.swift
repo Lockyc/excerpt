@@ -199,33 +199,12 @@ public enum StitchMatcher {
                 RowSignatures(previous, columns: run.columns),
                 RowSignatures(next, columns: run.columns), height: previous.height)
             if let moved = believed(c, previous, next, columns: run.columns),
-                case .moved(run.offset, let header, let footer, _) = moved
+                case .moved(run.offset, _, _, _) = moved
             {
-                let columns = widened(
-                    run.columns, previous, next, offset: run.offset, header: header,
-                    footer: footer, within: 0..<width)
-                return .moved(offset: run.offset, header: header, footer: footer, columns: columns)
+                return moved
             }
         }
         return nil
-    }
-
-    /// `band` grown a column at a time while the next column out also moved by `offset` between
-    /// the sticky bars: strips are coarse, and one straddling the page's edge would leave page
-    /// columns out of the band.
-    static func widened(
-        _ band: Range<Int>, _ previous: PixelBuffer, _ next: PixelBuffer, offset: Int,
-        header: Int, footer: Int, within limit: Range<Int>
-    ) -> Range<Int> {
-        let rows = (header + offset)..<(previous.height - footer)
-        func moves(_ x: Int) -> Bool {
-            rows.allSatisfy { previous[x: x, y: $0] == next[x: x, y: $0 - offset] }
-        }
-        var low = band.lowerBound
-        var high = band.upperBound
-        while low > limit.lowerBound && moves(low - 1) { low -= 1 }
-        while high < limit.upperBound && moves(high) { high += 1 }
-        return low..<high
     }
 
     /// The share of row pairs that match, pairing `previous` row `previousStart + i` with `next`
