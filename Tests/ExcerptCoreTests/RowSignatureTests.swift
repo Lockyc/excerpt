@@ -62,4 +62,24 @@ import Testing
         #expect(signatures.uniform == [true, true])
         #expect(signatures.hashes[0] != signatures.hashes[1])
     }
+
+    /// Rows are hashed in pixel pairs across four lanes; every column counts wherever it falls,
+    /// the last of an odd count and the columns past the last full group of four pairs included.
+    @Test(arguments: [1, 2, 7, 8, 9, 17, 31])
+    func everyColumnOfAnyWidthCounts(width: Int) {
+        let blank = ScrollFixtures.paint(width: width + 3, height: 1) { _, _ in
+            ScrollFixtures.paper
+        }
+        let columns = 3..<(width + 3)  // an odd start, so pairs straddle the buffer's pairs
+        let plain = RowSignatures(blank, columns: columns)
+        #expect(plain.uniform == [true])
+        for x in columns {
+            let marked = ScrollFixtures.paint(width: width + 3, height: 1) { px, _ in
+                px == x ? ScrollFixtures.ink : ScrollFixtures.paper
+            }
+            let signature = RowSignatures(marked, columns: columns)
+            #expect(signature.uniform == [width == 1], "column \(x)")
+            #expect(signature.hashes != plain.hashes, "column \(x)")
+        }
+    }
 }

@@ -1,3 +1,5 @@
+import Foundation
+
 /// How the next frame of a scrolling capture relates to the previous one.
 public enum FrameMatch: Equatable, Sendable {
     /// The page didn't move. Anything that changed is small and in place: a spinner, a caret.
@@ -54,8 +56,9 @@ public enum StitchMatcher {
 
         // Moved: only the columns that changed (a static sidebar beside a scrolling pane says
         // nothing about the offset), and only the rows between the sticky bars.
-        let a = RowSignatures(previous, columns: span)
-        let b = RowSignatures(next, columns: span)
+        let wholeSpan = span == 0..<width
+        let a = wholeSpan ? wholePrevious : RowSignatures(previous, columns: span)
+        let b = wholeSpan ? wholeNext : RowSignatures(next, columns: span)
         var header = 0
         while header < height && a.hashes[header] == b.hashes[header] { header += 1 }
         var footer = 0
@@ -205,6 +208,12 @@ public enum StitchMatcher {
             b.bytes.withUnsafeBytes { pb in
                 for y in 0..<a.height {
                     let rowStart = y * a.width * 4
+                    // Most rows of a still page are identical: one compare clears them.
+                    if memcmp(pa.baseAddress! + rowStart, pb.baseAddress! + rowStart, width * 4)
+                        == 0
+                    {
+                        continue
+                    }
                     func differs(_ x: Int) -> Bool {
                         pa.loadUnaligned(fromByteOffset: rowStart + x * 4, as: UInt32.self)
                             != pb.loadUnaligned(fromByteOffset: rowStart + x * 4, as: UInt32.self)
