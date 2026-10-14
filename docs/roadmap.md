@@ -32,6 +32,7 @@ Each phase is a shippable slice with an acceptance gate. The design behind every
 | Horizontal scrolling capture | The stitcher along the x axis, for wide sheets | Generalise the stitcher's axis once vertical is proven |
 | Tiling wide captures | Tiles split on height only, so a capture over 2000pt wide arrives downscaled and its text shrinks | Split tiles on width too and teach `text.md` the tile grid |
 | In-app updates | Re-running the installer is the update path | Decide between Sparkle and a release check |
+| Multi-core PNG encoding | ImageIO encodes a PNG on one core: about 2s for a stitch at `Stitcher.defaultMaximumHeight` (3000 px wide) before its thumbnail shows, and a quarter of a second for a full Retina screen | Spike row-band deflate across cores (zlib's sync flush lets the bands join into one IDAT stream) against `PNGCodec.encode` |
 
 ## Sequencing
 
