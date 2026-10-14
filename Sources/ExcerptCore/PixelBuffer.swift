@@ -45,6 +45,19 @@ public struct PixelBuffer: Equatable, Sendable {
             bytes: Array(UnsafeBufferPointer(start: pointer, count: count)))
     }
 
+    /// Byte for byte, by `memcmp`: the scroll capture compares whole frames as they arrive, and
+    /// an element-wise compare of a Retina screen's bytes takes tens of milliseconds.
+    public static func == (lhs: PixelBuffer, rhs: PixelBuffer) -> Bool {
+        guard lhs.width == rhs.width, lhs.height == rhs.height,
+            lhs.bytes.count == rhs.bytes.count
+        else { return false }
+        return lhs.bytes.withUnsafeBytes { a in
+            rhs.bytes.withUnsafeBytes { b in
+                a.count == 0 || memcmp(a.baseAddress!, b.baseAddress!, a.count) == 0
+            }
+        }
+    }
+
     public subscript(x x: Int, y y: Int) -> RGBA {
         let i = (y * width + x) * 4
         return RGBA(r: bytes[i], g: bytes[i + 1], b: bytes[i + 2], a: bytes[i + 3])
