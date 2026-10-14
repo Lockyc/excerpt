@@ -13,6 +13,9 @@ public protocol Scroller: AnyObject {
     func scroll(points: Double) -> Bool
 }
 
+/// How a scrolling capture starts: Excerpt scrolling the page, or the user.
+public enum ScrollStart: Sendable { case auto, manual }
+
 public enum ScrollOutcome {
     case saved(PixelBuffer)
     case cancelled
@@ -63,6 +66,9 @@ public final class ScrollCapture {
     private let stepPoints: Double
     private let scale: Double
     private let maximumHeight: Int
+    private let start: ScrollStart
+    /// The user scrolled since the loop last looked.
+    private var tookOver = false
     private var request: Request?
     private var waker: CheckedContinuation<Void, Never>?
     /// The read in flight, which `cancel()` ends.
@@ -73,13 +79,24 @@ public final class ScrollCapture {
 
     public init(
         source: FrameSource, scroller: Scroller, stepPoints: Double, scale: Double,
-        maximumHeight: Int = Stitcher.defaultMaximumHeight
+        maximumHeight: Int = Stitcher.defaultMaximumHeight, start: ScrollStart = .auto
     ) {
         self.source = source
         self.scroller = scroller
         self.stepPoints = stepPoints
         self.scale = scale
         self.maximumHeight = maximumHeight
+        self.start = start
+    }
+
+    /// The user scrolled the page (a wheel event over the region that Excerpt didn't post): they
+    /// scroll from here. Wakes a stopped capture, so scrolling back to where the stitch ends
+    /// picks it up again.
+    public func userScrolled() {
+        tookOver = true
+        let waiting = waker
+        waker = nil
+        waiting?.resume()
     }
 
     public func finish() { stop(.finish) }
@@ -121,7 +138,11 @@ public final class ScrollCapture {
         }
         var session = ScrollSession(
             first: first, scale: scale, canAutoScroll: true, maximumHeight: maximumHeight)
-        if let blocker = scroller.blocker { session.fallBack(blocker) }
+        if start == .manual {
+            session.takeOver()
+        } else if let blocker = scroller.blocker {
+            session.fallBack(blocker)
+        }
         let travel = Int((stepPoints * scale).rounded())
         var latest = first
         onChange?(session)
@@ -131,6 +152,11 @@ public final class ScrollCapture {
             case .cancel: return .cancelled
             case nil: break
             }
+            if tookOver {
+                tookOver = false
+                session.takeOver()
+                onChange?(session)
+            }
             do {
                 switch session.phase {
                 case .auto:
@@ -139,7 +165,9 @@ public final class ScrollCapture {
                     } else {
                         if scroller.scroll(points: stepPoints) {
                             latest = try await settledFrame(after: latest)
-                            session.stepped(latest, travel: travel)
+                            // A step the user scrolled through is not measured against its
+                            // travel: the loop hands over next.
+                            if !tookOver { session.stepped(latest, travel: travel) }
                         } else {
                             session.fallBack(.eventFailed)
                         }
@@ -151,7 +179,7 @@ public final class ScrollCapture {
                         onChange?(session)
                     }
                 case .halted:
-                    await waitForRequest()
+                    if !tookOver { await waitForRequest() }
                 case .finished:
                     return .saved(session.stitcher.image)
                 }

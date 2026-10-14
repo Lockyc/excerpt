@@ -23,6 +23,8 @@ public enum ManualReason: Equatable, Sendable {
     /// Before the page had moved by the distance posted, a step moved it much further or less
     /// far: the app scales wheel events, so steps can't be checked against their travel.
     case unexpectedTravel
+    /// The user scrolled the page themselves.
+    case userScrolled
 }
 
 public enum HaltReason: Equatable, Sendable {
@@ -154,6 +156,19 @@ public struct ScrollSession: Sendable {
         shortStep = nil
     }
 
+    /// The user scrolled the page: they scroll from here. From a stop on a frame that didn't
+    /// match too, so scrolling back to where the stitch ends picks it up again. A stop at the
+    /// height limit stays stopped.
+    public mutating func takeOver() {
+        switch phase {
+        case .auto: fallBack(.userScrolled)
+        case .halted(.uncertain):
+            phase = .manual(.userScrolled)
+            offTrack = true
+        default: break
+        }
+    }
+
     /// The stitch's height, as the preview labels it.
     public var heightText: String { LengthText.points(stitcher.height, scale: scale) }
 
@@ -177,6 +192,7 @@ public struct ScrollSession: Sendable {
                 case .eventFailed: detail = "Excerpt couldn't send scroll events"
                 case .unexpectedTravel:
                     detail = "The page scrolled a different distance than Excerpt asked for"
+                case .userScrolled: detail = "Esc cancels"
                 }
             }
             return ScrollHUDText(

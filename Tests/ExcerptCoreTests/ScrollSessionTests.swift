@@ -252,4 +252,33 @@ import Testing
         #expect(s.phase == .halted(.limit))
         #expect(s.stitcher.height == 300)
     }
+
+    @Test func theUserTakesOverFromAuto() {
+        var s = session()
+        s.stepped(frame(120), travel: 120)
+        s.takeOver()
+        #expect(s.phase == .manual(.userScrolled))
+        s.sampled(frame(240))
+        #expect(s.stitcher.height == 440)
+    }
+
+    @Test func theUserTakesOverAfterAMismatchAndScrollsBack() {
+        var s = session()
+        s.stepped(frame(120), travel: 120)
+        s.stepped(ScrollFixtures.stripes(width: 90, height: 200), travel: 120)
+        #expect(s.phase == .halted(.uncertain))
+        s.takeOver()
+        #expect(s.phase == .manual(.userScrolled))
+        s.sampled(frame(240))
+        #expect(!s.offTrack)
+        #expect(s.stitcher.height == 440)
+    }
+
+    @Test func takingOverAtTheLimitChangesNothing() {
+        var s = session(maximumHeight: 300)
+        s.stepped(frame(120), travel: 120)
+        #expect(s.phase == .halted(.limit))
+        s.takeOver()
+        #expect(s.phase == .halted(.limit))
+    }
 }

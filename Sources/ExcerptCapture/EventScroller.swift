@@ -10,17 +10,26 @@ public final class EventScroller: Scroller {
     private let point: CGPoint
     private let region: CGRect
     private let hud: CGRect
-    private let placed: Bool
+    /// Moves the pointer to the scroll point once, the first time a step is checked for: the
+    /// window under the pointer takes wheel events, and moving it every step would fight the
+    /// user reaching for Done. A capture the user scrolls never moves it. A failed move shows as
+    /// `.pointerMoved`.
+    private lazy var placed = CGWarpMouseCursorPosition(point) == .success
 
-    /// Moves the pointer to the scroll point once, here: the window under the pointer takes
-    /// wheel events, and moving it every step would fight the user reaching for Done. A failed
-    /// move shows as `.pointerMoved`. `hud` is the HUD's AppKit frame.
+    /// Stamped on every wheel event Excerpt posts, so the user's own can be told apart.
+    public nonisolated static let marker: Int64 = 0x4558_4350  // "EXCP"
+
+    /// `hud` is the HUD's AppKit frame.
     public init(region: ScrollRegion, hud: CGRect) {
         let at = ScrollChromeLayout.scrollPoint(region: region.appKitFrame, hud: hud)
         point = region.quartz(CGRect(origin: at, size: .zero)).origin
         self.region = region.quartz(region.appKitFrame)
         self.hud = region.quartz(hud)
-        placed = CGWarpMouseCursorPosition(point) == .success
+    }
+
+    /// Whether Excerpt posted `event`.
+    public nonisolated static func isOwn(_ event: CGEvent) -> Bool {
+        event.getIntegerValueField(.eventSourceUserData) == marker
     }
 
     public nonisolated static var isTrusted: Bool { AXIsProcessTrusted() }
@@ -47,6 +56,7 @@ public final class EventScroller: Scroller {
                 wheel1: -Int32(points.rounded()), wheel2: 0, wheel3: 0)
         else { return false }
         event.location = point
+        event.setIntegerValueField(.eventSourceUserData, value: Self.marker)
         event.post(tap: .cghidEventTap)
         return true
     }

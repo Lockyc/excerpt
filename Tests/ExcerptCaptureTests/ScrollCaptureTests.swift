@@ -56,8 +56,12 @@ final class FakePage: FrameSource, Scroller {
         if let block = blockAfterScrolls, scrolls.count == block.count { blocker = block.reason }
         fresh = 2
         idled = false
+        afterScroll?(scrolls.count)
         return true
     }
+
+    /// Runs after step `n` (1 first) is posted: the user reaching for the trackpad.
+    var afterScroll: ((Int) -> Void)?
 
     func nextFrame(timeout: Duration) async throws -> PixelBuffer? {
         if let failAfterScrolls, scrolls.count >= failAfterScrolls { throw StreamBroke() }
@@ -417,6 +421,36 @@ final class AnimatedPage: FrameSource, Scroller {
         capture.cancel()
         #expect(cancelled(await capture.run()))
         #expect(timers.started == 0)
+    }
+
+    @Test func startedByScrollingNoEventIsPosted() async {
+        let fake = FakePage(page: page, viewport: 200)
+        fake.userOffsets = [150, 300]
+        let capture = ScrollCapture(
+            source: fake, scroller: fake, stepPoints: 120, scale: 1, start: .manual)
+        var phases: [ScrollPhase] = []
+        capture.onChange = { phases.append($0.phase) }
+        fake.onIdle = { capture.finish() }
+        #expect(saved(await capture.run()) == ScrollFixtures.rows(page, 0..<500))
+        #expect(fake.scrolls.isEmpty)
+        #expect(phases.first == .manual(.userScrolled))
+    }
+
+    @Test func aUserScrollMidStepHandsOverWithoutHalting() async {
+        // The user scrolls while step 1 settles, to 185 rows: past the 180 a step's travel
+        // allows, so measured against it the step would halt. They carry on to 350.
+        let fake = FakePage(page: page, viewport: 200)
+        fake.extraTravel = { $0 == 1 ? 65 : 0 }
+        fake.userOffsets = [185, 350]
+        let capture = ScrollCapture(source: fake, scroller: fake, stepPoints: 120, scale: 1)
+        fake.afterScroll = { if $0 == 1 { capture.userScrolled() } }
+        var phases: [ScrollPhase] = []
+        capture.onChange = { phases.append($0.phase) }
+        fake.onIdle = { capture.finish() }
+        #expect(saved(await capture.run()) == ScrollFixtures.rows(page, 0..<550))
+        #expect(fake.scrolls.count == 1)
+        #expect(!phases.contains(.halted(.uncertain)))
+        #expect(phases.last == .manual(.userScrolled))
     }
 }
 
