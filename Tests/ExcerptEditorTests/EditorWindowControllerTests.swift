@@ -15,7 +15,7 @@ import Testing
             original: Fixtures.sheet(width: 2400, height: 400), edits: EditDocument(scale: 1),
             supersedesMaster: false)
         let editor = EditorWindowController(
-            capture: capture, save: { _ in }, copy: { _ in true }, forClaude: { _, _ in },
+            capture: capture, save: { _ in Data() }, copy: { _ in true }, forClaude: { _, _ in },
             borderStyle: .initial, rememberBorder: { _ in }, annotationStyle: .initial,
             rememberStyle: { _ in }, onClose: {})
         defer { editor.window?.orderOut(nil) }

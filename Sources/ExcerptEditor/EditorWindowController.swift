@@ -26,8 +26,11 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
     private static let snapHint = "⌥ places edges without snapping"
 
     private let capture: LoadedCapture
-    private let save: (EditDocument) throws -> Void
+    private let save: (EditDocument) throws -> Data
     private let copy: (() throws -> Data) -> Bool
+    /// The primary's PNG the last save wrote, and the document it renders: what Save copies
+    /// while the document is still that one, instead of rendering and encoding it again.
+    private var written: (document: EditDocument, png: Data)?
     private let forClaude: (CGImage, EditDocument) -> Void
     private let onClose: () -> Void
     private let model: EditorModel
@@ -52,7 +55,8 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         didSet { update() }
     }
 
-    /// `save` writes the document (the app's `LibraryStore.saveEdits`); `copy`, Save's last
+    /// `save` writes the document (the app's `LibraryStore.saveEdits`) and returns the primary's
+    /// PNG it wrote; `copy`, Save's last
     /// step, is handed a closure that renders the current PNG, puts it on the pasteboard,
     /// reports any failure, the render's included, and returns whether it worked; `forClaude`
     /// exports the original with the current edits; `borderStyle` is the border a capture
@@ -61,7 +65,7 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
     /// told each colour, size or background the user picks; `onClose` runs once the window has
     /// closed.
     public init(
-        capture: LoadedCapture, save: @escaping (EditDocument) throws -> Void,
+        capture: LoadedCapture, save: @escaping (EditDocument) throws -> Data,
         copy: @escaping (() throws -> Data) -> Bool,
         forClaude: @escaping (CGImage, EditDocument) -> Void, borderStyle: Border,
         rememberBorder: @escaping (Border) -> Void, annotationStyle: AnnotationStyle,
@@ -343,7 +347,9 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         let original = model.original
         finish {
             let document = model.document
+            let written = written
             return copy {
+                if let written, written.document == document { return written.png }
                 let image = Renderer.render(original, edits: document).image
                 return try PNGCodec.encode(image, scale: document.scale)
             }
@@ -373,7 +379,8 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
     private func writeDocument() -> Bool {
         canvas.endText()
         do {
-            try save(model.document)
+            let document = model.document
+            written = (document, try save(document))
             model.markSaved()
             update()
             return true

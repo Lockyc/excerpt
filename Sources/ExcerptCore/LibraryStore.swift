@@ -93,13 +93,19 @@ public struct LibraryStore: Sendable {
     /// an edited primary without its original. An existing master keeps its pixels: only its
     /// edits chunk is rewritten; the first edit, and every save `replacingMaster` (a primary
     /// loaded with `supersedesMaster`), encodes `original`. A file at the master's path that
-    /// isn't Excerpt's throws `foreignOriginal` before anything is written.
+    /// isn't Excerpt's throws `foreignOriginal` before anything is written. Returns the
+    /// primary's PNG as written. The primary is rendered and encoded while the master is
+    /// prepared: a first save encodes both in full.
+    @discardableResult
     public func saveEdits(
         primary: URL, original: CGImage, edits: EditDocument, replacingMaster: Bool = false
-    ) throws {
+    ) throws -> Data {
         let master = primary.deletingLastPathComponent()
             .appendingPathComponent(
                 LibraryNaming.originalName(forPrimary: primary.lastPathComponent))
+        let primaryData = Started {
+            try PNGCodec.encode(Renderer.render(original, edits: edits).image, scale: edits.scale)
+        }
         let masterData: Data
         if FileManager.default.fileExists(atPath: master.path) {
             let existing = try Data(contentsOf: master)
@@ -117,8 +123,9 @@ public struct LibraryStore: Sendable {
             masterData = try MasterFile.encode(original: original, edits: edits)
         }
         try masterData.write(to: master, options: .atomic)
-        let rendered = Renderer.render(original, edits: edits).image
-        try PNGCodec.encode(rendered, scale: edits.scale).write(to: primary, options: .atomic)
+        let data = try primaryData.value()
+        try data.write(to: primary, options: .atomic)
+        return data
     }
 
     /// True when the PNG carries the edits chunk; a file that isn't a PNG doesn't.
