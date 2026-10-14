@@ -64,6 +64,14 @@ public struct ClaudeBundle: Sendable {
             throw ClaudeBundleError.cacheUnreadable(cache.root, error)
         }
         let render = Renderer.render(original, edits: edits)
+        // Tiles encode across the cores while the text is read: recognition runs on the Neural
+        // Engine and gains nothing from more threads, encoding does.
+        let image = render.image
+        let encoding = Started {
+            try parallelMap(Tiling.tiles(of: image, scale: edits.scale)) {
+                try PNGCodec.encode($0, scale: 1)
+            }
+        }
         let text: String
         do {
             text = try CaptureText.read(
@@ -73,10 +81,9 @@ public struct ClaudeBundle: Sendable {
         } catch {
             throw ClaudeBundleError.recognitionFailed(error)
         }
-        let tiles = Tiling.tiles(of: render.image, scale: edits.scale)
         let encoded: [Data]
         do {
-            encoded = try tiles.map { try PNGCodec.encode($0, scale: 1) }
+            encoded = try encoding.value()
         } catch {
             throw ClaudeBundleError.tileEncodingFailed(error)
         }
@@ -85,9 +92,9 @@ public struct ClaudeBundle: Sendable {
         let folder = cache.folder(for: primary)
         let staging = cache.root.appendingPathComponent(
             ".\(folder.lastPathComponent)-\(UUID().uuidString)", isDirectory: true)
-        let digits = String(tiles.count).count
-        let names = tiles.indices.map {
-            "tile-\(padded($0 + 1, digits))-of-\(padded(tiles.count, digits)).png"
+        let digits = String(encoded.count).count
+        let names = encoded.indices.map {
+            "tile-\(padded($0 + 1, digits))-of-\(padded(encoded.count, digits)).png"
         }
         let swapped: URL
         do {
