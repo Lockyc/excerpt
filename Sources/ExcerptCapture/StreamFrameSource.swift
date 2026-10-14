@@ -1,3 +1,4 @@
+import Accelerate
 import CoreMedia
 import ExcerptCore
 import Foundation
@@ -163,20 +164,26 @@ enum FrameConversion {
     }
 
     /// Premultiplied BGRA rows, possibly padded past `width`, in Core's RGBA layout: the same
-    /// values reordered, so equal screens give equal buffers.
+    /// values reordered, so equal screens give equal buffers. Reordered by vImage: every frame
+    /// of the stream comes through here, thirty a second.
     static func pixelBuffer(bgra: UnsafeRawBufferPointer, width: Int, height: Int, bytesPerRow: Int)
         -> PixelBuffer
     {
-        var bytes = [UInt8](repeating: 0, count: width * height * 4)
-        for y in 0..<height {
-            for x in 0..<width {
-                let s = y * bytesPerRow + x * 4
-                let d = (y * width + x) * 4
-                bytes[d] = bgra[s + 2]
-                bytes[d + 1] = bgra[s + 1]
-                bytes[d + 2] = bgra[s]
-                bytes[d + 3] = bgra[s + 3]
+        let count = width * height * 4
+        let bytes = [UInt8](unsafeUninitializedCapacity: count) { out, initialized in
+            if count > 0 {
+                var source = vImage_Buffer(
+                    data: UnsafeMutableRawPointer(mutating: bgra.baseAddress!),
+                    height: vImagePixelCount(height), width: vImagePixelCount(width),
+                    rowBytes: bytesPerRow)
+                var destination = vImage_Buffer(
+                    data: out.baseAddress!, height: vImagePixelCount(height),
+                    width: vImagePixelCount(width), rowBytes: width * 4)
+                let error = vImagePermuteChannels_ARGB8888(
+                    &source, &destination, [2, 1, 0, 3], vImage_Flags(kvImageNoFlags))
+                precondition(error == kvImageNoError, "vImage reorders any 8-bit RGBA buffer")
             }
+            initialized = count
         }
         return PixelBuffer(width: width, height: height, bytes: bytes)
     }
