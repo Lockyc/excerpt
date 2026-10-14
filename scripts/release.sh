@@ -34,7 +34,7 @@ notarize() {
             fail "$v is not set; export the notary credentials first."
         fi
     done
-    just app
+    just bundle
     rm -f "$zip"
     ditto -c -k --keepParent "$app" "$zip"
     # A rejection may also exit non-zero; capture that so Apple's log still prints.

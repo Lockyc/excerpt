@@ -82,7 +82,7 @@ and `shellcheck` for the gate.
 ```bash
 just gate     # shellcheck, format check, build, tests
 just run      # build the signed app and launch it
-just deploy   # build, install to /Applications and launch
+just install  # build, install to /Applications and launch
 
 swift run Excerpt read shot.png   # the excerpt command, without building the app
 ```
@@ -90,7 +90,7 @@ swift run Excerpt read shot.png   # the excerpt command, without building the ap
 Signing uses a `Developer ID Application` identity from your keychain; set
 `EXCERPT_SIGN_IDENTITY` when more than one is present. Without one,
 `EXCERPT_SIGN_IDENTITY=- just run` signs ad hoc, and macOS then asks for Screen Recording again
-after each rebuild. `just deploy` doesn't link the `excerpt` command; link
+after each rebuild. `just install` doesn't link the `excerpt` command; link
 `/Applications/Excerpt.app/Contents/MacOS/Excerpt` as `excerpt` on your `PATH` to get it.
 
 What's planned is in [docs/roadmap.md](docs/roadmap.md).

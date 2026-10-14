@@ -12,7 +12,7 @@ Excerpt needs macOS 15 or later. On an older Mac, say so and stop.
 
 From an excerpt checkout (`[ -f install.sh ] && [ -f Package.swift ]`), ask with AskUserQuestion:
 - **Latest release** (recommended): `bash install.sh`
-- **This checkout's code**: `just deploy`, then `ln -sfn /Applications/Excerpt.app/Contents/MacOS/Excerpt /usr/local/bin/excerpt` (with `sudo` if `/usr/local/bin` isn't writable).
+- **This checkout's code**: `just install`, then `ln -sfn /Applications/Excerpt.app/Contents/MacOS/Excerpt /usr/local/bin/excerpt` (with `sudo` if `/usr/local/bin` isn't writable).
 
 Outside a checkout, run `curl -fsSL https://raw.githubusercontent.com/lockyc/excerpt/main/install.sh | bash`.
 

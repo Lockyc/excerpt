@@ -33,7 +33,7 @@ gate:
 
 [group("app")]
 [doc("Build the signed Excerpt.app into build/")]
-app:
+bundle:
     swift build -c release --product Excerpt
     rm -rf {{app_dir}}
     mkdir -p {{app_dir}}/Contents/MacOS
@@ -43,12 +43,12 @@ app:
 
 [group("app")]
 [doc("Build and launch the app from build/")]
-run: app quit
+run: bundle quit
     @just launch {{app_dir}}
 
 [group("app")]
 [doc("Build, install to /Applications, launch")]
-deploy: app quit
+install: bundle quit
     rm -rf /Applications/Excerpt.app
     ditto {{app_dir}} /Applications/Excerpt.app
     @just launch /Applications/Excerpt.app
