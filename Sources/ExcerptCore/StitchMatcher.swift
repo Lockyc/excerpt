@@ -154,19 +154,19 @@ public enum StitchMatcher {
                     let p = previousStart + i
                     let n = nextStart + i
                     guard previousUnique[p], nextUnique[n] else { continue }
-                    var first = Int.max
-                    var last = -1
-                    for x in columns {
-                        let u = pa.loadUnaligned(
-                            fromByteOffset: (p * previous.width + x) * 4, as: UInt32.self)
-                        let v = pb.loadUnaligned(
-                            fromByteOffset: (n * next.width + x) * 4, as: UInt32.self)
-                        if u != v {
-                            first = min(first, x)
-                            last = x
-                        }
+                    let rowA = pa.baseAddress! + (p * previous.width + columns.lowerBound) * 4
+                    let rowB = pb.baseAddress! + (n * next.width + columns.lowerBound) * 4
+                    // A row the offset explains is identical: one compare clears it.
+                    guard memcmp(rowA, rowB, columns.count * 4) != 0 else { continue }
+                    func differs(_ x: Int) -> Bool {
+                        rowA.loadUnaligned(fromByteOffset: x * 4, as: UInt32.self)
+                            != rowB.loadUnaligned(fromByteOffset: x * 4, as: UInt32.self)
                     }
-                    if last >= 0 && (last - first + 1) * 4 > columns.count { found += 1 }
+                    var first = 0
+                    while !differs(first) { first += 1 }
+                    var last = columns.count - 1
+                    while !differs(last) { last -= 1 }
+                    if (last - first + 1) * 4 > columns.count { found += 1 }
                 }
             }
         }
