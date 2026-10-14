@@ -18,14 +18,45 @@ enum Pasteboard {
         guard board.setString(text, forType: .string) else { throw WriteFailed() }
     }
 
-    /// Puts PNG data on the clipboard, with TIFF for apps that only read TIFF.
+    /// The provider of the TIFF on the clipboard now, held until the pasteboard is done with it.
+    private static var tiffProvider: TIFFProvider?
+
+    /// Puts PNG data on the clipboard, with TIFF for apps that only read TIFF. The TIFF is made
+    /// only when such an app asks for it: converting a full-screen capture costs over 100ms.
     static func copyPNG(data: Data) throws {
         let board = NSPasteboard.general
         board.clearContents()
-        board.declareTypes([.png, .tiff], owner: nil)
-        guard board.setData(data, forType: .png) else { throw WriteFailed() }
-        if let tiff = NSBitmapImageRep(data: data)?.tiffRepresentation {
-            board.setData(tiff, forType: .tiff)
+        let item = NSPasteboardItem()
+        let provider = TIFFProvider(png: data)
+        guard item.setData(data, forType: .png),
+            item.setDataProvider(provider, forTypes: [.tiff]),
+            board.writeObjects([item])
+        else { throw WriteFailed() }
+        tiffProvider = provider
+    }
+
+    fileprivate static func finished(with provider: TIFFProvider) {
+        if tiffProvider === provider { tiffProvider = nil }
+    }
+}
+
+/// Converts the clipboard's PNG to TIFF on request.
+private final class TIFFProvider: NSObject, NSPasteboardItemDataProvider {
+    private let png: Data
+
+    init(png: Data) { self.png = png }
+
+    func pasteboard(
+        _ pasteboard: NSPasteboard?, item: NSPasteboardItem,
+        provideDataForType type: NSPasteboard.PasteboardType
+    ) {
+        guard type == .tiff, let tiff = NSBitmapImageRep(data: png)?.tiffRepresentation else {
+            return
         }
+        item.setData(tiff, forType: .tiff)
+    }
+
+    func pasteboardFinishedWithDataProvider(_ pasteboard: NSPasteboard) {
+        Task { @MainActor in Pasteboard.finished(with: self) }
     }
 }
