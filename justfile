@@ -24,7 +24,7 @@ fmt:
     swift format --in-place --recursive Package.swift Sources Tests
 
 [group("dev")]
-[doc("Pre-merge gate: format check, build, tests")]
+[doc("Pre-merge gate: shellcheck, format check, build, tests")]
 gate:
     shellcheck install.sh scripts/*.sh
     swift format lint --strict --recursive Package.swift Sources Tests
