@@ -8,7 +8,9 @@ import ScreenCaptureKit
 /// the HUD and preview never appear in a frame) and without the cursor. The stream excludes
 /// Excerpt by application, because the HUD is created after it starts; that filter form can't
 /// also exclude Finder's desktop icons the way `ScreenCapturer`'s stills do, so icons under the
-/// region appear in frames.
+/// region appear in frames. Excerpt is looked up among apps with any window, not only on-screen
+/// ones: once the overlay has closed its only window may be the menu-bar item, which macOS
+/// reports as off-screen whenever the menu bar is hidden.
 @MainActor
 public final class StreamFrameSource: FrameSource {
     private let mailbox = FrameMailbox()
@@ -25,7 +27,7 @@ public final class StreamFrameSource: FrameSource {
     public func start(region: ScrollRegion) async throws {
         precondition(stream == nil, "one stream per source: stop it before starting another")
         let content = try await SCShareableContent.excludingDesktopWindows(
-            false, onScreenWindowsOnly: true)
+            false, onScreenWindowsOnly: false)
         guard let display = content.displays.first(where: { $0.displayID == region.displayID })
         else { throw ScrollCaptureError.displayGone }
         let ownPID = ProcessInfo.processInfo.processIdentifier
