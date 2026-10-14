@@ -246,9 +246,13 @@ import Testing
         #expect(stitcher.add(stuck(60)) == .appended(rows: 60))
         let before = stitcher.image
         let unstuck = ScrollFixtures.frame(page, offset: 230, viewport: 200, header: header)
-        #expect(
-            StitchMatcher.match(stuck(60), unstuck, ignoringRightColumns: 0)
-                == .moved(offset: 160, header: 20, footer: 0))
+        guard
+            case .moved(160, 20, 0, _) = StitchMatcher.match(
+                stuck(60), unstuck, ignoringRightColumns: 0)
+        else {
+            Issue.record("expected the unstuck footer to read as a 160-row move")
+            return
+        }
         #expect(stitcher.add(unstuck) == .uncertain)
         #expect(stitcher.image == before)
     }

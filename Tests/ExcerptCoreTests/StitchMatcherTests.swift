@@ -11,7 +11,7 @@ import Testing
     /// The offset of a move; blank rows that happen to line up at the frame's edges may join
     /// the sticky rows, so tests of plain pages check the offset alone.
     func offset(_ match: FrameMatch) -> Int? {
-        if case .moved(let offset, _, _) = match { offset } else { nil }
+        if case .moved(let offset, _, _, _) = match { offset } else { nil }
     }
 
     func frame(_ offset: Int, header: PixelBuffer? = nil, footer: PixelBuffer? = nil)
@@ -29,7 +29,7 @@ import Testing
         let match = StitchMatcher.match(
             frame(0, header: header, footer: footer), frame(97, header: header, footer: footer),
             ignoringRightColumns: 0)
-        guard case .moved(let offset, let top, let bottom) = match else {
+        guard case .moved(let offset, let top, let bottom, _) = match else {
             Issue.record("expected a move, got \(match)")
             return
         }
@@ -269,5 +269,53 @@ import Testing
         #expect(StitchMatcher.ignoredRightColumns(width: 800, scale: 2) == 32)
         #expect(StitchMatcher.ignoredRightColumns(width: 100, scale: 2) == 12)
         #expect(StitchMatcher.ignoredRightColumns(width: 4, scale: 2) == 0)
+    }
+
+    /// A 150-column frame: a 30-column side panel on each side of the 90-column page.
+    func panelled(page pageOffset: Int, panels panelOffset: Int) -> PixelBuffer {
+        let left = ScrollFixtures.page(width: 30, height: 1200, seed: 2)
+        let right = ScrollFixtures.page(width: 30, height: 1200, seed: 3)
+        return ScrollFixtures.beside(
+            ScrollFixtures.beside(
+                ScrollFixtures.frame(left, offset: panelOffset, viewport: 200),
+                frame(pageOffset)),
+            ScrollFixtures.frame(right, offset: panelOffset, viewport: 200))
+    }
+
+    @Test func sidePanelsMovingByAnotherAmountLeaveThePageTheBand() {
+        // Sticky panels still pinning: they moved 40 rows while the page moved 120.
+        let match = StitchMatcher.match(
+            panelled(page: 0, panels: 0), panelled(page: 120, panels: 40),
+            ignoringRightColumns: 0)
+        guard case .moved(let offset, _, _, let columns) = match else {
+            Issue.record("expected a move, got \(match)")
+            return
+        }
+        #expect(offset == 120)
+        // Every page column (marks from 34 to 116) is in; no marked panel column (left marks
+        // end at 26, right ones start at 124) is.
+        #expect((26...34).contains(columns.lowerBound))
+        #expect((116...124).contains(columns.upperBound))
+    }
+
+    @Test func aWholeWidthMoveIsItsOwnBand() {
+        let match = StitchMatcher.match(frame(0), frame(120), ignoringRightColumns: 0)
+        guard case .moved(_, _, _, let columns) = match else {
+            Issue.record("expected a move, got \(match)")
+            return
+        }
+        #expect(columns.count >= 80)  // the changed span: the page's marked columns
+    }
+
+    @Test func aNarrowScrollingBandIsNotBelieved() {
+        // 40 scrolling columns beside 110 of video: a band under a third of the width.
+        let video = ScrollFixtures.paint(width: 110, height: 200) { _, _ in ScrollFixtures.paper }
+        let a = ScrollFixtures.beside(
+            ScrollFixtures.animated(video, x: 0, y: 0, width: 110, height: 200, phase: 1),
+            ScrollFixtures.columns(frame(0), 0..<40))
+        let b = ScrollFixtures.beside(
+            ScrollFixtures.animated(video, x: 0, y: 0, width: 110, height: 200, phase: 2),
+            ScrollFixtures.columns(frame(120), 0..<40))
+        #expect(StitchMatcher.match(a, b, ignoringRightColumns: 0) == .uncertain)
     }
 }

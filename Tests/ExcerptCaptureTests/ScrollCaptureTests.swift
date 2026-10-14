@@ -282,7 +282,7 @@ final class AnimatedPage: FrameSource, Scroller {
             ScrollFixtures.frame(long, offset: offset, viewport: 200)
         }
         guard
-            case .moved(30, _, _) = StitchMatcher.match(
+            case .moved(30, _, _, _) = StitchMatcher.match(
                 frame(130), frame(410), ignoringRightColumns: 0)
         else {
             Issue.record("the jump no longer aliases as a 30-row move")

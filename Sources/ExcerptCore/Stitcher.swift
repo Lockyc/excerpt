@@ -53,7 +53,7 @@ public struct Stitcher: Sendable {
         switch StitchMatcher.match(reference, frame, ignoringRightColumns: ignoredRightColumns) {
         case .still: return .noMovement
         case .uncertain: return .uncertain
-        case .moved(let offset, let header, let footer):
+        case .moved(let offset, let header, let footer, _):
             if let travel, !travel.contains(offset) { return .unexpectedTravel(offset: offset) }
             let rowBytes = width * 4
             // The sticky rows on the stitch's tail: the last move's footer, or for the first

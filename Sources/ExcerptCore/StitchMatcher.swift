@@ -4,9 +4,11 @@ import Foundation
 public enum FrameMatch: Equatable, Sendable {
     /// The page didn't move. Anything that changed is small and in place: a spinner, a caret.
     case still
-    /// The content between the sticky rows moved up by `offset` rows. `header` rows at the top
-    /// and `footer` rows at the bottom are the same in both frames.
-    case moved(offset: Int, header: Int, footer: Int)
+    /// The content in `columns` (the scrolling band) moved up by `offset` rows; `header` rows at
+    /// the top and `footer` rows at the bottom of the band are the same in both frames. Columns
+    /// outside the band didn't scroll with it: margins, or side panels fixed in place or moving
+    /// by another amount.
+    case moved(offset: Int, header: Int, footer: Int, columns: Range<Int>)
     /// No offset is convincing: the content changed as it moved (video, animation), more than a
     /// frame's height went past, or the frame shows something else.
     case uncertain
@@ -28,6 +30,14 @@ public enum StitchMatcher {
     /// Width of the right-edge strip left out of matching, in points: an overlay scroll bar's
     /// thumb sits there and moves with every step, unlike the content beside it.
     public static let scrollBarPoints = 16.0
+    /// Strips the changed columns are split into when they don't move as one, to find the band
+    /// that does.
+    public static let strips = 16
+    /// The narrowest strip: narrower, too few of a strip's rows differ for any to be evidence.
+    public static let minimumStripWidth = 32
+    /// The narrowest scrolling band believed, as a share of the frame's width: narrower, a strip
+    /// of content beside something animated could alias an offset.
+    public static let minimumBandShare = 1.0 / 3
 
     /// The right-edge columns left out of matching for a region `width` pixels wide: the scroll
     /// bar strip at `scale`, never more than an eighth of the width.
@@ -59,6 +69,40 @@ public enum StitchMatcher {
         let wholeSpan = span == 0..<width
         let a = wholeSpan ? wholePrevious : RowSignatures(previous, columns: span)
         let b = wholeSpan ? wholeNext : RowSignatures(next, columns: span)
+        let whole = candidate(a, b, height: height)
+        if let stillScore, stillScore >= confidenceThreshold,
+            stillScore >= (whole.best?.score ?? 0) - ambiguityMargin
+        {
+            return .still
+        }
+        if let moved = believed(whole, previous, next, columns: span) { return moved }
+        if let moved = band(previous, next, span: span, width: width) { return moved }
+        if !whole.convincing,
+            isCaretSized(span, rows: changedRows(wholePrevious, wholeNext), of: previous)
+        {
+            return .still
+        }
+        return .uncertain
+    }
+
+    /// The best offset of the rows between the sticky bars, scored over one column range.
+    struct Candidate {
+        let header: Int
+        let footer: Int
+        let best: (offset: Int, score: Double)?
+        let runnerUp: Double
+        let uniqueA: [Bool]
+        let uniqueB: [Bool]
+
+        /// The best offset clears the confidence threshold, clearly ahead of the others.
+        var convincing: Bool {
+            guard let best else { return false }
+            return best.score >= StitchMatcher.confidenceThreshold
+                && runnerUp < best.score - StitchMatcher.ambiguityMargin
+        }
+    }
+
+    static func candidate(_ a: RowSignatures, _ b: RowSignatures, height: Int) -> Candidate {
         var header = 0
         while header < height && a.hashes[header] == b.hashes[header] { header += 1 }
         var footer = 0
@@ -88,23 +132,100 @@ public enum StitchMatcher {
                 }
             }
         }
+        return Candidate(
+            header: header, footer: footer, best: best, runnerUp: runnerUp, uniqueA: uniqueA,
+            uniqueB: uniqueB)
+    }
 
-        if let stillScore, stillScore >= confidenceThreshold,
-            stillScore >= (best?.score ?? 0) - ambiguityMargin
-        {
-            return .still
+    /// `c` as a move over `columns`, when it convinces and no row contradicts it.
+    static func believed(
+        _ c: Candidate, _ previous: PixelBuffer, _ next: PixelBuffer, columns: Range<Int>
+    ) -> FrameMatch? {
+        guard c.convincing, let best = c.best else { return nil }
+        let content = previous.height - c.header - c.footer
+        let found = contradictions(
+            previous, next, columns: columns, previousStart: c.header + best.offset,
+            nextStart: c.header, count: content - best.offset, previousUnique: c.uniqueA,
+            nextUnique: c.uniqueB)
+        guard found <= maximumContradictions else { return nil }
+        return .moved(offset: best.offset, header: c.header, footer: c.footer, columns: columns)
+    }
+
+    /// The widest run of `span`'s columns that moved as one when the span as a whole didn't: a
+    /// page between side panels that move by another amount or change in place. Strips with no
+    /// offset of their own (blank, too little evidence) may sit inside a run but never end one.
+    static func band(_ previous: PixelBuffer, _ next: PixelBuffer, span: Range<Int>, width: Int)
+        -> FrameMatch?
+    {
+        let narrowest = Int((Double(width) * minimumBandShare).rounded(.up))
+        guard span.count >= narrowest else { return nil }
+        let stripWidth = max(minimumStripWidth, span.count / strips)
+        let bounds = stride(from: span.lowerBound, to: span.upperBound, by: stripWidth).map {
+            $0..<min($0 + stripWidth, span.upperBound)
         }
-        guard let best, best.score >= confidenceThreshold, runnerUp < best.score - ambiguityMargin
-        else {
-            return isCaretSized(span, rows: changedRows(wholePrevious, wholeNext), of: previous)
-                ? .still : .uncertain
+        let offsets: [Int?] = bounds.map { columns in
+            let c = candidate(
+                RowSignatures(previous, columns: columns), RowSignatures(next, columns: columns),
+                height: previous.height)
+            return c.convincing ? c.best?.offset : nil
         }
-        let contradictions = contradictions(
-            previous, next, columns: span, previousStart: header + best.offset,
-            nextStart: header, count: content - best.offset, previousUnique: uniqueA,
-            nextUnique: uniqueB)
-        guard contradictions <= maximumContradictions else { return .uncertain }
-        return .moved(offset: best.offset, header: header, footer: footer)
+        var runs: [(columns: Range<Int>, offset: Int)] = []
+        for offset in Set(offsets.compactMap { $0 }) {
+            var first: Int?
+            var last: Int?
+            func close() {
+                if let f = first, let l = last {
+                    runs.append((bounds[f].lowerBound..<bounds[l].upperBound, offset))
+                }
+                first = nil
+                last = nil
+            }
+            for (i, o) in offsets.enumerated() {
+                if o == offset {
+                    if first == nil { first = i }
+                    last = i
+                } else if o != nil {
+                    close()
+                }
+            }
+            close()
+        }
+        // Widest first; equal widths in column order, so the result never depends on set order.
+        let ordered = runs.sorted {
+            ($0.columns.count, -$0.columns.lowerBound) > ($1.columns.count, -$1.columns.lowerBound)
+        }
+        for run in ordered where run.columns.count >= narrowest {
+            let c = candidate(
+                RowSignatures(previous, columns: run.columns),
+                RowSignatures(next, columns: run.columns), height: previous.height)
+            if let moved = believed(c, previous, next, columns: run.columns),
+                case .moved(run.offset, let header, let footer, _) = moved
+            {
+                let columns = widened(
+                    run.columns, previous, next, offset: run.offset, header: header,
+                    footer: footer, within: 0..<width)
+                return .moved(offset: run.offset, header: header, footer: footer, columns: columns)
+            }
+        }
+        return nil
+    }
+
+    /// `band` grown a column at a time while the next column out also moved by `offset` between
+    /// the sticky bars: strips are coarse, and one straddling the page's edge would leave page
+    /// columns out of the band.
+    static func widened(
+        _ band: Range<Int>, _ previous: PixelBuffer, _ next: PixelBuffer, offset: Int,
+        header: Int, footer: Int, within limit: Range<Int>
+    ) -> Range<Int> {
+        let rows = (header + offset)..<(previous.height - footer)
+        func moves(_ x: Int) -> Bool {
+            rows.allSatisfy { previous[x: x, y: $0] == next[x: x, y: $0 - offset] }
+        }
+        var low = band.lowerBound
+        var high = band.upperBound
+        while low > limit.lowerBound && moves(low - 1) { low -= 1 }
+        while high < limit.upperBound && moves(high) { high += 1 }
+        return low..<high
     }
 
     /// The share of row pairs that match, pairing `previous` row `previousStart + i` with `next`
