@@ -68,7 +68,7 @@ final class CaptureCoordinator {
                 if case .area(let still, let rect) = await overlay.run(
                     mode: .area, stills: stills)
                 {
-                    deliver(try Self.crop(still, to: rect), scale: still.scale)
+                    await deliver(try Self.crop(still, to: rect), scale: still.scale)
                 }
             case .window:
                 let windows = try await capturer.windowsFrontToBack()
@@ -90,12 +90,12 @@ final class CaptureCoordinator {
                             image, padding: Int(preferences.windowPaddingPoints * scale),
                             fill: fill)
                     }
-                    deliver(image, scale: scale)
+                    await deliver(image, scale: scale)
                 }
             case .fullscreen:
                 let mouse = NSEvent.mouseLocation
                 if let still = stills.first(where: { $0.frame.contains(mouse) }) ?? stills.first {
-                    deliver(still.image, scale: still.scale)
+                    await deliver(still.image, scale: still.scale)
                 }
             case .scrolling:
                 if case .area(let still, let rect) = await overlay.run(
@@ -222,12 +222,12 @@ final class CaptureCoordinator {
         var stopped: Error?
         switch outcome {
         case .saved(let image):
-            saved = deliver(image.makeImage(), scale: region.scale)
+            saved = await deliver(image.makeImage(), scale: region.scale)
             if case .stopped(let error) = scrollEnd { stopped = error }
         case .cancelled:
             break
         case .failed(let error, let partial):
-            if let partial { saved = deliver(partial.makeImage(), scale: region.scale) }
+            if let partial { saved = await deliver(partial.makeImage(), scale: region.scale) }
             stopped = error
         }
         scrollEnd = nil
@@ -260,12 +260,16 @@ final class CaptureCoordinator {
     }
 
     /// Saves to the library, copies, plays the shutter and shows the thumbnail. False when the
-    /// capture could not be saved; its own alert has said why.
+    /// capture could not be saved; its own alert has said why. The PNG is encoded and written
+    /// off the main thread: a full-screen capture takes a quarter of a second to encode.
     @discardableResult
-    private func deliver(_ image: CGImage, scale: CGFloat) -> Bool {
+    private func deliver(_ image: CGImage, scale: CGFloat) async -> Bool {
         let store = preferences.store
+        let date = Date()
         do {
-            let url = try store.saveCapture(image, scale: Double(scale), at: Date())
+            let url = try await Task.detached(priority: .userInitiated) {
+                try store.saveCapture(image, scale: Double(scale), at: date)
+            }.value
             do {
                 try Pasteboard.copyPNG(at: url)
             } catch {
