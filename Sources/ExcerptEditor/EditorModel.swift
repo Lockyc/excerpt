@@ -143,9 +143,13 @@ final class EditorModel {
     }
 
     /// Does nothing while a drag is in flight, so history can't interleave with a preview. A path
-    /// being built finishes first, so undo removes it whole.
+    /// being built finishes first, so undo removes it whole; one too short to keep is dropped,
+    /// and that is the whole undo.
     func undo() {
-        finishPath()
+        if let building {
+            finishPath()
+            guard document.annotations.contains(where: { $0.id == building.id }) else { return }
+        }
         guard drag == nil, let previous = history.undo(from: document) else { return }
         document = previous
         keepSelectionIfPresent()

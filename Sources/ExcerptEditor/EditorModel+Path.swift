@@ -160,7 +160,9 @@ extension EditorModel {
                     if points.count < 3 { closed = false }
                 }
             } else {
-                setDrag(.vertex(id: id, index: index, before: document))
+                let offset = CGPoint(
+                    x: points[index].x - p.original.x, y: points[index].y - p.original.y)
+                setDrag(.vertex(id: id, index: index, offset: offset, before: document))
             }
             return true
         }
@@ -177,7 +179,7 @@ extension EditorModel {
         var inserted = points
         inserted.insert(p.original, at: segment + 1)
         previewPathPoints(id, inserted)
-        setDrag(.vertex(id: id, index: segment + 1, before: before))
+        setDrag(.vertex(id: id, index: segment + 1, offset: .zero, before: before))
         return true
     }
 

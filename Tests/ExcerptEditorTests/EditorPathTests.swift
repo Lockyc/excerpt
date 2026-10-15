@@ -192,6 +192,36 @@ import Testing
         #expect(shape(m) == path([(50, 30), (220, 10), (220, 200)], closed: true))
     }
 
+    @Test func undoWithOneVertexKeepsTheEditBefore() {
+        let m = model()
+        m.tool = .rectangle
+        stroke(m, [CGPoint(x: 20, y: 300), CGPoint(x: 60, y: 330), CGPoint(x: 100, y: 360)])
+        m.tool = .path
+        click(m, 10, 10)
+        m.undo()
+        #expect(m.building == nil)
+        #expect(
+            m.document.annotations.map(\.shape) == [
+                .rectangle(rect: CGRect(x: 20, y: 300, width: 80, height: 60))
+            ])
+    }
+
+    @Test func aClickBesideAVertexLeavesItWhereItIs() {
+        let m = model()
+        triangle(m)
+        click(m, 206, 200)
+        #expect(shape(m) == path([(10, 10), (200, 10), (200, 200)], closed: true))
+        m.undo()
+        #expect(m.document.annotations.isEmpty)  // only the drawing was recorded
+    }
+
+    @Test func aVertexDragKeepsItsGrabOffset() {
+        let m = model()
+        triangle(m)
+        stroke(m, [CGPoint(x: 206, y: 200), CGPoint(x: 226, y: 220), CGPoint(x: 246, y: 240)])
+        #expect(shape(m) == path([(10, 10), (200, 10), (240, 240)], closed: true))
+    }
+
     @Test func pressingAnExistingPathMovesItInsteadOfStartingOne() {
         let m = model()
         click(m, 10, 10)

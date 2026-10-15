@@ -33,8 +33,9 @@ enum Drag {
     case edge(Seam, SeamEdge, start: CGPoint)
     /// A press under the path tool: the path's vertices from index `from` on are `raw`.
     case freehand(id: Int, from: Int, raw: [CGPoint])
-    /// A selected path's vertex being dragged.
-    case vertex(id: Int, index: Int, before: EditDocument)
+    /// A selected path's vertex being dragged, held `offset` from the pointer where it was
+    /// grabbed, so a press beside it doesn't jump it to the pointer.
+    case vertex(id: Int, index: Int, offset: CGPoint, before: EditDocument)
 }
 
 extension EditorModel {
@@ -147,10 +148,11 @@ extension EditorModel {
             setPending(.edge(seam, edge, from + Int(Double(delta).rounded())))
         case .freehand(let id, let from, let raw):
             dragFreehand(id: id, from: from, raw: raw, to: p)
-        case .vertex(let id, let index, _):
+        case .vertex(let id, let index, let offset, _):
             var points = pathPoints(id)
             if points.indices.contains(index) {
-                points[index] = p.original
+                points[index] = CGPoint(
+                    x: p.original.x + offset.x, y: p.original.y + offset.y)
                 previewPathPoints(id, points)
             }
         case nil:
@@ -178,7 +180,7 @@ extension EditorModel {
             commit(from: before)
         case .freehand(let id, let from, let raw):
             endFreehand(id: id, from: from, raw: raw)
-        case .vertex(_, _, let before):
+        case .vertex(_, _, _, let before):
             commit(from: before)
         case .region:
             switch (tool, shown) {
@@ -254,7 +256,7 @@ extension EditorModel {
     /// Abandons a drag in flight: a previewed shape or move goes back to where it started.
     func cancelDrag() {
         switch drag {
-        case .shape(_, _, let before), .move(_, _, let before), .vertex(_, _, let before):
+        case .shape(_, _, let before), .move(_, _, let before), .vertex(_, _, _, let before):
             preview(before)
         default: break
         }
