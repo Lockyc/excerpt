@@ -267,8 +267,49 @@ import Testing
         canvas.beginText(at: Pointer(rendered: CGPoint(x: 40, y: 60), map: map))
         (window.firstResponder as? NSTextView)?.insertText(
             "abc", replacementRange: NSRange(location: NSNotFound, length: 0))
-        canvas.endText()
+        canvas.commitInProgress()
         #expect(canvas.model.document.annotations.count == 1)
         #expect(window.undoManager?.canUndo != true)
+    }
+
+    func key(_ code: UInt16, _ characters: String) -> NSEvent {
+        NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: 0,
+            context: nil, characters: characters, charactersIgnoringModifiers: characters,
+            isARepeat: false, keyCode: code)!
+    }
+
+    func pathCanvas(clicking points: [(Double, Double)]) -> CanvasView {
+        let canvas = CanvasView(
+            model: EditorModel(
+                original: Fixtures.sheet(width: 360, height: 400),
+                document: EditDocument(scale: 1, salt: 7)))
+        canvas.model.tool = .path
+        let map = canvas.base.map
+        for (x, y) in points {
+            let p = Pointer(rendered: CGPoint(x: x, y: y), map: map)
+            canvas.model.mouseDown(p, map: map)
+            canvas.model.mouseUp(p, map: map, snap: false)
+        }
+        return canvas
+    }
+
+    @Test func committingInProgressFinishesAPath() {
+        let canvas = pathCanvas(clicking: [(10, 10), (100, 10)])
+        canvas.commitInProgress()
+        #expect(canvas.model.building == nil && canvas.model.document.annotations.count == 1)
+    }
+
+    @Test func returnFinishesAPathAndEscapeStepsBack() {
+        let canvas = pathCanvas(clicking: [(10, 10), (100, 10), (100, 100)])
+        canvas.keyDown(with: key(53, "\u{1b}"))
+        #expect(canvas.model.building != nil)
+        canvas.keyDown(with: key(36, "\r"))
+        #expect(canvas.model.building == nil)
+        #expect(
+            canvas.model.document.annotations.first?.shape
+                == .path(
+                    points: [CGPoint(x: 10, y: 10), CGPoint(x: 100, y: 10)], closed: false,
+                    fill: false))
     }
 }

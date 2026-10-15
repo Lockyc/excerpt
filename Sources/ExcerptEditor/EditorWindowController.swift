@@ -301,13 +301,13 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
     // MARK: Actions
 
     @objc private func toolChosen() {
-        canvas.endText()
+        canvas.commitInProgress()
         model.tool = Tool.allCases[tools.selectedSegment]
     }
 
     /// "Border" turns the border on or off; the chevron drops down its settings.
     @objc private func borderPressed() {
-        canvas.endText()
+        canvas.commitInProgress()
         // The chevron never stays selected, so a click on it is the one that selects it.
         guard borderControl.isSelected(forSegment: 1) else {
             model.setBorder(borderControl.isSelected(forSegment: 0))
@@ -328,7 +328,7 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
 
     /// Closes at once, dropping unsaved edits without asking.
     @objc private func discardPressed() {
-        canvas.endText()
+        canvas.commitInProgress()
         window?.close()
     }
 
@@ -360,24 +360,24 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
     /// the original, so they stay adjustable), then `action` runs, then the window closes. A
     /// failed save or action leaves it open.
     private func finish(_ action: () -> Bool) {
-        canvas.endText()
+        canvas.commitInProgress()
         guard !model.isDirty || writeDocument(), action() else { return }
         window?.close()
     }
 
     func undo() {
-        canvas.endText()
+        canvas.commitInProgress()
         model.undo()
     }
 
     func redo() {
-        canvas.endText()
+        canvas.commitInProgress()
         model.redo()
     }
 
     /// Writes the primary and master; false (after telling the user) when that failed.
     private func writeDocument() -> Bool {
-        canvas.endText()
+        canvas.commitInProgress()
         do {
             let document = model.document
             written = (document, try save(document))
@@ -398,7 +398,7 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
     /// True when nothing is unsaved, or the user chose Save (and it worked) or Don't Save;
     /// false on Cancel or a failed save. Shared by the window's close and the app's quit.
     public func confirmClose() -> Bool {
-        canvas.endText()
+        canvas.commitInProgress()
         guard model.isDirty else { return true }
         show()
         let alert = NSAlert()

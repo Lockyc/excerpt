@@ -276,6 +276,8 @@ final class CanvasView: NSView, NSTextViewDelegate {
         case nil:
             break
         }
+
+        drawPathHandles(in: context)
     }
 
     private func strokeDashed(_ rect: CGRect, in context: CGContext) {
@@ -291,17 +293,42 @@ final class CanvasView: NSView, NSTextViewDelegate {
         let gap = gapRect(seam)
         context.setStrokeColor(Self.accent)
         context.stroke(gap)
-        let radius = 5 * line
         let handles: [CGPoint] =
             seam.axis == .horizontal
             ? [CGPoint(x: gap.midX, y: gap.minY), CGPoint(x: gap.midX, y: gap.maxY)]
             : [CGPoint(x: gap.minX, y: gap.midY), CGPoint(x: gap.maxX, y: gap.midY)]
-        for handle in handles {
-            let knob = CGRect(
-                x: handle.x - radius, y: handle.y - radius, width: 2 * radius, height: 2 * radius)
-            context.setFillColor(CGColor(gray: 1, alpha: 1))
-            context.fillEllipse(in: knob)
-            context.strokeEllipse(in: knob)
+        for handle in handles { drawKnob(at: handle, radius: 5 * line, in: context) }
+    }
+
+    /// A white disc ringed in the accent: a draggable handle.
+    private func drawKnob(at centre: CGPoint, radius: CGFloat, in context: CGContext) {
+        let knob = CGRect(
+            x: centre.x - radius, y: centre.y - radius, width: 2 * radius, height: 2 * radius)
+        context.setFillColor(CGColor(gray: 1, alpha: 1))
+        context.fillEllipse(in: knob)
+        context.strokeEllipse(in: knob)
+    }
+
+    /// The vertices of the path being built, or of the selected path, as handles; while
+    /// building, the first vertex is larger once a click on it would close the path.
+    private func drawPathHandles(in context: CGContext) {
+        let id: Int?
+        if let building = model.building {
+            id = building.id
+        } else if case .annotation(let selected)? = model.selection, model.typing == nil {
+            id = selected
+        } else {
+            id = nil
+        }
+        guard let id, let note = model.document.annotations.first(where: { $0.id == id }),
+            case .path(let points, _, _) = note.shape
+        else { return }
+        let line = 1 / zoom
+        context.setStrokeColor(Self.accent)
+        context.setLineWidth(2 * line)
+        for (i, vertex) in points.enumerated() {
+            let closes = model.building != nil && i == 0 && points.count >= 3
+            drawKnob(at: base.map.point(vertex), radius: (closes ? 7 : 4) * line, in: context)
         }
     }
 
@@ -360,8 +387,27 @@ final class CanvasView: NSView, NSTextViewDelegate {
             beginText(at: p)
             return
         }
-        model.mouseDown(p, map: base.map)
+        model.mouseDown(
+            p, map: base.map, clickCount: event.clickCount,
+            option: event.modifierFlags.contains(.option))
     }
+
+    private var tracking: NSTrackingArea?
+
+    /// Tracks the pointer over the visible canvas, for the path being built's last segment.
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let tracking { removeTrackingArea(tracking) }
+        let area = NSTrackingArea(
+            rect: .zero,
+            options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+            owner: self)
+        addTrackingArea(area)
+        tracking = area
+    }
+
+    override func mouseMoved(with event: NSEvent) { model.hover(pointer(event)) }
+    override func mouseExited(with event: NSEvent) { model.hover(nil) }
 
     override func mouseDragged(with event: NSEvent) {
         model.mouseDragged(pointer(event), map: base.map, snap: snap(event))
@@ -405,8 +451,10 @@ final class CanvasView: NSView, NSTextViewDelegate {
         switch event.keyCode {
         case 51, 117:  // delete, forward delete
             model.deleteSelection()
+        case 36, 76:  // return, enter
+            if model.building != nil { model.finishPath() } else { super.keyDown(with: event) }
         case 53:  // escape
-            model.selection = nil
+            if model.building != nil { model.dropLastVertex() } else { model.selection = nil }
         default:
             super.keyDown(with: event)
         }
@@ -415,7 +463,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
     // MARK: Text
 
     func beginText(at p: Pointer) {
-        endText()
+        commitInProgress()
         model.beginTyping(at: p, map: base.map)
         typingUndo = UndoManager()
         let view = NSTextView(frame: .zero)
@@ -467,8 +515,9 @@ final class CanvasView: NSView, NSTextViewDelegate {
             height: max(rect.height * zoom, lineHeight))
     }
 
-    /// Commits whatever is typed; safe to call when nothing is being typed.
-    func endText() {
+    /// Commits the text being typed and the path being built; safe when neither is.
+    func commitInProgress() {
+        model.finishPath()
         guard textView != nil else {
             model.endTyping()
             return
@@ -490,7 +539,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
         model.updateTyping(textView?.string ?? "")
     }
 
-    func textDidEndEditing(_ notification: Notification) { endText() }
+    func textDidEndEditing(_ notification: Notification) { commitInProgress() }
 
     func undoManager(for view: NSTextView) -> UndoManager? { typingUndo }
 
@@ -500,12 +549,12 @@ final class CanvasView: NSView, NSTextViewDelegate {
             if NSApp.currentEvent?.modifierFlags.contains(.option) == true {
                 textView.insertNewlineIgnoringFieldEditor(nil)
             } else {
-                endText()
+                commitInProgress()
             }
             return true
         }
         if selector == #selector(NSResponder.cancelOperation(_:)) {
-            endText()
+            commitInProgress()
             return true
         }
         return false
