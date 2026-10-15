@@ -5,6 +5,9 @@ enum ItemOption: Equatable {
     case color(Palette)
     case size(StrokeWidth)
     case background(Bool)
+    case closed(Bool)
+    /// A path's fill; disabled while the path is open, which can't show one.
+    case fill(Bool, enabled: Bool)
     case moveEarlier(enabled: Bool)
     case moveLater(enabled: Bool)
     case delete
@@ -39,8 +42,10 @@ extension EditorModel {
         let color = ItemOption.color(annotation.color)
         let size = ItemOption.size(annotation.width)
         switch annotation.shape {
-        case .arrow, .rectangle, .path:
+        case .arrow, .rectangle:
             return [color, size, .delete]
+        case .path(_, let closed, let fill):
+            return [color, size, .closed(closed), .fill(fill, enabled: closed), .delete]
         case .highlight:
             return [color, .delete]
         case .text(_, _, let background):

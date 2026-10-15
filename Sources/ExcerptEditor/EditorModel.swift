@@ -196,6 +196,25 @@ final class EditorModel {
         }
     }
 
+    /// Closes or opens the selected path, as one undoable step.
+    func setClosed(_ on: Bool) { editSelectedPath { _, closed, _ in closed = on } }
+
+    /// Turns the selected path's fill on or off, as one undoable step.
+    func setFill(_ on: Bool) { editSelectedPath { _, _, fill in fill = on } }
+
+    /// Changes the selected path's points, closed flag or fill, as one undoable step; does
+    /// nothing unless a path is selected.
+    func editSelectedPath(_ change: (inout [CGPoint], inout Bool, inout Bool) -> Void) {
+        guard case .annotation(let id) = selection else { return }
+        apply { doc in
+            guard let i = doc.annotations.firstIndex(where: { $0.id == id }),
+                case .path(var points, var closed, var fill) = doc.annotations[i].shape
+            else { return }
+            change(&points, &closed, &fill)
+            doc.annotations[i].shape = .path(points: points, closed: closed, fill: fill)
+        }
+    }
+
     /// Whether colour and size apply to the selection: an annotation other than a blur, which
     /// has neither.
     var selectionTakesStyle: Bool {

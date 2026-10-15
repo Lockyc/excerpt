@@ -36,6 +36,8 @@ final class ItemBar: NSVisualEffectView {
     var onColor: (Palette) -> Void = { _ in }
     var onSize: (StrokeWidth) -> Void = { _ in }
     var onBackground: (Bool) -> Void = { _ in }
+    var onClosed: (Bool) -> Void = { _ in }
+    var onFill: (Bool) -> Void = { _ in }
     var onMove: (_ earlier: Bool) -> Void = { _ in }
     var onDelete: () -> Void = {}
 
@@ -107,6 +109,19 @@ final class ItemBar: NSVisualEffectView {
             return wire(button) { [weak self] in
                 self?.onBackground(($0 as! NSButton).state == .on)
             }
+        case .closed(let on):
+            let button = symbolButton("pentagon", label: "Closed")
+            button.setButtonType(.pushOnPushOff)
+            button.state = on ? .on : .off
+            button.toolTip = "Join the last point to the first"
+            return wire(button) { [weak self] in self?.onClosed(($0 as! NSButton).state == .on) }
+        case .fill(let on, let enabled):
+            let button = symbolButton("pentagon.fill", label: "Fill")
+            button.setButtonType(.pushOnPushOff)
+            button.state = on ? .on : .off
+            button.isEnabled = enabled
+            button.toolTip = enabled ? "Tint the inside in its colour" : "Close the path to fill it"
+            return wire(button) { [weak self] in self?.onFill(($0 as! NSButton).state == .on) }
         case .moveEarlier(let enabled):
             let button = symbolButton("chevron.left", label: "Move earlier")
             button.isEnabled = enabled

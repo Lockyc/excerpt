@@ -95,7 +95,7 @@ extension EditorModel {
             selection = .annotation(id)
             // Placed on press; a drag before release moves it, and release records one step.
             setDrag(.move(id: id, last: p.original, before: before))
-        case .text:
+        case .text, .path:
             break
         }
     }

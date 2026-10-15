@@ -5,6 +5,7 @@ public enum Tool: CaseIterable {
     case select
     case arrow
     case rectangle
+    case path
     case text
     case step
     case highlight
@@ -17,6 +18,7 @@ public enum Tool: CaseIterable {
         case .select: "v"
         case .arrow: "a"
         case .rectangle: "r"
+        case .path: "p"
         case .text: "t"
         case .step: "n"
         case .highlight: "h"
@@ -31,6 +33,7 @@ public enum Tool: CaseIterable {
         case .select: "Select"
         case .arrow: "Arrow"
         case .rectangle: "Rectangle"
+        case .path: "Path"
         case .text: "Text"
         case .step: "Step"
         case .highlight: "Highlight"
@@ -46,6 +49,7 @@ public enum Tool: CaseIterable {
         case .select: "cursorarrow"
         case .arrow: "arrow.up.right"
         case .rectangle: "rectangle"
+        case .path: "scribble.variable"
         case .text: "textformat"
         case .step: "1.circle"
         case .highlight: "highlighter"
@@ -67,7 +71,8 @@ extension Tool {
     /// Whether this tool draws `shape`'s kind of annotation.
     func draws(_ shape: Shape) -> Bool {
         switch (self, shape) {
-        case (.arrow, .arrow), (.rectangle, .rectangle), (.text, .text), (.highlight, .highlight),
+        case (.arrow, .arrow), (.rectangle, .rectangle), (.path, .path), (.text, .text),
+            (.highlight, .highlight),
             (.blur, .blur), (.step, .step):
             true
         default: false

@@ -38,6 +38,19 @@ import Testing
                     .color(.blue), .size(.thick), .moveEarlier(enabled: true),
                     .moveLater(enabled: false), .delete,
                 ])
+        let two = [CGPoint(x: 0, y: 0), CGPoint(x: 9, y: 9)]
+        #expect(
+            options(.path(points: two, closed: false, fill: true))
+                == [
+                    .color(.blue), .size(.thick), .closed(false), .fill(true, enabled: false),
+                    .delete,
+                ])
+        #expect(
+            options(.path(points: two, closed: true, fill: false))
+                == [
+                    .color(.blue), .size(.thick), .closed(true), .fill(false, enabled: true),
+                    .delete,
+                ])
     }
 
     @Test func theBarFollowsTypingSelectionAndCrop() {

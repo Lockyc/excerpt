@@ -49,6 +49,8 @@ final class CanvasView: NSView, NSTextViewDelegate {
         itemBar.onColor = { [weak self] in self?.model.setColor($0) }
         itemBar.onSize = { [weak self] in self?.model.setWidth($0) }
         itemBar.onBackground = { [weak self] in self?.model.setBackground($0) }
+        itemBar.onClosed = { [weak self] in self?.model.setClosed($0) }
+        itemBar.onFill = { [weak self] in self?.model.setFill($0) }
         itemBar.onMove = { [weak self] in self?.model.moveStep(earlier: $0) }
         itemBar.onDelete = { [weak self] in self?.deleteItem() }
         itemBar.isHidden = true

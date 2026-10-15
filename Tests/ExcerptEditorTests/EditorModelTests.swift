@@ -7,9 +7,11 @@ import Testing
 
 @Suite struct ToolTests {
     @Test func everyToolHasItsKey() {
-        #expect(Tool.allCases.map(\.key) == ["v", "a", "r", "t", "n", "h", "b", "k", "c"])
+        #expect(Tool.allCases.map(\.key) == ["v", "a", "r", "p", "t", "n", "h", "b", "k", "c"])
         #expect(Tool(key: "K") == .crop)
+        #expect(Tool(key: "P") == .path)
         #expect(Tool(key: "x") == nil)
+        #expect(Tool.path.draws(.path(points: [], closed: false, fill: false)))
     }
 }
 
@@ -32,6 +34,27 @@ import Testing
         EditorModel(
             original: Fixtures.sheet(width: 360, height: 400),
             document: EditDocument(scale: 2, salt: 7))
+    }
+
+    @Test func closingAndFillingAPathAreUndoableSteps() {
+        let points = [CGPoint(x: 10, y: 10), CGPoint(x: 90, y: 10), CGPoint(x: 50, y: 80)]
+        let m = EditorModel(
+            original: Fixtures.sheet(width: 360, height: 400),
+            document: EditDocument(
+                scale: 1,
+                annotations: [
+                    Annotation(id: 1, shape: .path(points: points, closed: false, fill: false))
+                ], salt: 7))
+        m.selection = .annotation(1)
+        m.setClosed(true)
+        m.setFill(true)
+        #expect(m.document.annotations[0].shape == .path(points: points, closed: true, fill: true))
+        m.undo()
+        #expect(
+            m.document.annotations[0].shape == .path(points: points, closed: true, fill: false))
+        m.undo()
+        #expect(
+            m.document.annotations[0].shape == .path(points: points, closed: false, fill: false))
     }
 
     @Test func applyIsOneUndoableStep() {
