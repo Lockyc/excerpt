@@ -27,6 +27,7 @@ final class EditorModel {
         didSet {
             endTyping()
             cancelDrag()
+            finishPath()
             selection = nil
             onChange?()
         }
@@ -53,6 +54,9 @@ final class EditorModel {
     private(set) var pending: Pending? { didSet { onChange?() } }
     /// The drag in progress; undo and redo wait for it to end.
     private(set) var drag: Drag? { didSet { onChange?() } }
+    /// The path being built under the path tool: previewed into the document, recorded once by
+    /// `finishPath`.
+    private(set) var building: PathBuild? { didSet { onChange?() } }
     /// The original's pixels, for snapping; read on first use.
     private(set) lazy var pixels = PixelBuffer(original)
 
@@ -69,12 +73,13 @@ final class EditorModel {
 
     /// Edits not yet written by ⌘S.
     var isDirty: Bool { document != saved }
-    var canUndo: Bool { history.canUndo }
+    /// A path being built can be undone: undo finishes it, then removes it.
+    var canUndo: Bool { history.canUndo || building != nil }
     var canRedo: Bool { history.canRedo }
 
     /// What the canvas shows: the whole capture while the crop tool is active, so a crop can
     /// be redrawn; otherwise the document, with the text being typed in place of the text it
-    /// retypes, or added.
+    /// retypes, or added, and the path being built run on to the pointer.
     var displayDocument: EditDocument {
         var shown = document
         if tool == .crop { shown.crop = nil }
@@ -84,6 +89,12 @@ final class EditorModel {
             } else {
                 shown.annotations.append(typing)
             }
+        }
+        if let building, drag == nil, let hover = building.hover,
+            let i = shown.annotations.firstIndex(where: { $0.id == building.id }),
+            case .path(let points, let closed, let fill) = shown.annotations[i].shape
+        {
+            shown.annotations[i].shape = .path(points: points + [hover], closed: closed, fill: fill)
         }
         return shown
     }
@@ -105,8 +116,10 @@ final class EditorModel {
     }
 
     /// One undoable step. A change that leaves the document as it was records nothing. A drag in
-    /// flight is cancelled first, so its release can't undo or double-record this change.
+    /// flight is cancelled first, so its release can't undo or double-record this change, and a
+    /// path being built finishes first.
     func apply(_ change: (inout EditDocument) -> Void) {
+        finishPath()
         if drag != nil { cancelDrag() }
         var next = document
         change(&next)
@@ -117,6 +130,7 @@ final class EditorModel {
 
     func setDrag(_ drag: Drag?) { self.drag = drag }
     func setPending(_ pending: Pending?) { self.pending = pending }
+    func setBuilding(_ building: PathBuild?) { self.building = building }
 
     /// Replaces the document without recording a step; a drag's live preview goes through here
     /// and is recorded once, on release, by `commit(from:)`.
@@ -128,15 +142,18 @@ final class EditorModel {
         history.record(before)
     }
 
-    /// Does nothing while a drag is in flight, so history can't interleave with a preview.
+    /// Does nothing while a drag is in flight, so history can't interleave with a preview. A path
+    /// being built finishes first, so undo removes it whole.
     func undo() {
+        finishPath()
         guard drag == nil, let previous = history.undo(from: document) else { return }
         document = previous
         keepSelectionIfPresent()
     }
 
-    /// Does nothing while a drag is in flight.
+    /// Does nothing while a drag is in flight. A path being built finishes first.
     func redo() {
+        finishPath()
         guard drag == nil, let next = history.redo(from: document) else { return }
         document = next
         keepSelectionIfPresent()

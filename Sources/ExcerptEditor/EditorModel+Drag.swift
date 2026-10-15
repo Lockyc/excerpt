@@ -31,6 +31,8 @@ enum Drag {
     case region(start: CGPoint)
     case move(id: Int, last: CGPoint, before: EditDocument)
     case edge(Seam, SeamEdge, start: CGPoint)
+    /// A press under the path tool: the path's vertices from index `from` on are `raw`.
+    case freehand(id: Int, from: Int, raw: [CGPoint])
 }
 
 extension EditorModel {
@@ -39,7 +41,7 @@ extension EditorModel {
     var minimumDrag: Double { 4 / viewScale }
     var snapRadius: Int { GapSnapper.radius(scale: document.scale) }
 
-    func mouseDown(_ p: Pointer, map: RenderMap) {
+    func mouseDown(_ p: Pointer, map: RenderMap, clickCount: Int = 1, option: Bool = false) {
         cancelDrag()
         switch tool {
         case .select, .cut:
@@ -95,7 +97,9 @@ extension EditorModel {
             selection = .annotation(id)
             // Placed on press; a drag before release moves it, and release records one step.
             setDrag(.move(id: id, last: p.original, before: before))
-        case .text, .path:
+        case .path:
+            pathMouseDown(p, map: map, clickCount: clickCount)
+        case .text:
             break
         }
     }
@@ -103,7 +107,7 @@ extension EditorModel {
     /// Under a drawing tool, a press on an annotation that tool draws selects it and starts
     /// moving it, as the select tool would, instead of drawing a new one over it. Other kinds
     /// are drawn over, so an arrow can start inside a highlight.
-    private func grabAnnotation(at p: Pointer, map: RenderMap) -> Bool {
+    func grabAnnotation(at p: Pointer, map: RenderMap) -> Bool {
         let own = document.annotations.filter { tool.draws($0.shape) }
         guard
             let id = HitTest.annotation(
@@ -138,6 +142,8 @@ extension EditorModel {
             let delta = seam.axis == .horizontal ? p.rendered.y - start.y : p.rendered.x - start.x
             let from = edge == .before ? seam.band.lowerBound : seam.band.upperBound
             setPending(.edge(seam, edge, from + Int(Double(delta).rounded())))
+        case .freehand(let id, let from, let raw):
+            dragFreehand(id: id, from: from, raw: raw, to: p)
         case nil:
             break
         }
@@ -161,6 +167,8 @@ extension EditorModel {
             selection = .annotation(id)
         case .move(_, _, let before):
             commit(from: before)
+        case .freehand(let id, let from, let raw):
+            endFreehand(id: id, from: from, raw: raw)
         case .region:
             switch (tool, shown) {
             case (.cut, .cut(let cut)?):
