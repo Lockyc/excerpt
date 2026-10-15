@@ -94,10 +94,19 @@ final class CanvasView: NSView, NSTextViewDelegate {
             base = Renderer.renderBase(model.original, edits: wanted)
             resize()
         }
+        if model.tool != cursorTool { window?.invalidateCursorRects(for: self) }
         needsDisplay = true
         syncTextView()
         placeItemBar()
         onChange()
+    }
+
+    /// The tool the canvas cursor shows.
+    private var cursorTool: Tool?
+
+    override func resetCursorRects() {
+        cursorTool = model.tool
+        addCursorRect(visibleRect, cursor: ToolGlyph.cursor(model.tool))
     }
 
     private func resize() {

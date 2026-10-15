@@ -118,7 +118,7 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         tools.segmentCount = Tool.allCases.count
         tools.trackingMode = .selectOne
         for (i, tool) in Tool.allCases.enumerated() {
-            tools.setImage(Self.symbol(tool.symbol, label: tool.title), forSegment: i)
+            tools.setImage(ToolGlyph.image(tool, pointSize: Self.symbolSize), forSegment: i)
             tools.setToolTip("\(tool.title) (\(tool.key.uppercased()))", forSegment: i)
             tools.setWidth(44, forSegment: i)
         }
@@ -221,10 +221,13 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         return row
     }
 
-    /// A toolbar symbol, drawn large to match the large controls.
+    /// Toolbar symbols are drawn large to match the large controls.
+    private static let symbolSize: CGFloat = 16
+
     private static func symbol(_ name: String, label: String?) -> NSImage? {
         NSImage(systemSymbolName: name, accessibilityDescription: label)?
-            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 16, weight: .regular))
+            .withSymbolConfiguration(
+                NSImage.SymbolConfiguration(pointSize: symbolSize, weight: .regular))
     }
 
     private func configure(_ button: NSButton, symbol: String, label: String, action: Selector) {

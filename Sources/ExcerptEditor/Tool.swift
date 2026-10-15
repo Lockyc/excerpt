@@ -43,8 +43,9 @@ public enum Tool: CaseIterable {
         }
     }
 
-    /// An SF Symbol for the toolbar.
-    public var symbol: String {
+    /// An SF Symbol for the toolbar; nil for a tool whose glyph `ToolGlyph` draws, since no
+    /// symbol reads as it.
+    public var symbol: String? {
         switch self {
         case .select: "cursorarrow"
         case .arrow: "arrow.up.right"
@@ -52,7 +53,7 @@ public enum Tool: CaseIterable {
         case .path: "scribble.variable"
         case .text: "textformat"
         case .step: "1.circle"
-        case .highlight: "highlighter"
+        case .highlight: nil
         case .blur: "square.grid.3x3.fill"
         case .crop: "crop"
         case .cut: "scissors"
