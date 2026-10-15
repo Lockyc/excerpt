@@ -245,9 +245,10 @@ public enum StitchMatcher {
         previous.bytes.withUnsafeBytes { pa in
             next.bytes.withUnsafeBytes { pb in
                 rows.allSatisfy { y in
-                    pa.loadUnaligned(
-                        fromByteOffset: ((y + offset) * previous.width + x) * 4, as: UInt32.self)
-                        == pb.loadUnaligned(fromByteOffset: (y * next.width + x) * 4, as: UInt32.self)
+                    let a = ((y + offset) * previous.width + x) * 4
+                    let b = (y * next.width + x) * 4
+                    return pa.loadUnaligned(fromByteOffset: a, as: UInt32.self)
+                        == pb.loadUnaligned(fromByteOffset: b, as: UInt32.self)
                 }
             }
         }
