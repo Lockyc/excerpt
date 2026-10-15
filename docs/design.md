@@ -50,6 +50,10 @@ Captures land in the **library** — `~/Documents/Screenshots/` by default (a se
   Saving re-renders the primary.
 - Sidecar files and a separate edits database are both wrong here: library files get moved and
   sorted by other tools, which would orphan either one. The edits travel inside the master.
+- **The top level holds the last 30 days; older files sit in `YYYY/MM-Month/`** (by creation
+  date), so the folder opens on recent captures and Recent Captures, which reads only the top
+  level, always has them. `LibraryFiler` does the filing (rules in its docblock) at launch,
+  daily, and when switched on; it is a setting, on by default.
 - "For Claude" output is scratch, not library content: `~/Library/Caches/excerpt/claude/<capture
   name>-<hash>/` (spaces become `-`, so `@` references hold; the hash is of the primary's path,
   so same-named captures in different folders keep separate bundles), replaced on each export
