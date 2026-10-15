@@ -173,8 +173,8 @@ Opens from the thumbnail's Edit, from the menu bar's Recent Captures (the librar
 other), or by opening a capture (registered as an Open With handler for PNG, not the default). Fits to width; tall captures scroll. Floats above other windows; no
 Dock icon.
 
-Tools: `V` select · `A` arrow · `R` rectangle · `T` text · `N` step · `H` highlight · `B` blur ·
-`K` crop · `C` cut. A new editor starts on the arrow. A drawing tool pressed on an annotation it
+Tools: `V` select · `A` arrow · `R` rectangle · `P` path · `T` text · `N` step · `H` highlight ·
+`B` blur · `K` crop · `C` cut. A new editor starts on the arrow. A drawing tool pressed on an annotation it
 draws selects and moves it rather than drawing over it; other kinds are drawn over. The arrow drag
 **starts at the head**. Crop snaps using the same gap detection as cuts.
 
@@ -182,7 +182,7 @@ draws selects and moves it rather than drawing over it; other kinds are drawn ov
 canvas, hidden during a drag) and carries that item's options and nothing else: delete for every
 item, and colour (six), size (three; one control sets stroke, text and step size) and the
 kind's own options where they apply — text adds its background, a step adds Move earlier / Move
-later (disabled at either end of the sequence). The options per kind are one pure mapping. The
+later (disabled at either end of the sequence), a path adds Open/Closed and, when closed, Fill. The options per kind are one pure mapping. The
 crop under `K` gets a bar with delete. A new annotation takes the colour, size and text background
 last chosen, remembered across launches, and stays selected after it is drawn so its bar is
 showing.
@@ -198,6 +198,18 @@ is what saves. Return commits; ⌥Return adds a line.
 the document's steps in annotation order, so steps always read 1…n, a delete closes the gap and
 Move earlier / later reorder them.
 
+**Paths** (`P`) are polylines and polygons — routes, boundaries, bent pointers — drawn opaque in
+their colour and width with round joins and caps, no arrowheads. Each click adds a vertex, with a
+rubber-band segment to the pointer; a press-drag adds a freehand run, simplified on release
+(Ramer–Douglas–Peucker, about half a stroke width) into ordinary vertices, so clicks and freehand
+mix in one path. Return, a double-click or a tool switch finishes it; a click on the first vertex
+closes it; Escape drops the last vertex, and on an empty path abandons it. Under two vertices is
+discarded; a finished path is one undo step. A selected path shows its vertices as handles: drag
+one to reshape, ⌥-click a vertex to delete it, ⌥-click a segment to insert one; a drag elsewhere
+on the path moves it. A closed path with **Fill** on is tinted first, with highlight's multiply at
+`AnnotationRenderer.highlightOpacity`, then stroked. A path is hit within slop of a segment, or
+inside it when filled, and is hidden by cuts only when every vertex lies in a removed band.
+
 **Border** turns the border on and off, and its chevron drops down an on/off switch, the six
 colours and three widths (2, 4, 8pt); it frames the render in a solid line drawn inside its edge,
 so a capture pasted into an email stands apart from the message. Choosing a colour or width
@@ -211,7 +223,7 @@ cannot be read from the primary; pixelation defeats reading, not candidate-match
 known strings. The noise is seeded from a per-document salt stored in the master. The editor
 shows the true result.
 
-**The edit document** holds the cuts, an optional crop, the annotations (arrow, rectangle,
+**The edit document** holds the cuts, an optional crop, the annotations (arrow, rectangle, path,
 text, step, highlight, blur), all in original pixels, an optional border, plus the blur salt, so
 every edit stays adjustable from the master.
 Render order: blur (from original pixels) → crop → cuts and their labels → annotations, placed
