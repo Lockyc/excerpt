@@ -101,6 +101,48 @@ import Testing
             Gestures.simplify([zigzag[0], zigzag[1]], tolerance: 50) == [zigzag[0], zigzag[1]])
     }
 
+    @Test func pathsGolden() throws {
+        // An open thick route crossing a cut, a closed outline, a closed filled area, and an
+        // open path with fill set, which draws no fill.
+        let image = Fixtures.sheet(width: 600, height: 800)
+        let edits = EditDocument(
+            scale: 2, cuts: [Cut(axis: .horizontal, lower: 400, upper: 500)],
+            annotations: [
+                Annotation(
+                    id: 1,
+                    shape: .path(
+                        points: [
+                            CGPoint(x: 40, y: 60), CGPoint(x: 200, y: 120),
+                            CGPoint(x: 260, y: 560), CGPoint(x: 120, y: 700),
+                        ], closed: false, fill: false),
+                    color: .orange, width: .thick),
+                Annotation(
+                    id: 2,
+                    shape: .path(
+                        points: [
+                            CGPoint(x: 340, y: 60), CGPoint(x: 560, y: 80),
+                            CGPoint(x: 520, y: 300), CGPoint(x: 360, y: 260),
+                        ], closed: true, fill: false),
+                    color: .blue, width: .thin),
+                Annotation(
+                    id: 3,
+                    shape: .path(
+                        points: [
+                            CGPoint(x: 340, y: 560), CGPoint(x: 560, y: 600),
+                            CGPoint(x: 450, y: 760),
+                        ], closed: true, fill: true),
+                    color: .green, width: .medium),
+                Annotation(
+                    id: 4,
+                    shape: .path(
+                        points: [CGPoint(x: 60, y: 300), CGPoint(x: 160, y: 340)], closed: false,
+                        fill: true),
+                    color: .red, width: .medium),
+            ],
+            salt: 7)
+        try Golden.check(Renderer.render(image, edits: edits).image, named: "render-paths")
+    }
+
     @Test func tooManyPathPointsReadAsDamaged() throws {
         let line = (0..<(EditDocument.maximumPathPoints / 2 + 1)).map {
             CGPoint(x: Double($0 % 1000), y: Double($0 / 1000))

@@ -4,7 +4,7 @@ import CoreText
 /// Draws annotations over a rendered base. The renderer uses it for export and the editor's
 /// canvas uses it for every repaint, so both draw the same pixels.
 public enum AnnotationRenderer {
-    /// Highlights multiply their colour at this opacity, so text under them stays dark.
+    /// Highlights and filled paths multiply their colour at this opacity, so text under them stays dark.
     public static let highlightOpacity = 0.5
     /// A step's white ring, as a fraction of its diameter, so a step reads on dark content too.
     static let stepRing = 0.08
@@ -84,7 +84,25 @@ public enum AnnotationRenderer {
                     numbers[annotation.id] ?? 0, at: flip.point(map.point(center)),
                     diameter: AnnotationGeometry.stepDiameter(annotation, scale: scale),
                     fill: color, ink: annotation.color.contrastingInk.cgColor, in: context)
-            case .blur, .path:
+            case .path(let points, let closed, let fill):
+                let path = CGMutablePath()
+                path.addLines(between: points.map { flip.point(map.point($0)) })
+                if closed { path.closeSubpath() }
+                if closed && fill {
+                    context.saveGState()
+                    context.setBlendMode(.multiply)
+                    context.setFillColor(color.copy(alpha: CGFloat(highlightOpacity))!)
+                    context.addPath(path)
+                    context.fillPath()
+                    context.restoreGState()
+                }
+                context.setStrokeColor(color)
+                context.setLineWidth(w)
+                context.setLineCap(.round)
+                context.setLineJoin(.round)
+                context.addPath(path)
+                context.strokePath()
+            case .blur:
                 break
             }
             context.restoreGState()
