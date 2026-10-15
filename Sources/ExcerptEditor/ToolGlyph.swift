@@ -14,22 +14,22 @@ enum ToolGlyph {
     /// Three lines of text, the middle one under a highlighter band.
     private static func highlight(pointSize: CGFloat) -> NSImage {
         let unit = pointSize / 16
-        let size = CGSize(width: 20 * unit, height: 16 * unit)
+        let size = CGSize(width: 20 * unit, height: 18 * unit)
         let image = NSImage(size: size, flipped: true) { _ in
             guard let context = NSGraphicsContext.current?.cgContext else { return false }
             context.setFillColor(NSColor.black.cgColor)
             let line = 1.5 * unit
-            for (y, width) in [(2.5, 16.0), (12.0, 12.0)] {
+            for (y, width) in [(1.0, 16.0), (15.5, 11.0)] {
                 context.fill(CGRect(x: 2 * unit, y: y * unit, width: width * unit, height: line))
             }
-            let band = CGRect(x: 0, y: 4.75 * unit, width: size.width, height: 6.5 * unit)
+            let band = CGRect(x: 0, y: 5 * unit, width: size.width, height: 8 * unit)
             context.addPath(
                 CGPath(
-                    roundedRect: band, cornerWidth: 1.5 * unit, cornerHeight: 1.5 * unit,
+                    roundedRect: band, cornerWidth: 2 * unit, cornerHeight: 2 * unit,
                     transform: nil))
             context.fillPath()
             context.setBlendMode(.clear)
-            context.fill(CGRect(x: 2 * unit, y: 7.25 * unit, width: 14 * unit, height: line))
+            context.fill(CGRect(x: 3 * unit, y: 8.25 * unit, width: 14 * unit, height: line))
             return true
         }
         image.isTemplate = true
