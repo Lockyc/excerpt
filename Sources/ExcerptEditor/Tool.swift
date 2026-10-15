@@ -47,8 +47,8 @@ public enum Tool: CaseIterable {
     /// symbol reads as it.
     public var symbol: String? {
         switch self {
-        case .select: "cursorarrow"
-        case .arrow: "arrow.up.right"
+        case .select: nil
+        case .arrow: nil
         case .rectangle: "rectangle"
         case .path: "scribble.variable"
         case .text: "textformat"
