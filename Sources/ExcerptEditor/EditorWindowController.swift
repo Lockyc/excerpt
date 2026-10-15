@@ -303,17 +303,23 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
 
     // MARK: Actions
 
+    /// Reads the chosen segment before committing, since the commit's update re-selects the
+    /// current tool's.
     @objc private func toolChosen() {
+        let chosen = Tool.allCases[tools.selectedSegment]
         canvas.commitInProgress()
-        model.tool = Tool.allCases[tools.selectedSegment]
+        model.tool = chosen
     }
 
     /// "Border" turns the border on or off; the chevron drops down its settings.
     @objc private func borderPressed() {
+        // Read before committing, whose update re-selects the segments from the model.
+        let settings = borderControl.isSelected(forSegment: 1)
+        let border = borderControl.isSelected(forSegment: 0)
         canvas.commitInProgress()
         // The chevron never stays selected, so a click on it is the one that selects it.
-        guard borderControl.isSelected(forSegment: 1) else {
-            model.setBorder(borderControl.isSelected(forSegment: 0))
+        guard settings else {
+            model.setBorder(border)
             return
         }
         borderControl.setSelected(false, forSegment: 1)
