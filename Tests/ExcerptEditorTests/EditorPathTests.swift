@@ -145,6 +145,53 @@ import Testing
         #expect(shape(m) == path([(10, 10)]))
     }
 
+    func triangle(_ m: EditorModel) {
+        click(m, 10, 10)
+        click(m, 200, 10)
+        click(m, 200, 200)
+        click(m, 10, 10)  // closes and selects
+    }
+
+    @Test func draggingAVertexReshapesAsOneStep() {
+        let m = model()
+        triangle(m)
+        stroke(m, [CGPoint(x: 200, y: 200), CGPoint(x: 150, y: 250), CGPoint(x: 100, y: 300)])
+        #expect(shape(m) == path([(10, 10), (200, 10), (100, 300)], closed: true))
+        m.undo()
+        #expect(shape(m) == path([(10, 10), (200, 10), (200, 200)], closed: true))
+    }
+
+    @Test func optionClickingAVertexDeletesItAndATriangleOpens() {
+        let m = model()
+        triangle(m)
+        click(m, 200, 200, option: true)
+        #expect(shape(m) == path([(10, 10), (200, 10)]))
+        click(m, 200, 10, option: true)  // two left: the path keeps them
+        #expect(shape(m) == path([(10, 10), (200, 10)]))
+    }
+
+    @Test func optionClickingASegmentInsertsAVertexToDrag() {
+        let m = model()
+        triangle(m)
+        let map = map(m)
+        m.mouseDown(Pointer(rendered: CGPoint(x: 100, y: 10), map: map), map: map, option: true)
+        m.mouseUp(Pointer(rendered: CGPoint(x: 100, y: 40), map: map), map: map, snap: false)
+        #expect(shape(m) == path([(10, 10), (100, 40), (200, 10), (200, 200)], closed: true))
+        m.undo()
+        #expect(shape(m) == path([(10, 10), (200, 10), (200, 200)], closed: true))
+    }
+
+    @Test func theSelectToolReshapesAtAVertexAndMovesElsewhere() {
+        let m = model()
+        triangle(m)
+        m.tool = .select
+        m.selection = .annotation(1)
+        stroke(m, [CGPoint(x: 10, y: 10), CGPoint(x: 20, y: 20), CGPoint(x: 30, y: 30)])
+        #expect(shape(m) == path([(30, 30), (200, 10), (200, 200)], closed: true))
+        stroke(m, [CGPoint(x: 200, y: 100), CGPoint(x: 210, y: 100), CGPoint(x: 220, y: 100)])
+        #expect(shape(m) == path([(50, 30), (220, 10), (220, 200)], closed: true))
+    }
+
     @Test func pressingAnExistingPathMovesItInsteadOfStartingOne() {
         let m = model()
         click(m, 10, 10)

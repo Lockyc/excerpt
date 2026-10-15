@@ -33,6 +33,8 @@ enum Drag {
     case edge(Seam, SeamEdge, start: CGPoint)
     /// A press under the path tool: the path's vertices from index `from` on are `raw`.
     case freehand(id: Int, from: Int, raw: [CGPoint])
+    /// A selected path's vertex being dragged.
+    case vertex(id: Int, index: Int, before: EditDocument)
 }
 
 extension EditorModel {
@@ -53,6 +55,7 @@ extension EditorModel {
                 setPending(.edge(seam, edge, edge == .before ? band.lowerBound : band.upperBound))
                 return
             }
+            if tool == .select, editVertex(at: p, map: map, option: option) { return }
             if let seam = HitTest.seam(at: p.rendered, map: map, slop: slop) {
                 selection = .seam(seam.axis, seam.band)
                 return
@@ -98,7 +101,7 @@ extension EditorModel {
             // Placed on press; a drag before release moves it, and release records one step.
             setDrag(.move(id: id, last: p.original, before: before))
         case .path:
-            pathMouseDown(p, map: map, clickCount: clickCount)
+            pathMouseDown(p, map: map, clickCount: clickCount, option: option)
         case .text:
             break
         }
@@ -144,6 +147,12 @@ extension EditorModel {
             setPending(.edge(seam, edge, from + Int(Double(delta).rounded())))
         case .freehand(let id, let from, let raw):
             dragFreehand(id: id, from: from, raw: raw, to: p)
+        case .vertex(let id, let index, _):
+            var points = pathPoints(id)
+            if points.indices.contains(index) {
+                points[index] = p.original
+                previewPathPoints(id, points)
+            }
         case nil:
             break
         }
@@ -169,6 +178,8 @@ extension EditorModel {
             commit(from: before)
         case .freehand(let id, let from, let raw):
             endFreehand(id: id, from: from, raw: raw)
+        case .vertex(_, _, let before):
+            commit(from: before)
         case .region:
             switch (tool, shown) {
             case (.cut, .cut(let cut)?):
@@ -243,7 +254,8 @@ extension EditorModel {
     /// Abandons a drag in flight: a previewed shape or move goes back to where it started.
     func cancelDrag() {
         switch drag {
-        case .shape(_, _, let before), .move(_, _, let before): preview(before)
+        case .shape(_, _, let before), .move(_, _, let before), .vertex(_, _, let before):
+            preview(before)
         default: break
         }
         setDrag(nil)

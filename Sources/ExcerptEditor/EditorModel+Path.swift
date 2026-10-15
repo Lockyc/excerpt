@@ -44,8 +44,9 @@ extension EditorModel {
 
     /// A press under the path tool. Building: a double-click finishes, a press on the first of
     /// three or more vertices closes, any other press adds a vertex and may drag out a freehand
-    /// run. Not building: a press on a path grabs it, else a new path starts there.
-    func pathMouseDown(_ p: Pointer, map: RenderMap, clickCount: Int) {
+    /// run. Not building: a press on the selected path's handles edits it, one on a path grabs
+    /// it, else a new path starts there.
+    func pathMouseDown(_ p: Pointer, map: RenderMap, clickCount: Int, option: Bool) {
         if let building {
             if clickCount >= 2 {
                 finishPath()
@@ -61,6 +62,7 @@ extension EditorModel {
             setDrag(.freehand(id: building.id, from: points.count, raw: [p.original]))
             return
         }
+        if editVertex(at: p, map: map, option: option) { return }
         if grabAnnotation(at: p, map: map) { return }
         guard canAddPathPoints(1) else { return }
         let before = document
@@ -139,6 +141,44 @@ extension EditorModel {
             return
         }
         previewPathPoints(building.id, Array(points.dropLast()))
+    }
+
+    /// A press on the selected path's own handles: a vertex is dragged to reshape, or with ⌥
+    /// deleted (never below two; a closed path under three opens); with ⌥ on a segment a vertex
+    /// is inserted there and dragged. False when the press isn't on the selected path's handles
+    /// or, with ⌥, its segments.
+    func editVertex(at p: Pointer, map: RenderMap, option: Bool) -> Bool {
+        guard building == nil, case .annotation(let id) = selection,
+            let note = document.annotations.first(where: { $0.id == id }),
+            case .path(let points, let closed, _) = note.shape
+        else { return false }
+        if let index = points.indices.first(where: { isNear(p, points[$0], map: map) }) {
+            if option {
+                guard points.count > 2 else { return true }
+                editSelectedPath { points, closed, _ in
+                    points.remove(at: index)
+                    if points.count < 3 { closed = false }
+                }
+            } else {
+                setDrag(.vertex(id: id, index: index, before: document))
+            }
+            return true
+        }
+        guard option, canAddPathPoints(1) else { return false }
+        let reach = AnnotationGeometry.lineWidth(note, scale: document.scale) / 2 + slop
+        let segments = AnnotationGeometry.segments(points, closed: closed)
+        guard
+            let segment = segments.indices.first(where: {
+                HitTest.distance(from: p.original, toSegment: segments[$0].0, segments[$0].1)
+                    <= reach
+            })
+        else { return false }
+        let before = document
+        var inserted = points
+        inserted.insert(p.original, at: segment + 1)
+        previewPathPoints(id, inserted)
+        setDrag(.vertex(id: id, index: segment + 1, before: before))
+        return true
     }
 
     /// Where the pointer is, for the path being built's last segment; nil when it leaves.
