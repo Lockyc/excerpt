@@ -209,11 +209,13 @@ final class CaptureCoordinator {
             windows?.update($0)
         }
         // The user's own wheel over the region hands scrolling to them; Excerpt's steps carry
-        // EventScroller.marker.
+        // EventScroller.marker. Fingers resting on the trackpad send wheel events that move
+        // nothing; those aren't scrolling.
         let quartzRegion = region.quartz(region.appKitFrame)
         let wheel = NSEvent.addGlobalMonitorForEvents(matching: .scrollWheel) {
             [weak capture] event in
-            guard let cg = event.cgEvent, !EventScroller.isOwn(cg),
+            guard event.scrollingDeltaY != 0 || event.scrollingDeltaX != 0,
+                let cg = event.cgEvent, !EventScroller.isOwn(cg),
                 quartzRegion.contains(cg.location)
             else { return }
             MainActor.assumeIsolated { capture?.userScrolled() }
