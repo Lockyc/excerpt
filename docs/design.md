@@ -129,7 +129,8 @@ holding one.
    between them move — are kept once: the header from the first frame, the footer from the last.
    **Side panels**: when the changed columns don't move as one (sticky panels still pinning,
    split panes), the widest run of column strips that does, at least
-   `StitchMatcher.minimumBandShare` of the width, is the scrolling band. Columns that didn't move
+   `StitchMatcher.minimumBandShare` of the width, is the scrolling band, provided what changed
+   on each side of it moved by an offset of its own (an animation there halts). Columns that didn't move
    with the band take their commonest colour in appended rows, so a panel shows once, from the
    first frame, with the background running on under it.
 4. Stops on two consecutive no-movement steps, on `Return`, or at a maximum height (30,000

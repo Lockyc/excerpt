@@ -135,8 +135,8 @@ extension Stitcher {
         let rowBytes = frame.width * 4
         var out = Array(frame.bytes[(rows.lowerBound * rowBytes)..<(rows.upperBound * rowBytes)])
         let side = (Array(0..<min(band.lowerBound, matched)) + Array(band.upperBound..<matched))
-            .filter { x in
-                !overlap.allSatisfy { previous[x: x, y: $0 + offset] == frame[x: x, y: $0] }
+            .filter {
+                !StitchMatcher.columnMoved($0, previous, frame, offset: offset, rows: overlap)
             }
         guard !side.isEmpty, !rows.isEmpty else { return out }
         let fill = commonestColours(frame, columns: side)

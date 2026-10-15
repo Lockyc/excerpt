@@ -198,13 +198,59 @@ public enum StitchMatcher {
             let c = candidate(
                 RowSignatures(previous, columns: run.columns),
                 RowSignatures(next, columns: run.columns), height: previous.height)
-            if let moved = believed(c, previous, next, columns: run.columns),
-                case .moved(run.offset, _, _, _) = moved
+            guard let moved = believed(c, previous, next, columns: run.columns),
+                case .moved(run.offset, let header, let footer, _) = moved
+            else { continue }
+            if panelsOnly(
+                outside: run.columns, span: span, previous, next, offset: run.offset,
+                rows: header..<(previous.height - footer - run.offset))
             {
                 return moved
             }
         }
         return nil
+    }
+
+    /// Whether the changed columns on each side of `band` that didn't move with it by `offset`
+    /// moved as one by an offset of their own: a side panel. Taken a side at a time, from the
+    /// first such column to the last, since blank columns between a panel's letters move with
+    /// any offset and would split it into slivers too thin to score. Anything else, an
+    /// animation at the page's edge, would be filled flat in the stitch.
+    static func panelsOnly(
+        outside band: Range<Int>, span: Range<Int>, _ previous: PixelBuffer, _ next: PixelBuffer,
+        offset: Int, rows: Range<Int>
+    ) -> Bool {
+        func stray(_ side: Range<Int>) -> Range<Int>? {
+            let x = side.filter { !columnMoved($0, previous, next, offset: offset, rows: rows) }
+            guard let first = x.first, let last = x.last else { return nil }
+            return first..<(last + 1)
+        }
+        let groups = [
+            stray(span.lowerBound..<max(span.lowerBound, band.lowerBound)),
+            stray(min(span.upperBound, band.upperBound)..<span.upperBound),
+        ].compactMap { $0 }
+        return groups.allSatisfy { columns in
+            candidate(
+                RowSignatures(previous, columns: columns), RowSignatures(next, columns: columns),
+                height: previous.height
+            ).convincing
+        }
+    }
+
+    /// Whether column `x` moved up by `offset` from `previous` to `next`: each of `next`'s
+    /// `rows` is `previous`'s row `offset` lower.
+    static func columnMoved(
+        _ x: Int, _ previous: PixelBuffer, _ next: PixelBuffer, offset: Int, rows: Range<Int>
+    ) -> Bool {
+        previous.bytes.withUnsafeBytes { pa in
+            next.bytes.withUnsafeBytes { pb in
+                rows.allSatisfy { y in
+                    pa.loadUnaligned(
+                        fromByteOffset: ((y + offset) * previous.width + x) * 4, as: UInt32.self)
+                        == pb.loadUnaligned(fromByteOffset: (y * next.width + x) * 4, as: UInt32.self)
+                }
+            }
+        }
     }
 
     /// The share of row pairs that match, pairing `previous` row `previousStart + i` with `next`

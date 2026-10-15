@@ -318,4 +318,19 @@ import Testing
             ScrollFixtures.columns(frame(120), 0..<40))
         #expect(StitchMatcher.match(a, b, ignoringRightColumns: 0) == .uncertain)
     }
+
+    @Test func anAnimationAtThePagesEdgeIsUncertainNotABand() {
+        // A video over the page's right 40 columns: the rest moves as one and is over a third
+        // of the width, but the video's columns neither move with it nor by any offset of
+        // their own. Stitching the rest would erase what the video covers.
+        let page = ScrollFixtures.page(width: 110, height: 1200)
+        func shot(_ offset: Int, phase: Int) -> PixelBuffer {
+            ScrollFixtures.animated(
+                ScrollFixtures.frame(page, offset: offset, viewport: 200), x: 70, y: 0,
+                width: 40, height: 200, phase: phase)
+        }
+        #expect(
+            StitchMatcher.match(shot(0, phase: 1), shot(120, phase: 2), ignoringRightColumns: 0)
+                == .uncertain)
+    }
 }
