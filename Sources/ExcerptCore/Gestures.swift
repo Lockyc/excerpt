@@ -10,8 +10,8 @@ public enum SeamEdge: Sendable {
 /// What a click lands on, in the coordinates the editor has: original pixels for annotations,
 /// rendered pixels for seams.
 public enum HitTest {
-    /// The topmost annotation under `p` (original pixels): within `slop` of an arrow's shaft, or
-    /// of any other annotation's bounds. `slop` is in original pixels (`scale` already converts
+    /// The topmost annotation under `p` (original pixels): within `slop` of an arrow's shaft or a
+    /// path's segments (or inside a filled closed path), or of any other annotation's bounds. `slop` is in original pixels (`scale` already converts
     /// stroke points to original pixels). An annotation the render doesn't draw
     /// (`AnnotationGeometry.isDrawn` under `map`) can't be hit.
     public static func annotation(
@@ -24,6 +24,14 @@ public enum HitTest {
             case .arrow(let tail, let head):
                 let reach = AnnotationGeometry.lineWidth(annotation, scale: scale) / 2 + slop
                 if distance(from: p, toSegment: tail, head) <= reach { return annotation.id }
+            case .path(let points, let closed, let fill):
+                let reach = AnnotationGeometry.lineWidth(annotation, scale: scale) / 2 + slop
+                let onStroke = AnnotationGeometry.segments(points, closed: closed).contains {
+                    distance(from: p, toSegment: $0.0, $0.1) <= reach
+                }
+                if onStroke || (closed && fill && contains(p, polygon: points)) {
+                    return annotation.id
+                }
             default:
                 let bounds = AnnotationGeometry.bounds(of: annotation, scale: scale)
                 let reach = bounds.insetBy(dx: -slop, dy: -slop)
@@ -56,7 +64,25 @@ public enum HitTest {
         return 0
     }
 
-    static func distance(from p: CGPoint, toSegment a: CGPoint, _ b: CGPoint) -> Double {
+    /// Whether `p` is inside `polygon` by the even-odd rule.
+    public static func contains(_ p: CGPoint, polygon: [CGPoint]) -> Bool {
+        var inside = false
+        var j = polygon.count - 1
+        for i in polygon.indices {
+            let a = polygon[i]
+            let b = polygon[j]
+            if (a.y > p.y) != (b.y > p.y),
+                Double(p.x) < Double(b.x - a.x) * Double(p.y - a.y) / Double(b.y - a.y)
+                    + Double(a.x)
+            {
+                inside.toggle()
+            }
+            j = i
+        }
+        return inside
+    }
+
+    public static func distance(from p: CGPoint, toSegment a: CGPoint, _ b: CGPoint) -> Double {
         let dx = Double(b.x - a.x)
         let dy = Double(b.y - a.y)
         let lengthSquared = dx * dx + dy * dy
@@ -148,6 +174,35 @@ public enum Gestures {
             cut.axis != axis || cut.upper <= cut.lower || cut.upper < band.lowerBound
                 || cut.lower > band.upperBound
         }
+    }
+
+    /// `points` without every vertex within `tolerance` of the segment its kept neighbours
+    /// draw (Ramer–Douglas–Peucker): a freehand stroke as the fewest straight segments that keep
+    /// its shape. The first and last points always stay.
+    public static func simplify(_ points: [CGPoint], tolerance: Double) -> [CGPoint] {
+        guard points.count > 2 else { return points }
+        var keep = [Bool](repeating: false, count: points.count)
+        keep[0] = true
+        keep[points.count - 1] = true
+        var spans = [(0, points.count - 1)]
+        while let (first, last) = spans.popLast() {
+            guard last > first + 1 else { continue }
+            var farthest = first
+            var greatest = -1.0
+            for i in (first + 1)..<last {
+                let d = HitTest.distance(from: points[i], toSegment: points[first], points[last])
+                if d > greatest {
+                    greatest = d
+                    farthest = i
+                }
+            }
+            if greatest > tolerance {
+                keep[farthest] = true
+                spans.append((first, farthest))
+                spans.append((farthest, last))
+            }
+        }
+        return points.indices.filter { keep[$0] }.map { points[$0] }
     }
 
     /// The crop a drag makes: the dragged rect clamped to the image, its edges snapped to

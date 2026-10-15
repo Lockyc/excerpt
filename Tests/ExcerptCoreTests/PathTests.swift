@@ -38,6 +38,69 @@ import Testing
         }
     }
 
+    let open = RenderMap(
+        crop: PixelRect(x: 0, y: 0, width: 400, height: 400),
+        rows: AxisMap(extent: 400, bands: [], gap: 36),
+        columns: AxisMap(extent: 400, bands: [], gap: 36))
+
+    @Test func boundsAreThePointsWithTheStroke() {
+        let note = Annotation(
+            id: 1, shape: .path(points: zigzag, closed: false, fill: false), width: .medium)
+        #expect(
+            AnnotationGeometry.bounds(of: note, scale: 1)
+                == CGRect(x: 5, y: 5, width: 100, height: 120))
+    }
+
+    @Test func aClosedPathHasItsClosingSegment() {
+        #expect(AnnotationGeometry.segments(zigzag, closed: false).count == 2)
+        let closing = AnnotationGeometry.segments(zigzag, closed: true)
+        #expect(closing.count == 3)
+        #expect(closing[2].0 == zigzag[2] && closing[2].1 == zigzag[0])
+        #expect(AnnotationGeometry.segments([zigzag[0], zigzag[1]], closed: true).count == 1)
+    }
+
+    @Test func aPathIsHitOnItsSegmentsAndInsideOnlyWhenFilled() {
+        let square = [
+            CGPoint(x: 100, y: 100), CGPoint(x: 300, y: 100), CGPoint(x: 300, y: 300),
+            CGPoint(x: 100, y: 300),
+        ]
+        func hit(_ p: CGPoint, closed: Bool, fill: Bool) -> Bool {
+            HitTest.annotation(
+                at: p, in: [path(square, closed: closed, fill: fill)], scale: 1, slop: 2,
+                map: open) == 1
+        }
+        #expect(hit(CGPoint(x: 200, y: 103), closed: false, fill: false))  // on a side
+        #expect(!hit(CGPoint(x: 103, y: 200), closed: false, fill: false))  // the missing side
+        #expect(hit(CGPoint(x: 103, y: 200), closed: true, fill: false))  // closing side
+        #expect(!hit(CGPoint(x: 200, y: 200), closed: true, fill: false))  // hollow inside
+        #expect(hit(CGPoint(x: 200, y: 200), closed: true, fill: true))  // filled inside
+        #expect(!hit(CGPoint(x: 200, y: 200), closed: false, fill: true))  // open ignores fill
+    }
+
+    @Test func aPathIsHiddenOnlyWhollyInsideOneBand() {
+        let cut = RenderMap(
+            crop: PixelRect(x: 0, y: 0, width: 400, height: 400),
+            rows: AxisMap(extent: 400, bands: [100..<300], gap: 36),
+            columns: AxisMap(extent: 400, bands: [], gap: 36))
+        let inside = path([CGPoint(x: 10, y: 150), CGPoint(x: 200, y: 250)])
+        let across = path([CGPoint(x: 10, y: 50), CGPoint(x: 200, y: 250)])
+        #expect(!AnnotationGeometry.isDrawn(inside, map: cut, scale: 1))
+        #expect(AnnotationGeometry.isDrawn(across, map: cut, scale: 1))
+    }
+
+    @Test func simplifyingKeepsCornersAndDropsJitter() {
+        let jittery = (0...50).map { CGPoint(x: Double($0) * 4, y: $0 % 2 == 0 ? 0 : 1) }
+        #expect(Gestures.simplify(jittery, tolerance: 2) == [jittery.first!, jittery.last!])
+        let corner =
+            (0...20).map { CGPoint(x: Double($0) * 5, y: 0) }
+            + (1...20).map { CGPoint(x: 100, y: Double($0) * 5) }
+        #expect(
+            Gestures.simplify(corner, tolerance: 2)
+                == [CGPoint(x: 0, y: 0), CGPoint(x: 100, y: 0), CGPoint(x: 100, y: 100)])
+        #expect(
+            Gestures.simplify([zigzag[0], zigzag[1]], tolerance: 50) == [zigzag[0], zigzag[1]])
+    }
+
     @Test func tooManyPathPointsReadAsDamaged() throws {
         let line = (0..<(EditDocument.maximumPathPoints / 2 + 1)).map {
             CGPoint(x: Double($0 % 1000), y: Double($0 / 1000))

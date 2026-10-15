@@ -111,6 +111,14 @@ public enum AnnotationGeometry {
         }
     }
 
+    /// The segments a path strokes: each vertex to the next, and the last back to the first
+    /// when `closed` and there are three or more.
+    public static func segments(_ points: [CGPoint], closed: Bool) -> [(CGPoint, CGPoint)] {
+        var pairs = Array(zip(points, points.dropFirst()))
+        if closed, points.count > 2 { pairs.append((points[points.count - 1], points[0])) }
+        return pairs
+    }
+
     /// The rect `points` span, unstroked; zero at the origin for none.
     public static func extent(of points: [CGPoint]) -> CGRect {
         guard let first = points.first else { return .zero }
