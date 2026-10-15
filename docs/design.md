@@ -182,7 +182,7 @@ draws selects and moves it rather than drawing over it; other kinds are drawn ov
 canvas, hidden during a drag) and carries that item's options and nothing else: delete for every
 item, and colour (six), size (three; one control sets stroke, text and step size) and the
 kind's own options where they apply — text adds its background, a step adds Move earlier / Move
-later (disabled at either end of the sequence), a path adds Closed and Fill (disabled while open). The options per kind are one pure mapping. The
+later (disabled at either end of the sequence), a path adds Closed (disabled under three points) and Fill (disabled while open). The options per kind are one pure mapping. The
 crop under `K` gets a bar with delete. A new annotation takes the colour, size and text background
 last chosen, remembered across launches, and stays selected after it is drawn so its bar is
 showing.
@@ -205,8 +205,8 @@ on release; within a path begun by a click, a press-drag adds a freehand run, so
 freehand mix in one path. Freehand is simplified on release (Ramer–Douglas–Peucker, half a stroke
 width) into ordinary vertices. Return, a double-click, a tool switch or any save, undo or close
 finishes it; a click on the first vertex of three or more closes it; Escape drops the last
-vertex, and the last one abandons the path. Under two vertices is discarded; a finished path is
-one undo step. A selected path shows its vertices as handles: drag one to reshape, ⌥-click a
+vertex, and the last one abandons the path, as delete does. The bar shows while it is built, so
+colour and size apply to it. Under two vertices is discarded; a finished path is one undo step. A selected path shows its vertices as handles: drag one to reshape, ⌥-click a
 vertex to delete it (a path keeps two; a closed one left with two opens), ⌥-click a segment to
 insert one; a drag elsewhere on the path moves it. A closed path with **Fill** on is tinted first, with highlight's multiply at
 `AnnotationRenderer.highlightOpacity`, then stroked. A path is hit within slop of a segment, or

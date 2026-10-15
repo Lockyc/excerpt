@@ -222,6 +222,81 @@ import Testing
         #expect(shape(m) == path([(10, 10), (200, 10), (240, 240)], closed: true))
     }
 
+    @Test func aJitteryFirstClickStartsAPolyline() {
+        let m = model()
+        let map = map(m)
+        m.mouseDown(Pointer(rendered: CGPoint(x: 50, y: 50), map: map), map: map)
+        for x in [51.0, 49, 51, 49, 51] {
+            m.mouseDragged(Pointer(rendered: CGPoint(x: x, y: 50), map: map), map: map, snap: false)
+        }
+        m.mouseUp(Pointer(rendered: CGPoint(x: 50, y: 50), map: map), map: map, snap: false)
+        #expect(m.building != nil)
+        #expect(shape(m) == path([(50, 50)]))
+    }
+
+    @Test func aTwoPointPathDoesNotClose() {
+        let m = model()
+        click(m, 10, 10)
+        click(m, 100, 10)
+        click(m, 100, 10, count: 2)
+        m.setClosed(true)
+        #expect(shape(m) == path([(10, 10), (100, 10)]))
+    }
+
+    @Test func redoWaitsWhileBuilding() {
+        let m = model()
+        click(m, 10, 10)
+        click(m, 100, 10)
+        click(m, 100, 10, count: 2)
+        m.undo()
+        #expect(m.canRedo)
+        click(m, 50, 50)
+        #expect(!m.canRedo)
+    }
+
+    @Test func pressingTheCurrentToolKeepsBuilding() {
+        let m = model()
+        click(m, 10, 10)
+        click(m, 100, 10)
+        m.tool = .path
+        #expect(m.building != nil)
+    }
+
+    @Test func aCancelledFreehandRunIsSimplified() {
+        let m = model()
+        click(m, 10, 10)
+        let map = map(m)
+        m.mouseDown(Pointer(rendered: CGPoint(x: 100, y: 10), map: map), map: map)
+        for x in stride(from: 105.0, through: 200, by: 5) {
+            m.mouseDragged(Pointer(rendered: CGPoint(x: x, y: 10), map: map), map: map, snap: false)
+        }
+        m.cancelDrag()
+        #expect(shape(m) == path([(10, 10), (100, 10), (200, 10)]))
+    }
+
+    @Test func thePathBeingBuiltTakesTheBarAndItsStyle() {
+        let m = model()
+        click(m, 10, 10)
+        click(m, 100, 10)
+        #expect(m.itemOptions?.first == .color(.red))
+        m.setColor(.blue)
+        m.setWidth(.thick)
+        #expect(m.building != nil)
+        click(m, 100, 100, count: 2)
+        #expect(m.document.annotations.last?.color == .blue)
+        #expect(m.document.annotations.last?.width == .thick)
+        m.undo()
+        #expect(m.document.annotations.isEmpty)  // one step: drawing and restyle together
+    }
+
+    @Test func deletingWhileBuildingAbandonsThePath() {
+        let m = model()
+        click(m, 10, 10)
+        click(m, 100, 10)
+        m.deleteSelection()
+        #expect(m.building == nil && m.document.annotations.isEmpty && !m.canUndo)
+    }
+
     @Test func pressingAnExistingPathMovesItInsteadOfStartingOne() {
         let m = model()
         click(m, 10, 10)

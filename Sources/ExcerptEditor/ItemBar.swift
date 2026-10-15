@@ -109,11 +109,13 @@ final class ItemBar: NSVisualEffectView {
             return wire(button) { [weak self] in
                 self?.onBackground(($0 as! NSButton).state == .on)
             }
-        case .closed(let on):
+        case .closed(let on, let enabled):
             let button = symbolButton("pentagon", label: "Closed")
             button.setButtonType(.pushOnPushOff)
             button.state = on ? .on : .off
-            button.toolTip = "Join the last point to the first"
+            button.isEnabled = enabled
+            button.toolTip =
+                enabled ? "Join the last point to the first" : "A path needs three points to close"
             return wire(button) { [weak self] in self?.onClosed(($0 as! NSButton).state == .on) }
         case .fill(let on, let enabled):
             let button = symbolButton("pentagon.fill", label: "Fill")

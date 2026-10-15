@@ -42,14 +42,22 @@ import Testing
         #expect(
             options(.path(points: two, closed: false, fill: true))
                 == [
-                    .color(.blue), .size(.thick), .closed(false), .fill(true, enabled: false),
+                    .color(.blue), .size(.thick), .closed(false, enabled: false),
+                    .fill(true, enabled: false),
                     .delete,
                 ])
         #expect(
             options(.path(points: two, closed: true, fill: false))
                 == [
-                    .color(.blue), .size(.thick), .closed(true), .fill(false, enabled: true),
-                    .delete,
+                    .color(.blue), .size(.thick), .closed(true, enabled: true),
+                    .fill(false, enabled: true), .delete,
+                ])
+        let three = two + [CGPoint(x: 0, y: 9)]
+        #expect(
+            options(.path(points: three, closed: false, fill: false))
+                == [
+                    .color(.blue), .size(.thick), .closed(false, enabled: true),
+                    .fill(false, enabled: false), .delete,
                 ])
     }
 

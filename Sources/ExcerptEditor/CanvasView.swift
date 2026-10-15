@@ -118,6 +118,11 @@ final class CanvasView: NSView, NSTextViewDelegate {
             let bounds = AnnotationGeometry.bounds(of: typing, scale: scale)
             return CGRect(origin: map.point(bounds.origin, bias: .after), size: bounds.size)
         }
+        if let building = model.building,
+            let annotation = model.document.annotations.first(where: { $0.id == building.id })
+        {
+            return map.rect(AnnotationGeometry.bounds(of: annotation, scale: scale))
+        }
         switch model.selection {
         case .annotation(let id):
             guard let annotation = model.document.annotations.first(where: { $0.id == id })

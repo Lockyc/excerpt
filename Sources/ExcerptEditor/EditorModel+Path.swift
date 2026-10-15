@@ -86,29 +86,38 @@ extension EditorModel {
         previewPathPoints(id, Array(pathPoints(id).prefix(from)) + raw)
     }
 
-    /// Ends a press under the path tool. A press that barely moved is a click: its vertex
-    /// stays. A real drag is simplified to vertices, and when it began the path, finishes it.
+    /// Ends a press under the path tool: settles its run, and a drag that began the path
+    /// finishes it.
     func endFreehand(id: Int, from: Int, raw: [CGPoint]) {
-        let travelled = zip(raw, raw.dropFirst()).reduce(0.0) {
-            $0 + Double(hypot($1.1.x - $1.0.x, $1.1.y - $1.0.y))
-        }
+        if settleFreehand(id: id, from: from, raw: raw), from == 0 { finishPath() }
+    }
+
+    /// Turns a press's run into vertices; true when it was a drag. A press that never strayed
+    /// `minimumDrag` from where it began is a click, however it jittered: its one vertex stays.
+    /// A drag is simplified, so a run cut short by a tool switch or a lost release is too.
+    @discardableResult
+    func settleFreehand(id: Int, from: Int, raw: [CGPoint]) -> Bool {
+        let reach = raw.map { Double(hypot($0.x - raw[0].x, $0.y - raw[0].y)) }.max() ?? 0
         let kept = Array(pathPoints(id).prefix(from))
-        guard travelled >= minimumDrag else {
+        guard reach >= minimumDrag else {
             previewPathPoints(id, kept + [raw[0]])
-            return
+            return false
         }
         let width =
             document.annotations.first(where: { $0.id == id })
             .map { AnnotationGeometry.lineWidth($0, scale: document.scale) } ?? 1
         previewPathPoints(id, kept + Gestures.simplify(raw, tolerance: width / 2))
-        if from == 0 { finishPath() }
+        return true
     }
 
     /// Ends the path being built as one undoable step, selected; `closing` closes one of three
     /// or more vertices. A path left with under two vertices is dropped and records nothing.
     func finishPath(closing: Bool = false) {
         guard let building else { return }
-        if case .freehand? = drag { setDrag(nil) }
+        if case .freehand(let id, let from, let raw)? = drag {
+            setDrag(nil)
+            settleFreehand(id: id, from: from, raw: raw)
+        }
         setBuilding(nil)
         var points: [CGPoint] = []
         for p in pathPoints(building.id) {

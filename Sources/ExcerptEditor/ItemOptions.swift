@@ -5,7 +5,9 @@ enum ItemOption: Equatable {
     case color(Palette)
     case size(StrokeWidth)
     case background(Bool)
-    case closed(Bool)
+    /// Whether a path is closed; disabled on an open path of two points, which has no shape to
+    /// close.
+    case closed(Bool, enabled: Bool)
     /// A path's fill; disabled while the path is open, which can't show one.
     case fill(Bool, enabled: Bool)
     case moveEarlier(enabled: Bool)
@@ -14,11 +16,16 @@ enum ItemOption: Equatable {
 }
 
 extension EditorModel {
-    /// The item bar for the text being typed, else the selection, else (under the crop tool)
-    /// the crop; nil when there is nothing to show a bar for.
+    /// The item bar for the text being typed or the path being built, else the selection, else
+    /// (under the crop tool) the crop; nil when there is nothing to show a bar for.
     var itemOptions: [ItemOption]? {
         if let typing {
             return Self.options(for: typing, canMoveEarlier: false, canMoveLater: false)
+        }
+        if let building,
+            let annotation = document.annotations.first(where: { $0.id == building.id })
+        {
+            return Self.options(for: annotation, canMoveEarlier: false, canMoveLater: false)
         }
         switch selection {
         case .annotation(let id):
@@ -44,8 +51,11 @@ extension EditorModel {
         switch annotation.shape {
         case .arrow, .rectangle:
             return [color, size, .delete]
-        case .path(_, let closed, let fill):
-            return [color, size, .closed(closed), .fill(fill, enabled: closed), .delete]
+        case .path(let points, let closed, let fill):
+            return [
+                color, size, .closed(closed, enabled: closed || points.count >= 3),
+                .fill(fill, enabled: closed), .delete,
+            ]
         case .highlight:
             return [color, .delete]
         case .text(_, _, let background):

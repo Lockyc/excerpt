@@ -258,6 +258,8 @@ extension EditorModel {
         switch drag {
         case .shape(_, _, let before), .move(_, _, let before), .vertex(_, _, _, let before):
             preview(before)
+        case .freehand(let id, let from, let raw):
+            settleFreehand(id: id, from: from, raw: raw)
         default: break
         }
         setDrag(nil)

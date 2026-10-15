@@ -27,7 +27,8 @@ final class EditorModel {
         didSet {
             endTyping()
             cancelDrag()
-            finishPath()
+            // Pressing the current tool's key again is not a switch: the path carries on.
+            if tool != oldValue { finishPath() }
             selection = nil
             onChange?()
         }
@@ -75,7 +76,8 @@ final class EditorModel {
     var isDirty: Bool { document != saved }
     /// A path being built can be undone: undo finishes it, then removes it.
     var canUndo: Bool { history.canUndo || building != nil }
-    var canRedo: Bool { history.canRedo }
+    /// Not while a path is being built: finishing it records a step, which clears what redo had.
+    var canRedo: Bool { history.canRedo && building == nil }
 
     /// What the canvas shows: the whole capture while the crop tool is active, so a crop can
     /// be redrawn; otherwise the document, with the text being typed in place of the text it
@@ -155,10 +157,9 @@ final class EditorModel {
         keepSelectionIfPresent()
     }
 
-    /// Does nothing while a drag is in flight. A path being built finishes first.
+    /// Does nothing while a drag is in flight or a path is being built.
     func redo() {
-        finishPath()
-        guard drag == nil, let next = history.redo(from: document) else { return }
+        guard building == nil, drag == nil, let next = history.redo(from: document) else { return }
         document = next
         keepSelectionIfPresent()
     }
@@ -217,15 +218,19 @@ final class EditorModel {
         }
     }
 
-    /// Closes or opens the selected path, as one undoable step.
-    func setClosed(_ on: Bool) { editSelectedPath { _, closed, _ in closed = on } }
+    /// Closes or opens the selected path, as one undoable step; a path of two points stays open.
+    func setClosed(_ on: Bool) {
+        editSelectedPath { points, closed, _ in closed = on && points.count >= 3 }
+    }
 
     /// Turns the selected path's fill on or off, as one undoable step.
     func setFill(_ on: Bool) { editSelectedPath { _, _, fill in fill = on } }
 
     /// Changes the selected path's points, closed flag or fill, as one undoable step; does
-    /// nothing unless a path is selected.
+    /// nothing unless a path is selected. A path being built finishes first, selected, so the
+    /// bar's Closed acts on it.
     func editSelectedPath(_ change: (inout [CGPoint], inout Bool, inout Bool) -> Void) {
+        finishPath()
         guard case .annotation(let id) = selection else { return }
         apply { doc in
             guard let i = doc.annotations.firstIndex(where: { $0.id == id }),
@@ -245,11 +250,21 @@ final class EditorModel {
         return !annotation.shape.isBlur
     }
 
-    /// Restyles the text being typed, else the selected annotation (one undoable step).
+    /// Restyles the text being typed or the path being built, else the selected annotation (one
+    /// undoable step).
     private func restyleSelection(_ change: (inout Annotation) -> Void) {
         if var typed = typing {
             change(&typed)
             typing = typed
+            return
+        }
+        // The path being built restyles in its preview, recorded with it when it finishes.
+        if let building,
+            let i = document.annotations.firstIndex(where: { $0.id == building.id })
+        {
+            var next = document
+            change(&next.annotations[i])
+            preview(next)
             return
         }
         guard case .annotation(let id) = selection, selectionTakesStyle else { return }
@@ -331,11 +346,19 @@ final class EditorModel {
 
     /// Whether `deleteSelection` would remove something: the selection, or under the crop tool
     /// with nothing selected, the crop.
-    var canDelete: Bool { selection != nil || (tool == .crop && document.crop != nil) }
+    var canDelete: Bool {
+        building != nil || selection != nil || (tool == .crop && document.crop != nil)
+    }
 
     /// Removes the selected annotation or seam; with nothing selected under the crop tool,
-    /// removes the crop.
+    /// removes the crop. A path being built is abandoned, recording nothing.
     func deleteSelection() {
+        if let building {
+            setBuilding(nil)
+            if case .freehand? = drag { setDrag(nil) }
+            preview(building.before)
+            return
+        }
         switch selection {
         case .annotation(let id):
             apply { $0.annotations.removeAll { $0.id == id } }
