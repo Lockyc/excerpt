@@ -56,7 +56,8 @@ stitches as you go, and your own scrolling takes over from auto-scroll at any po
 Each capture is saved to `~/Documents/Screenshots/` (a setting), copied to the clipboard and
 shown as a thumbnail with **Edit**, **For Claude** and **Close**. Files in that folder older
 than 30 days move into `YYYY/MM-Month/` folders, names unchanged (also a setting). The editor has
-arrow, rectangle, text (plain or on a background of its colour), numbered steps, highlight, blur,
+arrow, rectangle, path (click or freehand lines and outlines, optionally filled), text (plain or
+on a background of its colour), numbered steps, highlight, blur,
 crop and **cut** (`C`); a selected item's colour, size and options float beside it. Cut: drag across the rows or columns
 to remove, and the join becomes a torn seam. Cut and blurred content never reaches the saved
 file; the original and your edits stay in a separate `… original.png`, so reopening a capture

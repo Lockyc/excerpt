@@ -203,11 +203,12 @@ their colour and width with round joins and caps, no arrowheads. Each click adds
 rubber-band segment to the pointer. A press-drag that starts a path is a freehand stroke, finished
 on release; within a path begun by a click, a press-drag adds a freehand run, so clicks and
 freehand mix in one path. Freehand is simplified on release (Ramer–Douglas–Peucker, half a stroke
-width) into ordinary vertices. Return, a double-click, a tool switch or any save, undo or close finishes it; a
-click on the first vertex of three or more closes it; Escape drops the last vertex, and the last
-one abandons the path. Under two vertices is discarded; a finished path is one undo step. A selected path shows its vertices as handles: drag
-one to reshape, ⌥-click a vertex to delete it, ⌥-click a segment to insert one; a drag elsewhere
-on the path moves it. A closed path with **Fill** on is tinted first, with highlight's multiply at
+width) into ordinary vertices. Return, a double-click, a tool switch or any save, undo or close
+finishes it; a click on the first vertex of three or more closes it; Escape drops the last
+vertex, and the last one abandons the path. Under two vertices is discarded; a finished path is
+one undo step. A selected path shows its vertices as handles: drag one to reshape, ⌥-click a
+vertex to delete it (a path keeps two; a closed one left with two opens), ⌥-click a segment to
+insert one; a drag elsewhere on the path moves it. A closed path with **Fill** on is tinted first, with highlight's multiply at
 `AnnotationRenderer.highlightOpacity`, then stroked. A path is hit within slop of a segment, or
 inside it when filled, and is hidden by a cut only when all its vertices lie inside one removed
 band, as an arrow is.
