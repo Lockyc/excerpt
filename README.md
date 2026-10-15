@@ -50,8 +50,8 @@ menu flags any shortcut macOS still holds.
 
 The first capture asks for **Screen Recording** (System Settings → Privacy & Security → Screen &
 System Audio Recording); reopen Excerpt after granting it. Scrolling capture's auto-scroll also
-asks for **Accessibility**; without it, you scroll the page yourself and Excerpt stitches as you
-go.
+asks for **Accessibility**. Scrolling the selected region yourself needs neither: Excerpt
+stitches as you go, and your own scrolling takes over from auto-scroll at any point.
 
 Each capture is saved to `~/Documents/Screenshots/` (a setting), copied to the clipboard and
 shown as a thumbnail with **Edit**, **For Claude** and **Close**. The editor has

@@ -112,8 +112,11 @@ holding one.
 
 ### Scrolling capture (vertical)
 
-1. Select the scrolling region, press `Return`. The overlay opens on the last scrolling region
-   of this launch, already waiting for `Return`, so the same area can be captured again.
+1. Select the scrolling region, then press `Return` to auto-scroll, or scroll the region
+   yourself to start with you scrolling: the overlay takes that first wheel event and stays up
+   until the first frame, so the page hasn't moved when it is taken. The overlay opens on the
+   last scrolling region of this launch, already waiting, so the same area can be captured
+   again.
 2. The Start button and the HUD (Done, Cancel) sit centred in the region when it is tall enough
    to leave `ScrollChromeLayout.scrollBand` clear above and below them, else just outside it.
    **Auto-scroll** posts scroll-wheel events in the region's taller part clear of the HUD, ~60%
@@ -124,18 +127,26 @@ holding one.
    the one with the highest share of matching evidence rows (unique, non-uniform) in the overlap,
    clearly ahead of the others. **Sticky regions** — top/bottom rows unchanged while the rows
    between them move — are kept once: the header from the first frame, the footer from the last.
+   **Side panels**: when the changed columns don't move as one (sticky panels still pinning,
+   split panes), the widest run of column strips that does, at least
+   `StitchMatcher.minimumBandShare` of the width, is the scrolling band. Columns that didn't move
+   with the band take their commonest colour in appended rows, so a panel shows once, from the
+   first frame, with the background running on under it.
 4. Stops on two consecutive no-movement steps, on `Return`, or at a maximum height (30,000
    image pixels; the stitch is truncated contiguously there).
 5. **Manual fallback** when steps produce no movement before the page has moved, Accessibility is
    not granted, the pointer left the region or rests on the HUD, the wheel event failed, or the
    page scrolled a different distance than asked: the HUD reads "Scroll the page yourself · Return when done" and frames
-   are sampled and stitched as the user scrolls, skipping any that don't match.
+   are sampled and stitched as the user scrolls, skipping any that don't match. A wheel event
+   over the region that Excerpt didn't post (its own carry `EventScroller.marker`) hands
+   scrolling to the user the same way, during an auto run or after an uncertain stop.
 6. A live preview of the stitch sits beside the region.
 7. An **uncertain stitch** (no offset clears the confidence threshold — video, animation) stops,
    keeping the stitch for `Return`; it never fabricates a seam. The HUD says where it stopped.
    In manual mode a mismatched frame is skipped and the HUD asks to scroll back. In auto mode an
    uncertain stitch halts, and in either mode the cap does: `Return` saves what is stitched,
-   `Esc` discards. A stream failure or display change saves what is stitched and says so.
+   `Esc` discards, and after an uncertain stop scrolling the page yourself carries on from where
+   the stitch ends. A stream failure or display change saves what is stitched and says so.
 
 Known limits: a run of content identical except a narrow patch, flung past in manual mode, can
 stitch at a wrong offset (auto mode checks each step's travel); a final short step that aliases
@@ -143,8 +154,8 @@ can be believed when the page ends next; any animation wider than a quarter of t
 span, or several on the same rows, halts the capture; a sticky header with a changing top edge
 (progress bar, clock) reads as content and halts, as can a sticky footer that unsticks into
 the page's flow; the stream excludes only excerpt's windows, so desktop icons under the region
-appear in it; the matcher ignores the right-edge scroll-bar strip but the stitch copies whole
-rows, so an overlay scroll bar's thumb can appear along the right edge (select the region
+appear in it; the matcher ignores the right-edge scroll-bar strip but the stitch copies it (page
+content can reach the edge), so an overlay scroll bar's thumb can appear along the right edge (select the region
 without the scroll bar to avoid it).
 
 Permissions are requested on first use, per feature: Screen Recording for any capture,
