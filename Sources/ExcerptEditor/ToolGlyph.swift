@@ -11,6 +11,32 @@ enum ToolGlyph {
                 NSImage.SymbolConfiguration(pointSize: pointSize, weight: .regular))
     }
 
+    /// The toolbar's segment image: the glyph, with the tool's key in the bottom-right corner.
+    static func keyed(_ tool: Tool, pointSize: CGFloat) -> NSImage? {
+        guard let glyph = image(tool, pointSize: pointSize) else { return nil }
+        let key = NSAttributedString(
+            string: tool.key.uppercased(),
+            attributes: [
+                .font: NSFont.systemFont(ofSize: pointSize * 0.55, weight: .semibold),
+                .foregroundColor: NSColor.black,
+            ])
+        let keySize = key.size()
+        let side = pointSize * 1.5
+        let size = CGSize(width: side + keySize.width * 0.75, height: side)
+        let image = NSImage(size: size, flipped: true) { _ in
+            glyph.draw(
+                in: CGRect(
+                    x: (side - glyph.size.width) / 2, y: (side - glyph.size.height) / 2,
+                    width: glyph.size.width, height: glyph.size.height))
+            key.draw(
+                at: CGPoint(x: size.width - keySize.width, y: size.height - keySize.height + 2))
+            return true
+        }
+        image.isTemplate = true
+        image.accessibilityDescription = tool.title
+        return image
+    }
+
     /// The tool's glyph from its `svg` source.
     private static func drawn(_ tool: Tool, pointSize: CGFloat) -> NSImage? {
         guard let (source, scale) = svg[tool], let image = NSImage(data: Data(source.utf8))

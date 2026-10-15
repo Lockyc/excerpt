@@ -21,8 +21,7 @@ private final class CenteringClipView: NSClipView {
 /// colour, size and own options float beside it on the canvas.
 @MainActor
 public final class EditorWindowController: NSWindowController, NSWindowDelegate {
-    static let toolbarHeight: CGFloat = 92
-    static let minimumWidth: CGFloat = 860
+    static let toolbarHeight: CGFloat = 60
     private static let snapHint = "⌥ places edges without snapping"
 
     private let capture: LoadedCapture
@@ -42,8 +41,6 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
     private let borderControl = NSSegmentedControl()
     private let borderPanel: BorderPanel
     private let borderPopover = NSPopover()
-    private let snapHint = NSTextField(labelWithString: "")
-    private let hiddenNote = NSTextField(labelWithString: "")
     private let undoButton = NSButton()
     private let redoButton = NSButton()
     private let discardButton = NSButton(title: "Discard", target: nil, action: nil)
@@ -94,7 +91,6 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         window.isReleasedWhenClosed = false
         window.title = capture.primary.lastPathComponent
         window.representedURL = capture.primary
-        window.minSize = CGSize(width: Self.minimumWidth, height: 300)
         buildContent(in: window)
         // The canvas owns the model's change hook and forwards every change here.
         canvas.onChange = { [weak self] in self?.update() }
@@ -118,9 +114,9 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         tools.segmentCount = Tool.allCases.count
         tools.trackingMode = .selectOne
         for (i, tool) in Tool.allCases.enumerated() {
-            tools.setImage(ToolGlyph.image(tool, pointSize: Self.symbolSize), forSegment: i)
+            tools.setImage(ToolGlyph.keyed(tool, pointSize: Self.symbolSize), forSegment: i)
             tools.setToolTip("\(tool.title) (\(tool.key.uppercased()))", forSegment: i)
-            tools.setWidth(44, forSegment: i)
+            tools.setWidth(52, forSegment: i)
         }
         tools.target = self
         tools.action = #selector(toolChosen)
@@ -136,12 +132,6 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         borderControl.action = #selector(borderPressed)
         borderPopover.contentViewController = borderPanel
         borderPopover.behavior = .transient
-
-        for label in [snapHint, hiddenNote] {
-            label.textColor = .secondaryLabelColor
-            label.lineBreakMode = .byTruncatingTail
-            label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        }
 
         configure(
             undoButton, symbol: "arrow.uturn.backward", label: "Undo",
@@ -167,22 +157,30 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
             control.controlSize = .large
         }
 
-        let spacer = NSView()
-        spacer.setContentHuggingPriority(.fittingSizeCompression, for: .horizontal)
-        let styleRow = Self.row([tools, borderControl])
-        let actionRow = Self.row(
-            [
-                snapHint, hiddenNote, spacer, undoButton, redoButton, discardButton, claudeButton,
-                saveButton,
-            ])
-        let bar = NSStackView(views: [styleRow, actionRow])
-        bar.orientation = .vertical
-        bar.alignment = .centerX
-        bar.spacing = 8
-        bar.edgeInsets = NSEdgeInsets(top: 8, left: 10, bottom: 8, right: 10)
-        actionRow.widthAnchor.constraint(
-            equalTo: bar.widthAnchor, constant: -(bar.edgeInsets.left + bar.edgeInsets.right)
-        ).isActive = true
+        // One row: the tools centred on the window while there is room, pushed left of the
+        // actions when there isn't; the actions at the right.
+        let toolGroup = Self.row([tools, borderControl])
+        let actionGroup = Self.row(
+            [undoButton, redoButton, discardButton, claudeButton, saveButton])
+        let bar = NSView()
+        for view in [toolGroup, actionGroup] as [NSView] {
+            view.translatesAutoresizingMaskIntoConstraints = false
+            bar.addSubview(view)
+        }
+        let centred = toolGroup.centerXAnchor.constraint(equalTo: bar.centerXAnchor)
+        // Below the window's hold on its size, so centring never widens the window.
+        centred.priority = .dragThatCannotResizeWindow
+        NSLayoutConstraint.activate([
+            centred,
+            toolGroup.leadingAnchor.constraint(
+                greaterThanOrEqualTo: bar.leadingAnchor, constant: Self.barMargin),
+            actionGroup.leadingAnchor.constraint(
+                greaterThanOrEqualTo: toolGroup.trailingAnchor, constant: Self.barMargin),
+            actionGroup.trailingAnchor.constraint(
+                equalTo: bar.trailingAnchor, constant: -Self.barMargin),
+            toolGroup.centerYAnchor.constraint(equalTo: bar.centerYAnchor),
+            actionGroup.centerYAnchor.constraint(equalTo: bar.centerYAnchor),
+        ])
 
         let clip = CenteringClipView()
         clip.drawsBackground = true
@@ -212,7 +210,13 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
             scrollView.bottomAnchor.constraint(equalTo: content.bottomAnchor),
         ])
         window.contentView = content
+        // As narrow as the tools and actions fit side by side.
+        window.minSize = CGSize(
+            width: toolGroup.fittingSize.width + actionGroup.fittingSize.width + 3
+                * Self.barMargin, height: 300)
     }
+
+    private static let barMargin: CGFloat = 12
 
     private static func row(_ views: [NSView]) -> NSStackView {
         let row = NSStackView(views: views)
@@ -222,7 +226,7 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
     }
 
     /// Toolbar symbols are drawn large to match the large controls.
-    private static let symbolSize: CGFloat = 16
+    private static let symbolSize: CGFloat = 18
 
     private static func symbol(_ name: String, label: String?) -> NSImage? {
         NSImage(systemSymbolName: name, accessibilityDescription: label)?
@@ -247,7 +251,7 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
             ?? CGRect(x: 0, y: 0, width: 1440, height: 900)
         let scale = CGFloat(model.document.scale)
         let rendered = max(canvas.renderedSize.width, 1)
-        let width = min(max(rendered / scale, Self.minimumWidth), visible.width * 0.9)
+        let width = min(max(rendered / scale, window.minSize.width), visible.width * 0.9)
         let zoom = min(width / rendered, 1 / scale)
         let height = min(
             canvas.renderedSize.height * zoom + Self.toolbarHeight, visible.height * 0.9)
@@ -280,10 +284,11 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         tools.selectedSegment = Tool.allCases.firstIndex(of: model.tool) ?? 0
         borderControl.setSelected(model.document.border != nil, forSegment: 0)
         borderPanel.refresh()
-        hiddenNote.stringValue = model.hiddenNote(map: canvas.base.map)
         let limit = model.tool == .cut ? model.cutLimitNote : ""
-        snapHint.stringValue =
+        let hint =
             !limit.isEmpty ? limit : model.tool == .cut || model.tool == .crop ? Self.snapHint : ""
+        window?.subtitle = [hint, model.hiddenNote(map: canvas.base.map)]
+            .filter { !$0.isEmpty }.joined(separator: " · ")
 
         undoButton.isEnabled = model.canUndo
         undoButton.toolTip = model.canUndo ? "Undo (⌘Z)" : "Nothing to undo"

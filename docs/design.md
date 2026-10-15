@@ -174,7 +174,10 @@ other), or by opening a capture (registered as an Open With handler for PNG, not
 Dock icon.
 
 Tools: `V` select · `A` arrow · `R` rectangle · `P` path · `T` text · `N` step · `H` highlight ·
-`B` blur · `K` crop · `C` cut. A new editor starts on the arrow. Over the canvas the pointer is
+`B` blur · `K` crop · `C` cut, each key shown on its toolbar button. The toolbar is one row: tools
+and Border centred while there is room, the actions at the right; the editor's notes (snapping,
+the cut limit, annotations hidden by cuts) are the window's subtitle. A new editor starts on the
+arrow. Over the canvas the pointer is
 the arrow under select, the I-beam under text, and otherwise a crosshair badged with the tool's
 toolbar glyph (`ToolGlyph`). A drawing tool pressed on an annotation it
 draws selects and moves it rather than drawing over it; other kinds are drawn over. The arrow drag
