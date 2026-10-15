@@ -19,6 +19,7 @@ final class Preferences {
             "backdropColor": Self.defaultBackdropHex,
             "thumbnailSeconds": 15.0,
             "thumbnailAtPointer": false,
+            "fileOldCaptures": true,
         ])
     }
 
@@ -67,6 +68,11 @@ final class Preferences {
             } ?? .initial
         }
         set { defaults.set(try? JSONEncoder().encode(newValue), forKey: "editorStyle") }
+    }
+    /// Whether the library's top level is filed into month folders; see `LibraryFiler`.
+    var fileOldCaptures: Bool {
+        get { defaults.bool(forKey: "fileOldCaptures") }
+        set { defaults.set(newValue, forKey: "fileOldCaptures") }
     }
     var thumbnailSeconds: Double { max(1, defaults.double(forKey: "thumbnailSeconds")) }
     var thumbnailAtPointer: Bool {

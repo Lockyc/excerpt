@@ -175,6 +175,9 @@ final class SettingsModel: ObservableObject {
         didSet { preferences.libraryFolder = URL(fileURLWithPath: folder) }
     }
     @Published var prefix: String { didSet { preferences.namePrefix = prefix } }
+    @Published var fileOldCaptures: Bool {
+        didSet { preferences.fileOldCaptures = fileOldCaptures }
+    }
     @Published var playSound: Bool { didSet { preferences.playSound = playSound } }
     @Published var thumbnailAtPointer: Bool {
         didSet { preferences.thumbnailAtPointer = thumbnailAtPointer }
@@ -198,6 +201,7 @@ final class SettingsModel: ObservableObject {
         self.preferences = preferences
         folder = preferences.libraryFolder.path
         prefix = preferences.namePrefix
+        fileOldCaptures = preferences.fileOldCaptures
         playSound = preferences.playSound
         thumbnailAtPointer = preferences.thumbnailAtPointer
         windowBackdrop = preferences.windowBackdrop
@@ -237,6 +241,9 @@ struct SettingsView: View {
                 TextField("File name prefix", text: $model.prefix)
                 Text(model.exampleFileName)
                     .font(.caption).foregroundStyle(.secondary)
+                Toggle(
+                    "File captures older than \(Int(LibraryFiler.flatAge / (24 * 60 * 60))) days into month folders",
+                    isOn: $model.fileOldCaptures)
             }
             Section("Capture") {
                 Toggle("Play shutter sound", isOn: $model.playSound)

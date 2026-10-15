@@ -118,6 +118,25 @@ enum Alerts {
                 + " Remove them in Finder.")
     }
 
+    /// Captures old enough to file stayed at the top of the library.
+    static func libraryNotFiled(_ failures: [LibraryFilingFailure]) {
+        show(
+            "Couldn't file some captures",
+            sentence(
+                "Excerpt files captures into month folders, but left "
+                    + failures.map(\.description).joined(separator: "; "))
+                + " Move or rename them in Finder.")
+    }
+
+    /// The library couldn't be read, so nothing in it could be filed.
+    static func libraryUnfileable(_ folder: URL, _ error: Error) {
+        show(
+            "Couldn't file captures",
+            sentence(
+                "Excerpt files captures into month folders, but couldn't read \(folder.path): \(error.localizedDescription)"
+            ))
+    }
+
     /// The Claude cache folder couldn't be read, so nothing in it could be pruned.
     static func claudeCacheUnlistable(_ root: URL, _ error: Error) {
         let days = Int(ClaudeCache.maximumAge / (24 * 60 * 60))

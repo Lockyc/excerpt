@@ -43,6 +43,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             hotKeyStates: { [weak self] in self?.hotKeyStates() ?? [:] })
         claude.onBusyChange = { [weak self] primary in self?.showPreparingForClaude(primary) }
         claude.startPruning()
+        filing.start()
     }
 
     /// Registers every action's current binding that the rules keep, in place of whatever was
@@ -85,6 +86,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         preferences: preferences, onEdit: { [weak self] url in self?.openEditor(url) },
         onClaude: { [weak self] url in self?.forClaude(url) })
     private let claude = ClaudeExporter()
+    private lazy var filing = LibraryFiling(preferences: preferences)
     /// Open editors by primary, so opening a capture again (or its master) brings its window
     /// forward.
     private var editors: [URL: EditorWindowController] = [:]
