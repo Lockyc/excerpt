@@ -452,6 +452,18 @@ final class AnimatedPage: FrameSource, Scroller {
         #expect(!phases.contains(.halted(.uncertain)))
         #expect(phases.last == .manual(.userScrolled))
     }
+
+    @Test func aTakeOverKeepsTheFrameTheStepSettledOn() async {
+        // The user's flick carries step 1 to 185 rows, then on to 350: 350 shares no rows with
+        // the first frame, so only the settled frame at 185 bridges them.
+        let fake = FakePage(page: page, viewport: 200)
+        fake.extraTravel = { $0 == 1 ? 65 : 0 }
+        fake.userOffsets = [350]
+        let capture = ScrollCapture(source: fake, scroller: fake, stepPoints: 120, scale: 1)
+        fake.afterScroll = { if $0 == 1 { capture.userScrolled() } }
+        fake.onIdle = { capture.finish() }
+        #expect(saved(await capture.run()) == ScrollFixtures.rows(page, 0..<550))
+    }
 }
 
 /// Plays back a fixed list of reads: a frame, or nil for a timeout.

@@ -166,8 +166,15 @@ public final class ScrollCapture {
                         if scroller.scroll(points: stepPoints) {
                             latest = try await settledFrame(after: latest)
                             // A step the user scrolled through is not measured against its
-                            // travel: the loop hands over next.
-                            if !tookOver { session.stepped(latest, travel: travel) }
+                            // travel: they take over, and the frame it settled on is their
+                            // first, so a flick past a screen still has a frame to bridge it.
+                            if tookOver {
+                                tookOver = false
+                                session.takeOver()
+                                session.sampled(latest)
+                            } else {
+                                session.stepped(latest, travel: travel)
+                            }
                         } else {
                             session.fallBack(.eventFailed)
                         }
