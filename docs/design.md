@@ -182,7 +182,7 @@ draws selects and moves it rather than drawing over it; other kinds are drawn ov
 canvas, hidden during a drag) and carries that item's options and nothing else: delete for every
 item, and colour (six), size (three; one control sets stroke, text and step size) and the
 kind's own options where they apply — text adds its background, a step adds Move earlier / Move
-later (disabled at either end of the sequence), a path adds Open/Closed and, when closed, Fill. The options per kind are one pure mapping. The
+later (disabled at either end of the sequence), a path adds Closed and Fill (disabled while open). The options per kind are one pure mapping. The
 crop under `K` gets a bar with delete. A new annotation takes the colour, size and text background
 last chosen, remembered across launches, and stays selected after it is drawn so its bar is
 showing.
@@ -200,15 +200,17 @@ Move earlier / later reorder them.
 
 **Paths** (`P`) are polylines and polygons — routes, boundaries, bent pointers — drawn opaque in
 their colour and width with round joins and caps, no arrowheads. Each click adds a vertex, with a
-rubber-band segment to the pointer; a press-drag adds a freehand run, simplified on release
-(Ramer–Douglas–Peucker, about half a stroke width) into ordinary vertices, so clicks and freehand
-mix in one path. Return, a double-click or a tool switch finishes it; a click on the first vertex
-closes it; Escape drops the last vertex, and on an empty path abandons it. Under two vertices is
-discarded; a finished path is one undo step. A selected path shows its vertices as handles: drag
+rubber-band segment to the pointer. A press-drag that starts a path is a freehand stroke, finished
+on release; within a path begun by a click, a press-drag adds a freehand run, so clicks and
+freehand mix in one path. Freehand is simplified on release (Ramer–Douglas–Peucker, half a stroke
+width) into ordinary vertices. Return, a double-click, a tool switch or any save, undo or close finishes it; a
+click on the first vertex of three or more closes it; Escape drops the last vertex, and the last
+one abandons the path. Under two vertices is discarded; a finished path is one undo step. A selected path shows its vertices as handles: drag
 one to reshape, ⌥-click a vertex to delete it, ⌥-click a segment to insert one; a drag elsewhere
 on the path moves it. A closed path with **Fill** on is tinted first, with highlight's multiply at
 `AnnotationRenderer.highlightOpacity`, then stroked. A path is hit within slop of a segment, or
-inside it when filled, and is hidden by cuts only when every vertex lies in a removed band.
+inside it when filled, and is hidden by a cut only when all its vertices lie inside one removed
+band, as an arrow is.
 
 **Border** turns the border on and off, and its chevron drops down an on/off switch, the six
 colours and three widths (2, 4, 8pt); it frames the render in a solid line drawn inside its edge,
