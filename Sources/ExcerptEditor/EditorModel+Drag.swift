@@ -279,7 +279,7 @@ extension EditorModel {
             return Double(hypot(head.x - tail.x, head.y - tail.y)) < minimumDrag
         case .rectangle(let rect), .highlight(let rect), .blur(let rect):
             return Double(max(rect.width, rect.height)) < minimumDrag
-        case .text, .step:
+        case .text, .step, .path:
             return false
         }
     }

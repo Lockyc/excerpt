@@ -60,9 +60,9 @@ public struct PixelRect: Codable, Hashable, Sendable {
 /// strokes and text.
 public struct EditDocument: Codable, Equatable, Sendable {
     /// Version 2 carries `crop` and `annotations`, version 3 `border`, version 4 text
-    /// backgrounds and steps; an older build rejects a newer document rather than open it
-    /// without them, so its next save can't erase them.
-    public static let currentVersion = 4
+    /// backgrounds and steps, version 5 paths; an older build rejects a newer document rather
+    /// than open it without them, so its next save can't erase them.
+    public static let currentVersion = 5
 
     public var scale: Double
     public var cuts: [Cut]
@@ -154,14 +154,28 @@ public struct EditDocument: Codable, Equatable, Sendable {
     /// The most annotations a document may hold. Every blur is grouped against the others before
     /// it is drawn, so a crafted master's hundred thousand are refused.
     public static let maximumAnnotations = 10_000
+    /// The most path vertices a document may hold across all its paths: each is placed, stroked
+    /// and hit-tested on every repaint, so a crafted master's millions are refused.
+    public static let maximumPathPoints = 100_000
+
+    /// How many path vertices the document holds.
+    public var pathPointCount: Int {
+        annotations.reduce(0) { count, note in
+            if case .path(let points, _, _) = note.shape { return count + points.count }
+            return count
+        }
+    }
     /// Annotation ids are in `0..<idLimit`, which keeps `nextAnnotationID` clear of overflow.
     public static let idLimit = Int.max / 2
 
     /// Throws `invalidGeometry` unless every stored coordinate, size and id is in range and
     /// neither axis has more than `maximumCutsPerAxis` cuts nor the document more than
-    /// `maximumAnnotations` annotations.
+    /// `maximumAnnotations` annotations nor more than `maximumPathPoints` path vertices, and
+    /// every path has at least two.
     private func validateGeometry() throws {
-        guard annotations.count <= Self.maximumAnnotations else {
+        guard annotations.count <= Self.maximumAnnotations,
+            pathPointCount <= Self.maximumPathPoints
+        else {
             throw EditDocumentError.invalidGeometry
         }
         for axis in [Axis.horizontal, .vertical]
@@ -198,6 +212,8 @@ public struct EditDocument: Codable, Equatable, Sendable {
             case .text(let origin, _, _): ok = inRange(origin.x, origin.y)
             case .step(let center): ok = inRange(center.x, center.y)
             case .rectangle(let r), .highlight(let r), .blur(let r): ok = rectOK(r)
+            case .path(let points, _, _):
+                ok = points.count >= 2 && points.allSatisfy { inRange($0.x, $0.y) }
             }
             guard ok else { throw EditDocumentError.invalidGeometry }
         }

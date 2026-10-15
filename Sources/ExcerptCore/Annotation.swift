@@ -83,6 +83,9 @@ public enum Shape: Codable, Equatable, Sendable {
     /// A numbered circle. The number is not stored: it is the step's rank among the document's
     /// steps (`AnnotationGeometry.stepNumbers`).
     case step(center: CGPoint)
+    /// A polyline through `points`, or a polygon when `closed`. `fill` tints a closed path's
+    /// inside as a highlight does; an open path keeps it but doesn't draw it.
+    case path(points: [CGPoint], closed: Bool, fill: Bool)
 
     /// The same shape moved by `dx`, `dy`.
     public func offset(dx: Double, dy: Double) -> Shape {
@@ -96,6 +99,8 @@ public enum Shape: Codable, Equatable, Sendable {
         case .highlight(let rect): return .highlight(rect: move(rect))
         case .blur(let rect): return .blur(rect: move(rect))
         case .step(let center): return .step(center: move(center))
+        case .path(let points, let closed, let fill):
+            return .path(points: points.map { move($0) }, closed: closed, fill: fill)
         }
     }
 

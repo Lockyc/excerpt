@@ -39,7 +39,7 @@ extension EditorModel {
         let color = ItemOption.color(annotation.color)
         let size = ItemOption.size(annotation.width)
         switch annotation.shape {
-        case .arrow, .rectangle:
+        case .arrow, .rectangle, .path:
             return [color, size, .delete]
         case .highlight:
             return [color, .delete]

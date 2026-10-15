@@ -84,7 +84,7 @@ public enum AnnotationRenderer {
                     numbers[annotation.id] ?? 0, at: flip.point(map.point(center)),
                     diameter: AnnotationGeometry.stepDiameter(annotation, scale: scale),
                     fill: color, ink: annotation.color.contrastingInk.cgColor, in: context)
-            case .blur:
+            case .blur, .path:
                 break
             }
             context.restoreGState()

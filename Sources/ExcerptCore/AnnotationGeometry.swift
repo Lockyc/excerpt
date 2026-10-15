@@ -106,7 +106,17 @@ public enum AnnotationGeometry {
             let r = stepDiameter(annotation, scale: scale) / 2
             return CGRect(
                 x: Double(center.x) - r, y: Double(center.y) - r, width: 2 * r, height: 2 * r)
+        case .path(let points, _, _):
+            return extent(of: points).insetBy(dx: -w / 2, dy: -w / 2)
         }
+    }
+
+    /// The rect `points` span, unstroked; zero at the origin for none.
+    public static func extent(of points: [CGPoint]) -> CGRect {
+        guard let first = points.first else { return .zero }
+        var rect = CGRect(origin: first, size: .zero)
+        for p in points.dropFirst() { rect = rect.union(CGRect(origin: p, size: .zero)) }
+        return rect
     }
 
     /// Whether an annotation shows on the render: the one test the renderer and the hidden
@@ -125,6 +135,9 @@ public enum AnnotationGeometry {
                 CGRect(
                     x: min(tail.x, head.x), y: min(tail.y, head.y),
                     width: abs(head.x - tail.x), height: abs(head.y - tail.y)))
+        case .path(let points, _, _):
+            // Decided on the unstroked extent, as the arrow is.
+            return !map.isHidden(extent(of: points))
         case .text, .step:
             return true
         }
