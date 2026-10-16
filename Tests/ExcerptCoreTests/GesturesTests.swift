@@ -75,11 +75,51 @@ import Testing
     }
 
     @Test func aPartlyHiddenAnnotationIsHitOnItsKeptPart() {
-        // Rows 0..<100 are cut; rectangle 1 survives below the cut.
+        // Rows 0..<50 are cut into a 20px gap; rectangle 1 shows from rendered y 20 to 70.
         #expect(
             HitTest.annotation(
-                at: CGPoint(x: 10, y: 80), in: annotations, scale: 1, slop: 0, map: partlyHidden)
+                at: CGPoint(x: 10, y: 60), in: annotations, scale: 1, slop: 0, map: partlyHidden)
                 == 1)
+    }
+
+    @Test func anArrowAcrossASeamIsHitOnTheShaftItDraws() {
+        let map = RenderMap(
+            crop: PixelRect(x: 0, y: 0, width: 1200, height: 1200),
+            rows: AxisMap(extent: 1200, bands: [100..<1000], gap: 18),
+            columns: AxisMap(extent: 1200, bands: [], gap: 18))
+        let arrow = Annotation(
+            id: 1, shape: .arrow(tail: CGPoint(x: 0, y: 0), head: CGPoint(x: 1000, y: 1100)))
+        // Drawn from (0,0) to (1000,218): (400,87.2) lies on that shaft, above the seam.
+        #expect(
+            HitTest.annotation(
+                at: CGPoint(x: 400, y: 87.2), in: [arrow], scale: 1, slop: 6, map: map) == 1)
+    }
+
+    @Test func aStepOverASeamIsHitWhereItsCircleDraws() {
+        let map = RenderMap(
+            crop: PixelRect(x: 0, y: 0, width: 400, height: 1400),
+            rows: AxisMap(extent: 1400, bands: [120..<1120], gap: 36),
+            columns: AxisMap(extent: 400, bands: [], gap: 36))
+        let step = Annotation(id: 1, shape: .step(center: CGPoint(x: 200, y: 110)))
+        // The circle drawn at (200,110) runs on over the gap below it.
+        #expect(
+            HitTest.annotation(
+                at: CGPoint(x: 200, y: 140), in: [step], scale: 2, slop: 0, map: map) == 1)
+    }
+
+    @Test func aCroppedRenderIsHitInRenderedPixels() {
+        let map = RenderMap(
+            crop: PixelRect(x: 100, y: 100, width: 300, height: 300),
+            rows: AxisMap(extent: 300, bands: [], gap: 20),
+            columns: AxisMap(extent: 300, bands: [], gap: 20))
+        let box = Annotation(
+            id: 1, shape: .highlight(rect: CGRect(x: 150, y: 150, width: 20, height: 20)))
+        #expect(
+            HitTest.annotation(at: CGPoint(x: 60, y: 60), in: [box], scale: 1, slop: 0, map: map)
+                == 1)
+        #expect(
+            HitTest.annotation(
+                at: CGPoint(x: 160, y: 160), in: [box], scale: 1, slop: 0, map: map) == nil)
     }
 
     @Test func crossingSeamsPreferTheNearerCentreLineThenTheVerticalOne() {

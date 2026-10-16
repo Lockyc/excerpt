@@ -284,7 +284,7 @@ final class EditorModel {
     func textID(at pointer: Pointer, map: RenderMap) -> Int? {
         guard
             let id = HitTest.annotation(
-                at: pointer.original, in: document.annotations, scale: document.scale, slop: 0,
+                at: pointer.rendered, in: document.annotations, scale: document.scale, slop: 0,
                 map: map),
             let annotation = document.annotations.first(where: { $0.id == id }),
             case .text = annotation.shape

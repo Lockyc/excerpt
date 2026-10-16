@@ -7,33 +7,37 @@ public enum SeamEdge: Sendable {
     case after
 }
 
-/// What a click lands on, in the coordinates the editor has: original pixels for annotations,
-/// rendered pixels for seams.
+/// What a click lands on, in rendered pixels: where the render draws each thing.
 public enum HitTest {
-    /// The topmost annotation under `p` (original pixels): within `slop` of an arrow's shaft or a
-    /// path's segments (or inside a filled closed path), or of any other annotation's bounds. `slop` is in original pixels (`scale` already converts
-    /// stroke points to original pixels). An annotation the render doesn't draw
-    /// (`AnnotationGeometry.isDrawn` under `map`) can't be hit.
+    /// The topmost annotation under rendered point `p`: within `slop` rendered pixels of an
+    /// arrow's shaft or a path's segments (or inside a filled closed path), or of any other
+    /// annotation's drawn bounds. Each shape is placed through `map` as `AnnotationRenderer`
+    /// draws it, so a shape crossing a seam is hit where it shows. An annotation the render
+    /// doesn't draw (`AnnotationGeometry.isDrawn` under `map`) can't be hit.
     public static func annotation(
         at p: CGPoint, in annotations: [Annotation], scale: Double, slop: Double,
         map: RenderMap
     ) -> Int? {
         for annotation in annotations.reversed() {
             if !AnnotationGeometry.isDrawn(annotation, map: map, scale: scale) { continue }
+            let w = AnnotationGeometry.lineWidth(annotation, scale: scale)
             switch annotation.shape {
             case .arrow(let tail, let head):
-                let reach = AnnotationGeometry.lineWidth(annotation, scale: scale) / 2 + slop
-                if distance(from: p, toSegment: tail, head) <= reach { return annotation.id }
+                let from = map.point(tail)
+                let to = map.point(head)
+                if distance(from: p, toSegment: from, to) <= w / 2 + slop { return annotation.id }
             case .path(let points, let closed, let fill):
-                let reach = AnnotationGeometry.lineWidth(annotation, scale: scale) / 2 + slop
-                let onStroke = AnnotationGeometry.segments(points, closed: closed).contains {
-                    distance(from: p, toSegment: $0.0, $0.1) <= reach
+                let placed = points.map { map.point($0) }
+                let onStroke = AnnotationGeometry.segments(placed, closed: closed).contains {
+                    distance(from: p, toSegment: $0.0, $0.1) <= w / 2 + slop
                 }
-                if onStroke || (closed && fill && contains(p, polygon: points)) {
+                if onStroke || (closed && fill && contains(p, polygon: placed)) {
                     return annotation.id
                 }
             default:
-                let bounds = AnnotationGeometry.bounds(of: annotation, scale: scale)
+                guard let bounds = placedBounds(of: annotation, scale: scale, map: map) else {
+                    continue
+                }
                 let reach = bounds.insetBy(dx: -slop, dy: -slop)
                 if p.x >= reach.minX, p.x <= reach.maxX, p.y >= reach.minY, p.y <= reach.maxY {
                     return annotation.id
@@ -41,6 +45,31 @@ public enum HitTest {
             }
         }
         return nil
+    }
+
+    /// The rendered rect a rectangle, highlight, blur, text or step covers, stroke included,
+    /// placed as `AnnotationRenderer` places it: rects through `map.rect`; text and a step at
+    /// full size from their mapped origin or centre.
+    static func placedBounds(of annotation: Annotation, scale: Double, map: RenderMap)
+        -> CGRect?
+    {
+        let w = AnnotationGeometry.lineWidth(annotation, scale: scale)
+        switch annotation.shape {
+        case .rectangle(let rect):
+            return map.rect(rect.standardized)?.insetBy(dx: -w / 2, dy: -w / 2)
+        case .highlight(let rect), .blur(let rect):
+            return map.rect(rect.standardized)
+        case .text(let origin, _, _):
+            let bounds = AnnotationGeometry.bounds(of: annotation, scale: scale)
+            let topLeft = map.point(origin, bias: .after)
+            return bounds.offsetBy(dx: topLeft.x - origin.x, dy: topLeft.y - origin.y)
+        case .step(let center):
+            let bounds = AnnotationGeometry.bounds(of: annotation, scale: scale)
+            let placed = map.point(center)
+            return bounds.offsetBy(dx: placed.x - center.x, dy: placed.y - center.y)
+        case .arrow, .path:
+            return nil
+        }
     }
 
     /// The seam whose gap is nearest rendered point `p`, within `slop` rendered pixels (`slop`

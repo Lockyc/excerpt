@@ -88,7 +88,7 @@ extension EditorModel {
             }
             guard tool == .select else { return nil }
             return HitTest.annotation(
-                at: p.original, in: document.annotations, scale: document.scale, slop: slop,
+                at: p.rendered, in: document.annotations, scale: document.scale, slop: slop,
                 map: map
             ).map(Grab.annotation)
         case .path:
@@ -106,7 +106,7 @@ extension EditorModel {
     private func ownAnnotation(at p: Pointer, map: RenderMap) -> Grab? {
         let own = document.annotations.filter { tool.draws($0.shape) }
         return HitTest.annotation(
-            at: p.original, in: own, scale: document.scale, slop: slop, map: map
+            at: p.rendered, in: own, scale: document.scale, slop: slop, map: map
         ).map(Grab.annotation)
     }
 
