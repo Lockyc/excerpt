@@ -54,9 +54,17 @@ main() {
     staged="$app_dir/.Excerpt.app.new"
     in_dir "$app_dir" rm -rf "$staged"
     in_dir "$app_dir" ditto "$new" "$staged" || fail "couldn't copy Excerpt into $app_dir."
-    in_dir "$app_dir" rm -rf "$target" \
-        || fail "couldn't remove the old $target. Allow your terminal in System Settings > Privacy & Security > App Management, or drag the old app to the Trash, then re-run."
-    in_dir "$app_dir" mv "$staged" "$target" || fail "couldn't move Excerpt into place at $target."
+    old="$app_dir/.Excerpt.app.old"
+    in_dir "$app_dir" rm -rf "$old"
+    if [ -e "$target" ]; then
+        in_dir "$app_dir" mv "$target" "$old" \
+            || fail "couldn't move the old $target aside. Allow your terminal in System Settings > Privacy & Security > App Management, or drag the old app to the Trash, then re-run."
+    fi
+    if ! in_dir "$app_dir" mv "$staged" "$target"; then
+        [ ! -e "$old" ] || in_dir "$app_dir" mv "$old" "$target" || true
+        fail "couldn't move Excerpt into place at $target."
+    fi
+    in_dir "$app_dir" rm -rf "$old"
 
     echo "→ linking $bin_dir/excerpt"
     [ -d "$bin_dir" ] || in_dir "$(dirname "$bin_dir")" mkdir -p "$bin_dir"
