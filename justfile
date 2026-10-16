@@ -5,8 +5,8 @@
 default:
     @if command -v perl >/dev/null 2>&1; then just --color always --list | perl -CS -Mutf8 -lpe 'BEGIN{($w)=`stty size 2>/dev/null </dev/tty`=~/ (\d+)/; $w||=100; $col=(-t STDOUT && !exists $ENV{NO_COLOR})} s/\e\[[0-9;]*m//g unless $col; (my $v=$_)=~s/\e\[[0-9;]*m//g; if(length($v)>$w){my($o,$n)=("",0); while(length && $n<$w-1){ if($col && s/^(\e\[[0-9;]*m)//){$o.=$1}else{s/^(.)//;$o.=$1;$n++} } $_=$o."…".($col?"\e[0m":"")}'; else just --list; fi
 
-sign_identity := env("EXCERPT_SIGN_IDENTITY", "Developer ID Application")
-app_dir := "build/Excerpt.app"
+sign_identity := env("APPLE_SIGNING_IDENTITY", "Developer ID Application")
+app := "build/Excerpt.app"
 
 [group("dev")]
 [doc("Compile all targets (debug)")]
@@ -26,7 +26,7 @@ fmt:
 [group("dev")]
 [doc("Pre-merge gate: shellcheck, format check, build, tests")]
 gate:
-    shellcheck install.sh scripts/*.sh
+    shellcheck install.sh
     swift format lint --strict --recursive Package.swift Sources Tests
     swift build
     swift test
@@ -35,22 +35,22 @@ gate:
 [doc("Build the signed Excerpt.app into build/")]
 bundle:
     swift build -c release --product Excerpt
-    rm -rf {{app_dir}}
-    mkdir -p {{app_dir}}/Contents/MacOS
-    cp "$(swift build -c release --show-bin-path)/Excerpt" {{app_dir}}/Contents/MacOS/Excerpt
-    sed "s/__VERSION__/$(tr -d '[:space:]' < VERSION)/g" Support/Info.plist > {{app_dir}}/Contents/Info.plist
-    codesign --force --options runtime --timestamp --sign "{{sign_identity}}" {{app_dir}}
+    rm -rf {{app}}
+    mkdir -p {{app}}/Contents/MacOS
+    cp "$(swift build -c release --show-bin-path)/Excerpt" {{app}}/Contents/MacOS/Excerpt
+    sed "s/__VERSION__/$(tr -d '[:space:]' < VERSION)/g" Support/Info.plist > {{app}}/Contents/Info.plist
+    codesign --force --options runtime --timestamp --sign "{{sign_identity}}" {{app}}
 
 [group("app")]
 [doc("Build and launch the app from build/")]
 run: bundle quit
-    @just launch {{app_dir}}
+    @just launch {{app}}
 
 [group("app")]
 [doc("Build, install to /Applications, launch")]
 install: bundle quit
     rm -rf /Applications/Excerpt.app
-    ditto {{app_dir}} /Applications/Excerpt.app
+    ditto {{app}} /Applications/Excerpt.app
     @just launch /Applications/Excerpt.app
 
 # Quits any running Excerpt, force-killing one still alive after 3s.
@@ -69,14 +69,3 @@ launch path:
     #!/usr/bin/env bash
     for _ in {1..20}; do open "{{path}}" 2>/dev/null && exit 0; sleep 0.25; done
     open "{{path}}"
-
-[group("release")]
-[doc("Build, notarize and staple the app; zip it to build/Excerpt.zip")]
-notarize:
-    scripts/release.sh notarize
-
-[group("release")]
-[doc("Release VERSION: notarize, tag, fast-forward main, publish with NOTES")]
-[no-cd]
-release notes:
-    "{{justfile_directory()}}/scripts/release.sh" publish "{{notes}}"

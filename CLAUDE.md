@@ -32,11 +32,12 @@ runs the command without the app.
 
 ## Branch and release model
 
-`main` + `dev`. Work lands on `dev`. `main` advances two ways only: at a release, `just release`
-moves it to the release commit with `git push origin HEAD:main` — a non-force push, so
-fast-forward only, and the shared checkout never switches branch; or by a docs-only commit
-forward-merged into `dev` straight after. The version's one source is the tracked root
-`VERSION` file; a release tags `v<version>` and publishes a GitHub release with notes.
-`just release NOTES.md` cuts it and needs the notary credentials in the env
-(`scripts/release.sh` names them). No CI: excerpt ships on macOS only, so the local `just gate`
-is the check.
+`main` + `dev`. Work lands on `dev`. `main` advances two ways only: at a release, by a
+non-force `git push origin HEAD:main` to the release commit (fast-forward only, and the shared
+checkout never switches branch); or by a docs-only commit forward-merged into `dev` straight
+after. The version's one source is the tracked root `VERSION` file; a release tags
+`v<version>` and publishes `Excerpt.zip` in a GitHub release with notes. The maintainer's
+release tooling, outside this repo, cuts it from a clean, pushed `dev`. The interface it relies on
+is `just gate`, and `just bundle` signing the justfile's `app` with the Developer ID named by
+`APPLE_SIGNING_IDENTITY` and the hardened runtime. No CI: excerpt ships on macOS only, so the
+local `just gate` is the check.
