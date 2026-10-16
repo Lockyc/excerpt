@@ -9,6 +9,8 @@ header rows and its totals, drop the thousand rows between, and the join is mark
 seam that says how much was removed. It works across columns too, and on long scrolling
 captures of web pages and forms.
 
+![A 64-row invoice sheet in Excerpt's editor: rows 8 to 60 cut out, the header and totals joined by a torn seam marked "1,431 px hidden"](docs/screenshots/cut.png)
+
 Around that: area, window, fullscreen and scrolling capture, text capture (OCR), a floating
 preview, an annotation editor, and an export that splits tall captures into tiles Claude can
 read.
