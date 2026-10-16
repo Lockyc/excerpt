@@ -179,22 +179,23 @@ public enum Gestures {
 
     /// `cuts` with the seam removing `band` on `axis` moved so that its `edge` is at `position`:
     /// every cut making up the band is replaced by one cut. The edge stays at least one line
-    /// from the other edge and inside `0...extent`.
+    /// from the other edge and inside `0...extent`. The edge not moved stays where those cuts
+    /// put it, even past a crop that clips `band`, so un-cropping later shows nothing new.
     public static func adjusting(
         _ cuts: [Cut], axis: Axis, band: Range<Int>, edge: SeamEdge, to position: Int,
         extent: Int, snapping buffer: PixelBuffer?, radius: Int
     ) -> [Cut] {
         let target = snapEdge(
             position, axis: axis, extent: extent, snapping: buffer, radius: radius)
-        var lower = band.lowerBound
-        var upper = band.upperBound
+        let kept = removing(cuts, axis: axis, band: band)
+        let replaced = cuts.filter { $0.axis == axis && $0.upper > $0.lower && !kept.contains($0) }
+        var lower = replaced.map(\.lower).min().map { min($0, band.lowerBound) } ?? band.lowerBound
+        var upper = replaced.map(\.upper).max().map { max($0, band.upperBound) } ?? band.upperBound
         switch edge {
-        case .before: lower = min(max(0, target), upper - 1)
-        case .after: upper = max(min(extent, target), lower + 1)
+        case .before: lower = min(max(0, target), band.upperBound - 1)
+        case .after: upper = max(min(extent, target), band.lowerBound + 1)
         }
-        return removing(cuts, axis: axis, band: band) + [
-            Cut(axis: axis, lower: lower, upper: upper)
-        ]
+        return kept + [Cut(axis: axis, lower: lower, upper: upper)]
     }
 
     /// `cuts` without every cut making up the seam that removes `band` on `axis`.

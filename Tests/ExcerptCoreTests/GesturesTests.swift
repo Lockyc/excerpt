@@ -197,6 +197,15 @@ import Testing
         #expect(off == [Cut(axis: .horizontal, lower: 100, upper: 400)])
     }
 
+    @Test func adjustingKeepsTheCutACropHides() {
+        // A crop at y 100 clips cut 50..<300 to the seam band 100..<300.
+        let cuts = [Cut(axis: .horizontal, lower: 50, upper: 300)]
+        let moved = Gestures.adjusting(
+            cuts, axis: .horizontal, band: 100..<300, edge: .after, to: 350, extent: 400,
+            snapping: nil, radius: 0)
+        #expect(moved == [Cut(axis: .horizontal, lower: 50, upper: 350)])
+    }
+
     @Test func adjustedEdgesSnap() {
         let cuts = [Cut(axis: .horizontal, lower: 100, upper: 200)]
         let snapped = Gestures.adjusting(
