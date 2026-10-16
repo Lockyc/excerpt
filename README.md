@@ -66,6 +66,8 @@ file; the original and your edits stay in a separate `… original.png`, so reop
 lets you adjust them; the menu bar's **Recent Captures** reopens one. **Border** frames the image in a solid line of your colour and width, so a screenshot pasted
 into an email stands apart from it. **Save** (⌘S) saves, copies the image and closes the editor.
 
+![The cut invoice sheet with the two overdue rows highlighted, numbered 1 and 2, and their client names blurred](docs/screenshots/annotate.png)
+
 **For Claude** (⇧⌘C in the editor) writes the capture as tiles sized for Claude to read plus a
 `text.md` of its text with each cut marked, and copies `@` references to paste into Claude
 Code. The same works for any image file from the command line:
