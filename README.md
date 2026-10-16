@@ -75,8 +75,8 @@ excerpt read shot.png   # text on stdout, tile paths on stderr
 ```
 
 Known limits: tiles split on height only, so a capture over 2000pt wide reaches Claude downscaled;
-`text.md` reads columns that share a background row by row; scrolling capture stops rather than
-guess on pages with large animations or video.
+`text.md` reads columns that share a background row by row; scrolling capture stops on pages
+with large animations or video.
 
 ## Build from source
 
