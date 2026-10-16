@@ -75,7 +75,10 @@ final class CaptureCoordinator {
                 if case .window(let window) = await overlay.run(
                     mode: .window(windows: windows), stills: stills)
                 {
-                    let still = stills.first { $0.frame.intersects(window.frame) }
+                    // The display holding most of the window sets its scale and wallpaper.
+                    let still = stills.filter { $0.frame.intersects(window.frame) }.max {
+                        Self.overlap($0.frame, window.frame) < Self.overlap($1.frame, window.frame)
+                    }
                     let scale = still?.scale ?? 2
                     var image = try await capturer.image(of: window, scale: scale)
                     if preferences.windowBackdrop {
@@ -130,6 +133,12 @@ final class CaptureCoordinator {
     }
 
     /// The selection `rect`, in pixels, cut from `still`.
+    /// The area `a` and `b` share.
+    private static func overlap(_ a: CGRect, _ b: CGRect) -> CGFloat {
+        let shared = a.intersection(b)
+        return shared.isNull ? 0 : shared.width * shared.height
+    }
+
     private static func crop(_ still: DisplayStill, to rect: CGRect) throws -> CGImage {
         guard let image = still.image.cropping(to: rect) else { throw CropFailed() }
         return image
@@ -189,7 +198,7 @@ final class CaptureCoordinator {
             NSScreen.screens.first { $0.displayID == region.displayID }?.visibleFrame
             ?? region.appKitFrame
         let hud = ScrollChromeLayout.hud(
-            size: ScrollWindows.hudSize, region: region.appKitFrame, visible: visible)
+            size: ScrollChromeLayout.hudSize, region: region.appKitFrame, visible: visible)
         let capture = ScrollCapture(
             source: source, scroller: EventScroller(region: region, hud: hud),
             stepPoints: region.stepPoints, scale: Double(region.scale), start: start)

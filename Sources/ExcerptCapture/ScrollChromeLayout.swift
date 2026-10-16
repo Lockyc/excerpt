@@ -9,6 +9,7 @@ import CoreGraphics
 public enum ScrollChromeLayout {
     public static let gap: CGFloat = 12
     public static let previewWidth: CGFloat = 180
+    public static let hudSize = CGSize(width: 520, height: 128)
 
     /// Right of the region, else left of it, else inside its right edge; top-aligned with it.
     public static func preview(region: CGRect, visible: CGRect) -> CGRect {

@@ -18,9 +18,14 @@ let touchBarShortcuts: Set<[UInt32]> = [[22, 768], [22, 4864]]
 /// True when an enabled system shortcut already owns this key + modifiers. Carbon's
 /// RegisterEventHotKey does not see these, so the combination would register "successfully"
 /// while the system acts on the press instead. The Touch Bar screenshot shortcuts never count.
+/// The table sets the fn bit on arrow- and F-key entries, which a binding never carries, so
+/// only the bits a binding can hold are compared.
 public func systemShortcutHolds(keyCode: UInt32, modifiers: UInt32, in table: [SymbolicHotKey])
     -> Bool
 {
     guard !touchBarShortcuts.contains([keyCode, modifiers]) else { return false }
-    return table.contains { $0.enabled && $0.keyCode == keyCode && $0.modifiers == modifiers }
+    return table.contains {
+        $0.enabled && $0.keyCode == keyCode
+            && $0.modifiers & HotKeyBinding.modifierMask == modifiers
+    }
 }

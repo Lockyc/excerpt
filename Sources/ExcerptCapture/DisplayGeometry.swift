@@ -55,12 +55,4 @@ public enum DisplayGeometry {
             x: rect.minX - displayFrame.minX, y: displayFrame.maxY - rect.maxY, width: rect.width,
             height: rect.height)
     }
-
-    /// A display-local point → Quartz global points, where CGEvents are posted.
-    public static func quartzPoint(
-        forLocalPoint point: CGPoint, displayFrame: CGRect, primaryHeight: CGFloat
-    ) -> CGPoint {
-        let origin = quartzRect(fromAppKit: displayFrame, primaryHeight: primaryHeight).origin
-        return CGPoint(x: origin.x + point.x, y: origin.y + point.y)
-    }
 }

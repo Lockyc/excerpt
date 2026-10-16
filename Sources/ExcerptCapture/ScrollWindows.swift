@@ -6,8 +6,6 @@ import ExcerptCore
 /// capture never depends on where keyboard focus went.
 @MainActor
 public final class ScrollWindows {
-    public static let hudSize = CGSize(width: 520, height: 128)
-
     private let hud: NSPanel
     private let preview: NSPanel
     private let titleLabel = NSTextField(labelWithString: "")
@@ -19,7 +17,7 @@ public final class ScrollWindows {
     private var shownHeight = -1
     private var activeObserver: NSObjectProtocol?
 
-    /// `region`, `hud` (the HUD's frame, from `ScrollChromeLayout.hud` at `hudSize`) and `visible`
+    /// `region`, `hud` (the HUD's frame, from `ScrollChromeLayout.hud` at its `hudSize`) and `visible`
     /// (its screen's visible frame) in AppKit points.
     public init(
         region: CGRect, hud hudFrame: CGRect, visible: CGRect, onDone: @escaping () -> Void,
@@ -115,7 +113,7 @@ public final class ScrollWindows {
         for label in [titleLabel, detailLabel] {
             label.lineBreakMode = .byWordWrapping
             label.maximumNumberOfLines = 2
-            label.preferredMaxLayoutWidth = Self.hudSize.width - 28
+            label.preferredMaxLayoutWidth = ScrollChromeLayout.hudSize.width - 28
         }
         let text = NSStackView(views: [titleLabel, detailLabel])
         text.orientation = .vertical

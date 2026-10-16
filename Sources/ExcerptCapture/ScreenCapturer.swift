@@ -38,6 +38,18 @@ public final class ScreenCapturer {
     @discardableResult
     public nonisolated static func requestPermission() -> Bool { CGRequestScreenCaptureAccess() }
 
+    /// A cursorless, best-resolution still of `width`×`height` points at `scale`.
+    private static func still(width: CGFloat, height: CGFloat, scale: CGFloat)
+        -> SCStreamConfiguration
+    {
+        let configuration = SCStreamConfiguration()
+        configuration.width = Int(width * scale)
+        configuration.height = Int(height * scale)
+        configuration.showsCursor = false
+        configuration.captureResolution = .best
+        return configuration
+    }
+
     /// A full-resolution still of every display, without excerpt's own windows or the Finder's
     /// desktop icons. Taken before the overlay appears: the frozen screen. The displays are
     /// captured at once, so each one added doesn't lengthen the wait for the overlay.
@@ -55,11 +67,8 @@ public final class ScreenCapturer {
             guard let screen = NSScreen.screens.first(where: { $0.displayID == display.displayID })
             else { return nil }
             let scale = screen.backingScaleFactor
-            let configuration = SCStreamConfiguration()
-            configuration.width = Int(CGFloat(display.width) * scale)
-            configuration.height = Int(CGFloat(display.height) * scale)
-            configuration.showsCursor = false
-            configuration.captureResolution = .best
+            let configuration = Self.still(
+                width: CGFloat(display.width), height: CGFloat(display.height), scale: scale)
             return StillRequest(
                 displayID: display.displayID, frame: screen.frame, scale: scale,
                 filter: SCContentFilter(display: display, excludingWindows: excluded),
@@ -131,11 +140,8 @@ public final class ScreenCapturer {
             $0.windowLayer <= desktopLayer && $0.frame.intersects(display.frame)
         }
         guard !windows.isEmpty else { return nil }
-        let configuration = SCStreamConfiguration()
-        configuration.width = Int(CGFloat(display.width) * scale)
-        configuration.height = Int(CGFloat(display.height) * scale)
-        configuration.showsCursor = false
-        configuration.captureResolution = .best
+        let configuration = Self.still(
+            width: CGFloat(display.width), height: CGFloat(display.height), scale: scale)
         let filter = SCContentFilter(display: display, including: windows)
         return try await SCScreenshotManager.captureImage(
             contentFilter: filter, configuration: configuration)
@@ -149,11 +155,7 @@ public final class ScreenCapturer {
     /// desktop-independent filter, which no single display can hold.
     public func image(of window: CapturableWindow, scale: CGFloat) async throws -> CGImage {
         let frame = window.window.frame
-        let configuration = SCStreamConfiguration()
-        configuration.width = Int(frame.width * scale)
-        configuration.height = Int(frame.height * scale)
-        configuration.showsCursor = false
-        configuration.captureResolution = .best
+        let configuration = Self.still(width: frame.width, height: frame.height, scale: scale)
         let content = try await SCShareableContent.excludingDesktopWindows(
             true, onScreenWindowsOnly: true)
         let filter: SCContentFilter

@@ -17,6 +17,14 @@ import Testing
     @Test func differentModifiersAreNotAConflict() {
         #expect(!systemShortcutHolds(keyCode: 21, modifiers: 4864, in: table))
     }
+    @Test func theFnBitOnArrowAndFKeyEntriesIsIgnored() {
+        let table = [
+            SymbolicHotKey(keyCode: 126, modifiers: 0x21000, enabled: true),  // ⌃↑ Mission Control
+            SymbolicHotKey(keyCode: 103, modifiers: 0x20000, enabled: true),  // F11 Show Desktop
+        ]
+        #expect(systemShortcutHolds(keyCode: 126, modifiers: 0x1000, in: table))
+        #expect(systemShortcutHolds(keyCode: 103, modifiers: 0, in: table))
+    }
     @Test func touchBarScreenshotShortcutsAreNotAConflict() {
         let touchBar = [
             SymbolicHotKey(keyCode: 22, modifiers: 768, enabled: true),
