@@ -11,9 +11,10 @@ captures of web pages and forms.
 
 ![A 64-row invoice sheet in Excerpt's editor: rows 8 to 60 cut out, the header and totals joined by a torn seam marked "1,431 px hidden"](docs/screenshots/cut.png)
 
-Around that: area, window, fullscreen and scrolling capture, text capture (OCR), a floating
-preview, an annotation editor, and an export that splits tall captures into tiles Claude can
-read.
+It also does everything you'd expect of a screenshot tool: area, window, fullscreen and
+scrolling capture, copying the text out of a capture (OCR), a floating preview after each
+capture, and an editor for arrows, text and highlights. Tall captures can be exported as tiles
+sized for Claude to read.
 
 ## Install
 
