@@ -49,7 +49,7 @@ final class ClaudeExporter {
     /// Whether `a` and `b` are one capture's primary: they share a cache folder.
     func isSameCapture(_ a: URL, _ b: URL) -> Bool { cache.folder(for: a) == cache.folder(for: b) }
 
-    /// The editor's export: what it shows, unsaved edits included.
+    /// The editor's export: the render of the edits it has just saved.
     func export(original: CGImage, edits: EditDocument, primary: URL) {
         run(primary: primary) { cache, recognizer in
             try ClaudeBundle.write(

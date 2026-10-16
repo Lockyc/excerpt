@@ -196,8 +196,7 @@ last chosen, remembered across launches, and stays selected after it is drawn so
 showing.
 
 **Text** is drawn either plain in its colour or on a **background**: a rounded pill in its colour
-with the text in `Palette.contrastingInk` (black on yellow, white otherwise). New text starts
-with the background on. Typing previews through Core's renderer on every keystroke — the text view
+with the text in `Palette.contrastingInk` (black on yellow, white otherwise). Typing previews through Core's renderer on every keystroke — the text view
 under it supplies only input, caret and selection, its own glyphs transparent — so what is typed
 is what saves. Return commits; ⌥Return adds a line.
 
