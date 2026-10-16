@@ -27,13 +27,17 @@ fail() {
     exit 1
 }
 
-notarize() {
+require_credentials() {
     local v
     for v in APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
         if [ -z "${!v:-}" ]; then
             fail "$v is not set; export the notary credentials first."
         fi
     done
+}
+
+notarize() {
+    require_credentials
     just bundle
     rm -f "$zip"
     ditto -c -k --keepParent "$app" "$zip"
@@ -70,8 +74,19 @@ publish() {
     if [ "$(git rev-parse --abbrev-ref HEAD)" != dev ]; then
         fail "release from dev."
     fi
+    if ! [[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        fail "VERSION holds '$version', not MAJOR.MINOR.PATCH."
+    fi
     if ! git diff --quiet || ! git diff --cached --quiet; then
         fail "the tree has uncommitted changes."
+    fi
+    # SwiftPM compiles every file under Sources/, tracked or not.
+    if [ -n "$(git ls-files --others --exclude-standard -- Sources Support Package.swift VERSION)" ]; then
+        fail "the build would include untracked files."
+    fi
+    require_credentials
+    if ! gh auth status > /dev/null 2>&1; then
+        fail "gh isn't authenticated; run gh auth login."
     fi
     git fetch --quiet --tags origin
     if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/dev)" ]; then

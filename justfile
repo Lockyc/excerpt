@@ -38,7 +38,7 @@ bundle:
     rm -rf {{app_dir}}
     mkdir -p {{app_dir}}/Contents/MacOS
     cp "$(swift build -c release --show-bin-path)/Excerpt" {{app_dir}}/Contents/MacOS/Excerpt
-    sed "s/__VERSION__/$(cat VERSION)/g" Support/Info.plist > {{app_dir}}/Contents/Info.plist
+    sed "s/__VERSION__/$(tr -d '[:space:]' < VERSION)/g" Support/Info.plist > {{app_dir}}/Contents/Info.plist
     codesign --force --options runtime --timestamp --sign "{{sign_identity}}" {{app_dir}}
 
 [group("app")]
