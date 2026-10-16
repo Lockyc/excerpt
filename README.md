@@ -61,11 +61,12 @@ shown as a thumbnail with **Edit**, **For Claude** and **Close**. Files in that 
 than 30 days move into `YYYY/MM-Month/` folders, names unchanged (also a setting). The editor has
 arrow, rectangle, path (click or freehand lines and outlines, optionally filled), text (plain or
 on a background of its colour), numbered steps, highlight, blur,
-crop and **cut** (`C`); a selected item's colour, size and options float beside it. Cut: drag across the rows or columns
-to remove, and the join becomes a torn seam. Cut and blurred content never reaches the saved
-file; the original and your edits stay in a separate `… original.png`, so reopening a capture
-lets you adjust them; the menu bar's **Recent Captures** reopens one. **Border** frames the image in a solid line of your colour and width, so a screenshot pasted
-into an email stands apart from it. **Save** (⌘S) saves, copies the image and closes the editor.
+crop and **cut** (`C`); a selected item's colour, size and options float beside it. To cut,
+drag across the rows or columns to remove; the join becomes a torn seam. Cut and blurred
+content never reaches the saved file. The original and your edits are kept in a separate
+`… original.png`, so you can reopen a capture from the menu bar's **Recent Captures** and
+adjust them. **Border** frames the image in a solid line of your colour and width, so a
+screenshot pasted into an email stands apart from the text around it. **Save** (⌘S) saves, copies the image and closes the editor.
 
 ![The cut invoice sheet with the two overdue rows highlighted, numbered 1 and 2, and their client names blurred](docs/screenshots/annotate.png)
 
@@ -78,7 +79,8 @@ excerpt read shot.png   # text on stdout, tile paths on stderr
 ```
 
 Known limits: tiles split on height only, so a capture over 2000pt wide reaches Claude downscaled;
-`text.md` reads columns that share a background row by row; scrolling capture stops on pages
+side-by-side columns on one background are read across, line by line, so their text interleaves
+in `text.md`; scrolling capture stops on pages
 with large animations or video.
 
 ## Build from source
