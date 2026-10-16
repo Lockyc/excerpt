@@ -81,7 +81,8 @@ final class EditorModel {
 
     /// What the canvas shows: the whole capture while the crop tool is active, so a crop can
     /// be redrawn; otherwise the document, with the text being typed in place of the text it
-    /// retypes, or added, and the path being built run on to the pointer.
+    /// retypes, or added, and the path being built run on to the pointer, or shown closed while
+    /// the pointer is where a press closes it.
     var displayDocument: EditDocument {
         var shown = document
         if tool == .crop { shown.crop = nil }
@@ -96,7 +97,10 @@ final class EditorModel {
             let i = shown.annotations.firstIndex(where: { $0.id == building.id }),
             case .path(let points, let closed, let fill) = shown.annotations[i].shape
         {
-            shown.annotations[i].shape = .path(points: points + [hover], closed: closed, fill: fill)
+            shown.annotations[i].shape =
+                building.closes
+                ? .path(points: points, closed: true, fill: fill)
+                : .path(points: points + [hover], closed: closed, fill: fill)
         }
         return shown
     }

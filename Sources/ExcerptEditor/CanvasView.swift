@@ -94,19 +94,50 @@ final class CanvasView: NSView, NSTextViewDelegate {
             base = Renderer.renderBase(model.original, edits: wanted)
             resize()
         }
-        if model.tool != cursorTool { window?.invalidateCursorRects(for: self) }
         needsDisplay = true
         syncTextView()
         placeItemBar()
+        updateCursor()
         onChange()
     }
 
-    /// The tool the canvas cursor shows.
-    private var cursorTool: Tool?
+    /// Sets the pointer for where it is over the canvas, in the key window only.
+    private func updateCursor() {
+        guard let window, window.isKeyWindow else { return }
+        let location = convert(window.mouseLocationOutsideOfEventStream, from: nil)
+        guard visibleRect.contains(location) else { return }
+        let p = Pointer(
+            rendered: CGPoint(x: location.x / zoom, y: location.y / zoom), map: base.map)
+        cursor(at: p).set()
+    }
 
-    override func resetCursorRects() {
-        cursorTool = model.tool
-        addCursorRect(visibleRect, cursor: ToolGlyph.cursor(model.tool))
+    /// A hand over what a press would move, closed while it moves; a resize arrow on a seam's
+    /// edge; a pointing hand on a seam or the first vertex that closes the path being built;
+    /// otherwise the tool's own.
+    private func cursor(at p: Pointer) -> NSCursor {
+        func resize(_ seam: Seam) -> NSCursor {
+            seam.axis == .horizontal ? .rowResize : .columnResize
+        }
+        switch model.drag {
+        case .move?, .vertex?: return .closedHand
+        case .edge(let seam, _, _)?: return resize(seam)
+        case nil: break
+        default: return ToolGlyph.cursor(model.tool)
+        }
+        let option = NSEvent.modifierFlags.contains(.option)
+        switch model.grab(at: p, map: base.map, option: option) {
+        case .annotation?, .vertex?: return .openHand
+        case .seamEdge(let seam, _)?: return resize(seam)
+        case .segment?: return .crosshair
+        case .seam?, .closePath?: return .pointingHand
+        case nil: return ToolGlyph.cursor(model.tool)
+        }
+    }
+
+    override func cursorUpdate(with event: NSEvent) { updateCursor() }
+    override func flagsChanged(with event: NSEvent) {
+        updateCursor()
+        super.flagsChanged(with: event)
     }
 
     private func resize() {
@@ -314,17 +345,21 @@ final class CanvasView: NSView, NSTextViewDelegate {
         for handle in handles { drawKnob(at: handle, radius: 5 * line, in: context) }
     }
 
-    /// A white disc ringed in the accent: a draggable handle.
-    private func drawKnob(at centre: CGPoint, radius: CGFloat, in context: CGContext) {
+    /// A white disc ringed in the accent: a draggable handle; filled with the accent, the one a
+    /// press is about to take.
+    private func drawKnob(
+        at centre: CGPoint, radius: CGFloat, in context: CGContext, active: Bool = false
+    ) {
         let knob = CGRect(
             x: centre.x - radius, y: centre.y - radius, width: 2 * radius, height: 2 * radius)
-        context.setFillColor(CGColor(gray: 1, alpha: 1))
+        context.setFillColor(active ? Self.accent : CGColor(gray: 1, alpha: 1))
         context.fillEllipse(in: knob)
         context.strokeEllipse(in: knob)
     }
 
     /// The vertices of the path being built, or of the selected path, as handles; while
-    /// building, the first vertex is larger once a click on it would close the path.
+    /// building, the first vertex is larger once a click on it would close the path, and filled
+    /// while the pointer is on it.
     private func drawPathHandles(in context: CGContext) {
         let id: Int?
         if let building = model.building {
@@ -342,7 +377,9 @@ final class CanvasView: NSView, NSTextViewDelegate {
         context.setLineWidth(2 * line)
         for (i, vertex) in points.enumerated() {
             let closes = model.building != nil && i == 0 && points.count >= 3
-            drawKnob(at: base.map.point(vertex), radius: (closes ? 7 : 4) * line, in: context)
+            drawKnob(
+                at: base.map.point(vertex), radius: (closes ? 7 : 4) * line, in: context,
+                active: closes && model.building?.closes == true)
         }
     }
 
@@ -414,14 +451,24 @@ final class CanvasView: NSView, NSTextViewDelegate {
         if let tracking { removeTrackingArea(tracking) }
         let area = NSTrackingArea(
             rect: .zero,
-            options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+            options: [
+                .mouseMoved, .mouseEnteredAndExited, .cursorUpdate, .activeInKeyWindow,
+                .inVisibleRect,
+            ],
             owner: self)
         addTrackingArea(area)
         tracking = area
     }
 
-    override func mouseMoved(with event: NSEvent) { model.hover(pointer(event)) }
-    override func mouseExited(with event: NSEvent) { model.hover(nil) }
+    override func mouseMoved(with event: NSEvent) {
+        model.hover(pointer(event), map: base.map)
+        updateCursor()
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        model.hover(nil, map: base.map)
+        NSCursor.arrow.set()
+    }
 
     override func mouseDragged(with event: NSEvent) {
         model.mouseDragged(pointer(event), map: base.map, snap: snap(event))

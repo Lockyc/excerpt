@@ -140,9 +140,42 @@ import Testing
     @Test func theRubberBandShowsButIsNotStored() {
         let m = model()
         click(m, 10, 10)
-        m.hover(Pointer(rendered: CGPoint(x: 80, y: 90), map: map(m)))
+        m.hover(Pointer(rendered: CGPoint(x: 80, y: 90), map: map(m)), map: map(m))
         #expect(m.displayDocument.annotations.last?.shape == path([(10, 10), (80, 90)]))
         #expect(shape(m) == path([(10, 10)]))
+    }
+
+    @Test func onTheFirstVertexThePathShowsTheCloseAPressWouldMake() {
+        let m = model()
+        click(m, 10, 10)
+        click(m, 200, 10)
+        click(m, 200, 200)
+        let near = Pointer(rendered: CGPoint(x: 13, y: 12), map: map(m))
+        #expect(m.grab(at: near, map: map(m), option: false) == .closePath)
+        m.hover(near, map: map(m))
+        #expect(
+            m.displayDocument.annotations.last?.shape
+                == path([(10, 10), (200, 10), (200, 200)], closed: true))
+        m.hover(Pointer(rendered: CGPoint(x: 60, y: 90), map: map(m)), map: map(m))
+        #expect(
+            m.displayDocument.annotations.last?.shape
+                == path([(10, 10), (200, 10), (200, 200), (60, 90)]))
+    }
+
+    @Test func grabNamesWhatAPressWouldMove() {
+        let m = model()
+        triangle(m)
+        let map = map(m)
+        func grab(_ x: Double, _ y: Double) -> Grab? {
+            m.grab(at: Pointer(rendered: CGPoint(x: x, y: y), map: map), map: map, option: false)
+        }
+        #expect(grab(200, 200) == .vertex(id: 1, index: 2))
+        #expect(grab(105, 10) == .annotation(1))
+        #expect(grab(300, 350) == nil)
+        m.tool = .arrow  // another tool's kind is drawn over, not grabbed
+        #expect(grab(105, 10) == nil)
+        m.tool = .select
+        #expect(grab(105, 10) == .annotation(1))
     }
 
     func triangle(_ m: EditorModel) {

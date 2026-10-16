@@ -24,6 +24,21 @@ enum Pending: Equatable {
     case edge(Seam, SeamEdge, Int)
 }
 
+/// What a press takes hold of rather than drawing something new.
+enum Grab: Equatable {
+    /// An edge of the selected seam, dragged to resize its cut.
+    case seamEdge(Seam, SeamEdge)
+    /// A vertex of the selected path: dragged to reshape, or with ⌥ deleted.
+    case vertex(id: Int, index: Int)
+    /// With ⌥, segment `index` of the selected path, where a vertex is inserted and dragged.
+    case segment(id: Int, index: Int)
+    /// The first vertex of the path being built, closing it.
+    case closePath
+    case seam(Seam)
+    /// An annotation, selected and moved.
+    case annotation(Int)
+}
+
 /// A drag in progress. Shape and move drags have already previewed into the document; `before`
 /// is what to record from, or restore on cancel.
 enum Drag {
@@ -44,36 +59,103 @@ extension EditorModel {
     var minimumDrag: Double { 4 / viewScale }
     var snapRadius: Int { GapSnapper.radius(scale: document.scale) }
 
-    func mouseDown(_ p: Pointer, map: RenderMap, clickCount: Int = 1, option: Bool = false) {
-        cancelDrag()
+    /// What a press at `p` takes hold of under the current tool, before anything new is drawn,
+    /// in the order the press tries them; nil when it would draw, select nothing or add to the
+    /// path being built. The pointer shows it too, so a press does what the pointer promised.
+    func grab(at p: Pointer, map: RenderMap, option: Bool) -> Grab? {
+        if let building {
+            let points = pathPoints(building.id)
+            return points.count >= 3 && isNear(p, points[0], map: map) ? .closePath : nil
+        }
         switch tool {
         case .select, .cut:
             if case .seam(let axis, let band) = selection,
                 let seam = map.seams(axis).first(where: { $0.band == band }),
                 let edge = edge(of: seam, near: p.rendered)
             {
-                setDrag(.edge(seam, edge, start: p.rendered))
-                setPending(.edge(seam, edge, edge == .before ? band.lowerBound : band.upperBound))
-                return
+                return .seamEdge(seam, edge)
             }
-            if tool == .select, editVertex(at: p, map: map, option: option) { return }
+            if tool == .select, let handle = pathHandle(at: p, map: map, option: option) {
+                return handle
+            }
             if let seam = HitTest.seam(at: p.rendered, map: map, slop: slop) {
-                selection = .seam(seam.axis, seam.band)
-                return
+                return .seam(seam)
             }
-            if tool == .select,
-                let id = HitTest.annotation(
-                    at: p.original, in: document.annotations, scale: document.scale, slop: slop,
-                    map: map)
-            {
-                selection = .annotation(id)
-                setDrag(.move(id: id, last: p.original, before: document))
-                return
+            guard tool == .select else { return nil }
+            return HitTest.annotation(
+                at: p.original, in: document.annotations, scale: document.scale, slop: slop,
+                map: map
+            ).map(Grab.annotation)
+        case .path:
+            return pathHandle(at: p, map: map, option: option) ?? ownAnnotation(at: p, map: map)
+        case .arrow, .rectangle, .highlight, .step, .blur:
+            return ownAnnotation(at: p, map: map)
+        case .crop, .text:
+            return nil
+        }
+    }
+
+    /// Under a drawing tool, a press on an annotation that tool draws selects it and starts
+    /// moving it, as the select tool would, instead of drawing a new one over it. Other kinds
+    /// are drawn over, so an arrow can start inside a highlight.
+    private func ownAnnotation(at p: Pointer, map: RenderMap) -> Grab? {
+        let own = document.annotations.filter { tool.draws($0.shape) }
+        return HitTest.annotation(
+            at: p.original, in: own, scale: document.scale, slop: slop, map: map
+        ).map(Grab.annotation)
+    }
+
+    /// Acts on what `grab` found under `p`.
+    private func take(_ grab: Grab, at p: Pointer, option: Bool) {
+        switch grab {
+        case .seamEdge(let seam, let edge):
+            setDrag(.edge(seam, edge, start: p.rendered))
+            setPending(
+                .edge(seam, edge, edge == .before ? seam.band.lowerBound : seam.band.upperBound))
+        case .vertex(let id, let index):
+            let points = pathPoints(id)
+            if option {
+                guard points.count > 2 else { return }
+                editSelectedPath { points, closed, _ in
+                    points.remove(at: index)
+                    if points.count < 3 { closed = false }
+                }
+            } else {
+                let offset = CGPoint(
+                    x: points[index].x - p.original.x, y: points[index].y - p.original.y)
+                setDrag(.vertex(id: id, index: index, offset: offset, before: document))
             }
+        case .segment(let id, let index):
+            let before = document
+            var inserted = pathPoints(id)
+            inserted.insert(p.original, at: index + 1)
+            previewPathPoints(id, inserted)
+            setDrag(.vertex(id: id, index: index + 1, offset: .zero, before: before))
+        case .closePath:
+            finishPath(closing: true)
+        case .seam(let seam):
+            selection = .seam(seam.axis, seam.band)
+        case .annotation(let id):
+            selection = .annotation(id)
+            setDrag(.move(id: id, last: p.original, before: document))
+        }
+    }
+
+    func mouseDown(_ p: Pointer, map: RenderMap, clickCount: Int = 1, option: Bool = false) {
+        cancelDrag()
+        if building != nil, clickCount >= 2 {
+            finishPath()
+            return
+        }
+        if let grab = grab(at: p, map: map, option: option) {
+            take(grab, at: p, option: option)
+            return
+        }
+        switch tool {
+        case .select, .cut:
             selection = nil
             if tool == .cut { setDrag(.region(start: p.original)) }
         case .arrow, .rectangle, .highlight:
-            if grabAnnotation(at: p, map: map) { return }
             let before = document
             let id = document.nextAnnotationID
             var next = document
@@ -85,11 +167,9 @@ extension EditorModel {
             selection = nil
             setDrag(.shape(id: id, start: p.original, before: before))
         case .blur, .crop:
-            if tool == .blur, grabAnnotation(at: p, map: map) { return }
             selection = nil
             setDrag(.region(start: p.original))
         case .step:
-            if grabAnnotation(at: p, map: map) { return }
             let before = document
             let id = document.nextAnnotationID
             var next = document
@@ -102,24 +182,10 @@ extension EditorModel {
             // Placed on press; a drag before release moves it, and release records one step.
             setDrag(.move(id: id, last: p.original, before: before))
         case .path:
-            pathMouseDown(p, map: map, clickCount: clickCount, option: option)
+            pathMouseDown(p)
         case .text:
             break
         }
-    }
-
-    /// Under a drawing tool, a press on an annotation that tool draws selects it and starts
-    /// moving it, as the select tool would, instead of drawing a new one over it. Other kinds
-    /// are drawn over, so an arrow can start inside a highlight.
-    func grabAnnotation(at p: Pointer, map: RenderMap) -> Bool {
-        let own = document.annotations.filter { tool.draws($0.shape) }
-        guard
-            let id = HitTest.annotation(
-                at: p.original, in: own, scale: document.scale, slop: slop, map: map)
-        else { return false }
-        selection = .annotation(id)
-        setDrag(.move(id: id, last: p.original, before: document))
-        return true
     }
 
     func mouseDragged(_ p: Pointer, map: RenderMap, snap: Bool) {
