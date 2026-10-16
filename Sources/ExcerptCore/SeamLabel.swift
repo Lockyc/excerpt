@@ -11,7 +11,7 @@ public enum SeamLabel {
     static func attributedLine(_ text: String, scale: Double) -> (
         line: CTLine, ascent: CGFloat, descent: CGFloat, width: CGFloat
     ) {
-        let font = CTFontCreateUIFontForLanguage(.emphasizedSystem, CGFloat(10 * scale), nil)!
+        let font = TextLayout.font(pixelSize: 10 * scale)
         let attributes: [NSAttributedString.Key: Any] = [
             NSAttributedString.Key(kCTFontAttributeName as String): font,
             NSAttributedString.Key(kCTForegroundColorAttributeName as String): CGColor(
