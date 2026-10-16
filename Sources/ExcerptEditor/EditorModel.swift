@@ -76,8 +76,9 @@ final class EditorModel {
     var isDirty: Bool { document != saved }
     /// A path being built can be undone: undo finishes it, then removes it.
     var canUndo: Bool { history.canUndo || building != nil }
-    /// Not while a path is being built: finishing it records a step, which clears what redo had.
-    var canRedo: Bool { history.canRedo && building == nil }
+    /// Not while a path is being built or text typed: finishing either records a step, which
+    /// clears what redo had.
+    var canRedo: Bool { history.canRedo && building == nil && typing == nil }
 
     /// What the canvas shows: the whole capture while the crop tool is active, so a crop can
     /// be redrawn; otherwise the document, with the text being typed in place of the text it
@@ -174,9 +175,9 @@ final class EditorModel {
         case .annotation(let id)?:
             if !document.annotations.contains(where: { $0.id == id }) { selection = nil }
         case .seam(let axis, let band)?:
-            let extent = axis == .horizontal ? original.height : original.width
-            let bands = CutSet.normalized(document.cuts, axis: axis, extent: extent)
-            if !bands.contains(band) { selection = nil }
+            let map = Renderer.map(
+                width: original.width, height: original.height, edits: displayDocument)
+            if !map.seams(axis).contains(where: { $0.band == band }) { selection = nil }
         case nil:
             break
         }

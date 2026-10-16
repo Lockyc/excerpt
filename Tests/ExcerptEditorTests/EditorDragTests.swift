@@ -506,4 +506,40 @@ import Testing
         m.undo()
         #expect(m.document.crop == PixelRect(x: 60, y: 40, width: 120, height: 100))
     }
+
+    @Test func undoKeepsTheSelectedSeamOfACutTheCropClips() {
+        let m = model(
+            EditDocument(
+                scale: 1, cuts: [Cut(axis: .horizontal, lower: 20, upper: 120)],
+                crop: PixelRect(x: 60, y: 40, width: 240, height: 300), salt: 7))
+        m.apply { $0.annotations = [note(1, CGRect(x: 100, y: 200, width: 20, height: 20))] }
+        let seam = map(m).seams(.horizontal)[0]
+        m.selection = .seam(.horizontal, seam.band)
+        m.undo()
+        #expect(m.selection == .seam(.horizontal, seam.band))
+    }
+
+    @Test func aMoveReleasedPastTheCanvasEdgeLeavesTheAnnotationReachable() {
+        let m = model()
+        m.apply { $0.annotations = [note(1, CGRect(x: 20, y: 20, width: 60, height: 40))] }
+        m.tool = .select
+        drag(m, CGPoint(x: 50, y: 40), CGPoint(x: 2000, y: 40))
+        guard case .rectangle(let rect) = m.document.annotations[0].shape else {
+            Issue.record("not a rectangle")
+            return
+        }
+        #expect(rect.minX < 360)
+    }
+
+    @Test func redoIsUnavailableWhileTypingSoTheTextCantClearIt() {
+        let m = model()
+        m.apply { $0.annotations = [note(1, CGRect(x: 20, y: 20, width: 60, height: 40))] }
+        m.undo()
+        #expect(m.canRedo)
+        m.tool = .text
+        let map = map(m)
+        m.beginTyping(at: Pointer(rendered: CGPoint(x: 200, y: 200), map: map), map: map)
+        m.updateTyping("hi")
+        #expect(!m.canRedo)
+    }
 }

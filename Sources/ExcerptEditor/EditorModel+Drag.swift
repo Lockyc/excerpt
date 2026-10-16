@@ -8,9 +8,14 @@ struct Pointer {
     let rendered: CGPoint
     let original: CGPoint
 
+    /// `rendered` is clamped to the render: AppKit keeps sending drag events past the view's
+    /// edge, and a shape moved out there could never be pointed at again.
     init(rendered: CGPoint, map: RenderMap) {
-        self.rendered = rendered
-        self.original = map.original(rendered)
+        let clamped = CGPoint(
+            x: min(max(rendered.x, 0), Double(map.columns.renderedLength)),
+            y: min(max(rendered.y, 0), Double(map.rows.renderedLength)))
+        self.rendered = clamped
+        self.original = map.original(clamped)
     }
 }
 
