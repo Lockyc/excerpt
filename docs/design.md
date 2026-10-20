@@ -107,6 +107,8 @@ holding one.
   alone.
 - **All-in-one selector:** a menu of the five modes at the pointer, each showing its hotkey,
   shown once the stills are taken; the mode picked runs on them.
+- **Switching mode:** another mode's hotkey, pressed while a selection is up, switches to that
+  mode on the same stills.
 - Stills exclude desktop icons and excerpt's own windows through the `SCContentFilter`.
 - **After every capture that makes a file** it is saved, copied to the clipboard, and shown as
   a large thumbnail (Edit · For Claude · Close, draggable) that closes after 15s (paused

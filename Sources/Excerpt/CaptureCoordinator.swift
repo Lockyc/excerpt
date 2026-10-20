@@ -14,6 +14,10 @@ final class CaptureCoordinator {
     private let selector = CaptureSelector()
     private let onDelivered: (URL, CGImage) -> Void
     private var running = false
+    /// The overlay waiting on a selection, and the mode it is selecting for.
+    private var selecting: (overlay: SelectionOverlay, action: HotKeyAction)?
+    /// The mode a hotkey pressed mid-selection switched to.
+    private var switchedTo: HotKeyAction?
     /// Whether this launch has shown the system's Accessibility prompt.
     private var askedForAccessibility = false
     /// How the scrolling capture in progress was asked to end: the first request wins.
@@ -31,7 +35,10 @@ final class CaptureCoordinator {
     }
 
     func run(_ requested: HotKeyAction) async {
-        guard !running else { return }  // a second hotkey press mid-capture is ignored
+        guard !running else {
+            switchMode(to: requested)
+            return
+        }
         running = true
         defer { running = false }
         guard ensurePermission() else { return }
@@ -63,67 +70,99 @@ final class CaptureCoordinator {
                 action = mode
                 if action.selects { overlay.cover() }
             }
-            switch action {
-            case .area:
-                if case .area(let still, let rect) = await overlay.run(
-                    mode: .area, stills: stills)
-                {
-                    await deliver(try Self.crop(still, to: rect), scale: still.scale)
-                }
-            case .window:
-                let windows = try await capturer.windowsFrontToBack()
-                if case .window(let window) = await overlay.run(
-                    mode: .window(windows: windows), stills: stills)
-                {
-                    // The display holding most of the window sets its scale and wallpaper.
-                    let still = stills.filter { $0.frame.intersects(window.frame) }.max {
-                        Self.overlap($0.frame, window.frame) < Self.overlap($1.frame, window.frame)
-                    }
-                    let scale = still?.scale ?? 2
-                    var image = try await capturer.image(of: window, scale: scale)
-                    if preferences.windowBackdrop {
-                        var fill = Backdrop.Fill.color(preferences.backdropColor)
-                        if preferences.backdropStyle == .wallpaper, let still,
-                            let wallpaper = try? await capturer.wallpaper(
-                                displayID: still.displayID, scale: scale)
-                        {
-                            fill = .image(wallpaper)
-                        }
-                        image = Backdrop.compose(
-                            image, padding: Int(preferences.windowPaddingPoints * scale),
-                            fill: fill)
-                    }
-                    await deliver(image, scale: scale)
-                }
-            case .fullscreen:
-                let mouse = NSEvent.mouseLocation
-                if let still = stills.first(where: { $0.frame.contains(mouse) }) ?? stills.first {
-                    await deliver(still.image, scale: still.scale)
-                }
-            case .scrolling:
-                switch await overlay.run(
-                    mode: .scrollingArea(previous: lastScrollRegion), stills: stills)
-                {
-                case .area(let still, let rect):
-                    try await captureScrolling(
-                        still: still, pixelRect: rect, start: .auto, overlay: overlay)
-                case .scrolledArea(let still, let rect):
-                    try await captureScrolling(
-                        still: still, pixelRect: rect, start: .manual, overlay: overlay)
-                case .window, .cancelled:
-                    break
-                }
-            case .text:
-                if case .area(let still, let rect) = await overlay.run(
-                    mode: .area, stills: stills)
-                {
-                    await copyText(of: try Self.crop(still, to: rect), scale: still.scale)
-                }
-            case .selector:
-                return  // resolved to the mode picked above
+            while true {
+                switchedTo = nil
+                try await capture(action, stills: stills, overlay: overlay)
+                guard let next = switchedTo else { return }
+                if next == .scrolling && !overlay.aside({ scrollingMayStart() }) { return }
+                action = next
             }
         } catch {
             Alerts.show("Capture failed", error.localizedDescription)
+        }
+    }
+
+    /// A hotkey for another mode, pressed while a selection is up, ends that selection and runs
+    /// the new mode on the same stills; any other press mid-capture is ignored.
+    private func switchMode(to action: HotKeyAction) {
+        guard let selecting, action != selecting.action, action != .selector else { return }
+        switchedTo = action
+        selecting.overlay.interrupt()
+    }
+
+    /// Waits on `overlay` for a selection in `mode`, switchable by another mode's hotkey meanwhile.
+    private func select(
+        _ mode: SelectionMode, for action: HotKeyAction, overlay: SelectionOverlay,
+        stills: [DisplayStill]
+    ) async -> SelectionResult {
+        selecting = (overlay, action)
+        defer { selecting = nil }
+        return await overlay.run(mode: mode, stills: stills)
+    }
+
+    /// Runs `action` on the stills already taken.
+    private func capture(
+        _ action: HotKeyAction, stills: [DisplayStill], overlay: SelectionOverlay
+    ) async throws {
+        switch action {
+        case .area:
+            if case .area(let still, let rect) = await select(
+                .area, for: action, overlay: overlay, stills: stills)
+            {
+                await deliver(try Self.crop(still, to: rect), scale: still.scale)
+            }
+        case .window:
+            let windows = try await capturer.windowsFrontToBack()
+            if case .window(let window) = await select(
+                .window(windows: windows), for: action, overlay: overlay, stills: stills)
+            {
+                // The display holding most of the window sets its scale and wallpaper.
+                let still = stills.filter { $0.frame.intersects(window.frame) }.max {
+                    Self.overlap($0.frame, window.frame) < Self.overlap($1.frame, window.frame)
+                }
+                let scale = still?.scale ?? 2
+                var image = try await capturer.image(of: window, scale: scale)
+                if preferences.windowBackdrop {
+                    var fill = Backdrop.Fill.color(preferences.backdropColor)
+                    if preferences.backdropStyle == .wallpaper, let still,
+                        let wallpaper = try? await capturer.wallpaper(
+                            displayID: still.displayID, scale: scale)
+                    {
+                        fill = .image(wallpaper)
+                    }
+                    image = Backdrop.compose(
+                        image, padding: Int(preferences.windowPaddingPoints * scale),
+                        fill: fill)
+                }
+                await deliver(image, scale: scale)
+            }
+        case .fullscreen:
+            let mouse = NSEvent.mouseLocation
+            if let still = stills.first(where: { $0.frame.contains(mouse) }) ?? stills.first {
+                await deliver(still.image, scale: still.scale)
+            }
+        case .scrolling:
+            switch await select(
+                .scrollingArea(previous: lastScrollRegion), for: action, overlay: overlay,
+                stills: stills)
+            {
+            case .area(let still, let rect):
+                try await captureScrolling(
+                    still: still, pixelRect: rect, start: .auto, overlay: overlay)
+            case .scrolledArea(let still, let rect):
+                try await captureScrolling(
+                    still: still, pixelRect: rect, start: .manual, overlay: overlay)
+            case .window, .cancelled:
+                break
+            }
+        case .text:
+            if case .area(let still, let rect) = await select(
+                .area, for: action, overlay: overlay, stills: stills)
+            {
+                await copyText(of: try Self.crop(still, to: rect), scale: still.scale)
+            }
+        case .selector:
+            return  // resolved to the mode picked above
         }
     }
 

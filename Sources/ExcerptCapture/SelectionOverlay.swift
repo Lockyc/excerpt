@@ -99,6 +99,22 @@ public final class SelectionOverlay {
         }
     }
 
+    /// Ends the waiting `run` cancelled but keeps the overlay up, so the next `run` presents the
+    /// same stills in another mode.
+    public func interrupt() {
+        guard result == nil, let continuation else { return }
+        self.continuation = nil
+        continuation.resume(returning: .cancelled)
+    }
+
+    /// Runs `body` with the windows out of its way, for an alert they would cover.
+    public func aside<T>(_ body: () -> T) -> T {
+        let shown = windows.filter(\.isVisible)
+        for window in shown { window.orderOut(nil) }
+        defer { for window in shown { window.orderFrontRegardless() } }
+        return body()
+    }
+
     /// Takes the overlay down, cancelled once it hasn't finished.
     public func close() {
         finish(.cancelled)
@@ -209,8 +225,17 @@ final class OverlayView: NSView {
     required init?(coder: NSCoder) { fatalError("not used") }
 
     /// Shows `still` in `mode`, then settles a press made while covering: window mode takes the
-    /// window it landed on; area modes end its drag if it was already released.
+    /// window it landed on; area modes end its drag if it was already released. Presenting again
+    /// after an interrupt starts over, with nothing selected.
     func present(still: DisplayStill, mode: SelectionMode) {
+        if self.still != nil {
+            earlyPress = nil
+            releasedEarly = false
+            pressClearedSelection = false
+            moving = false
+            hovered = nil
+            clearSelection()
+        }
         self.still = still
         self.mode = mode
         image = NSImage(cgImage: still.image, size: still.frame.size)
