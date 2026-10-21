@@ -45,3 +45,11 @@ import Testing
         #expect(arranged.series == [b] && arranged.alreadyOpen == [a])
     }
 }
+
+@Suite struct SeriesNumberingRestartTests {
+    @Test func aRestartOnAStepLessCaptureIsIgnored() {
+        #expect(
+            SeriesNumbering.firstSteps(stepCounts: [2, 0, 1], restarts: [false, true, false])
+                == [1, 1, 3])
+    }
+}

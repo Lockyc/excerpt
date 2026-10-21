@@ -157,3 +157,57 @@ import Testing
         #expect(!strip.restartSwitch(at: 0).isEnabled)
     }
 }
+
+@MainActor
+@Suite struct SeriesEditorFixTests {
+    func editor(_ docs: [EditDocument], height: (Int) -> Int = { _ in 300 })
+        -> EditorWindowController
+    {
+        let captures = docs.enumerated().map { i, doc in
+            LoadedCapture(
+                primary: URL(fileURLWithPath: "/tmp/fix-\(i).png"),
+                original: Fixtures.sheet(width: 400, height: height(i)), edits: doc,
+                supersedesMaster: false)
+        }
+        return EditorWindowController(
+            captures: captures, save: { _, _ in Data() }, copy: { _ in true },
+            forClaude: { _, _, _ in }, borderStyle: .initial, rememberBorder: { _ in },
+            annotationStyle: .initial, rememberStyle: { _ in }, onClose: {})
+    }
+
+    @Test func aLoneCaptureKeepsTheNumbersItWasSavedWith() {
+        let step = Annotation(id: 1, shape: .step(center: CGPoint(x: 50, y: 50)))
+        let lone = editor([EditDocument(scale: 1, annotations: [step], firstStep: 4, salt: 1)])
+        defer { lone.window?.orderOut(nil) }
+        #expect(lone.model(at: 0).document.firstStep == 4)
+        #expect(!lone.model(at: 0).isDirty)
+    }
+
+    @Test func switchingMidDragEndsTheDrag() {
+        let pair = editor([EditDocument(scale: 1, salt: 1), EditDocument(scale: 1, salt: 2)])
+        defer { pair.window?.orderOut(nil) }
+        let m = pair.model(at: 0)
+        m.tool = .rectangle
+        let map = RenderMap(
+            crop: PixelRect(x: 0, y: 0, width: 400, height: 300),
+            rows: AxisMap(extent: 300, bands: [], gap: 36),
+            columns: AxisMap(extent: 400, bands: [], gap: 36))
+        m.mouseDown(Pointer(rendered: CGPoint(x: 10, y: 10), map: map), map: map)
+        m.mouseDragged(Pointer(rendered: CGPoint(x: 90, y: 90), map: map), map: map, snap: false)
+        #expect(m.drag != nil)
+        pair.show(capture: 1)
+        #expect(m.drag == nil)
+    }
+
+    @Test func switchingToATallerCaptureKeepsTheWindowOnScreen() throws {
+        let pair = editor(
+            [EditDocument(scale: 1, salt: 1), EditDocument(scale: 1, salt: 2)],
+            height: { $0 == 0 ? 200 : 3000 })
+        defer { pair.window?.orderOut(nil) }
+        let window = try #require(pair.window)
+        let visible = try #require(window.screen ?? NSScreen.main).visibleFrame
+        window.setFrameTopLeftPoint(CGPoint(x: visible.minX, y: visible.minY + 350))
+        pair.show(capture: 1)
+        #expect(window.frame.minY >= visible.minY)
+    }
+}
