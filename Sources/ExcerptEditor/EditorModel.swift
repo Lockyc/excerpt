@@ -61,14 +61,17 @@ final class EditorModel {
     /// The original's pixels, for snapping; read on first use.
     private(set) lazy var pixels = PixelBuffer(original)
 
-    /// A document without a margin colour takes `marginColor`, so the picture can grow from
-    /// here on; that alone is not an edit.
+    /// A document without a margin colour takes `marginColor` where that leaves its render
+    /// unchanged (`EditDocument.adoptMarginColor`), so the picture can grow from here on; that
+    /// alone is not an edit.
     init(
         original: CGImage, document: EditDocument, borderStyle: Border = .initial,
         style: AnnotationStyle = .initial, marginColor: RGBA? = nil
     ) {
         var document = document
-        if document.marginColor == nil { document.marginColor = marginColor }
+        if let marginColor {
+            document.adoptMarginColor(marginColor, width: original.width, height: original.height)
+        }
         self.original = original
         self.style = style
         self.document = document
@@ -398,7 +401,9 @@ final class EditorModel {
         case .seam(let axis, let band):
             apply { $0.cuts = Gestures.removing($0.cuts, axis: axis, band: band) }
         case nil:
-            if tool == .crop { apply { $0.crop = nil } }
+            if tool == .crop {
+                apply { $0.setCrop(nil, width: original.width, height: original.height) }
+            }
         }
         selection = nil
     }

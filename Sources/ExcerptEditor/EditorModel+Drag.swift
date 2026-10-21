@@ -268,11 +268,10 @@ extension EditorModel {
                 }
                 selection = .annotation(id)
             case (.crop, .region(let rect)?):
-                apply {
-                    $0.crop = PixelRect(
-                        x: Int(rect.minX), y: Int(rect.minY), width: Int(rect.width),
-                        height: Int(rect.height))
-                }
+                let crop = PixelRect(
+                    x: Int(rect.minX), y: Int(rect.minY), width: Int(rect.width),
+                    height: Int(rect.height))
+                apply { $0.setCrop(crop, width: original.width, height: original.height) }
             default:
                 break
             }
@@ -361,10 +360,15 @@ extension EditorModel {
                 minimum: minimumDrag, snapping: snap ? pixels : nil, radius: snapRadius
             ).map { .region($0.cgRect) }
         default:
-            let rect = Gestures.rect(from: start, to: end).integral
-            guard Double(rect.width) >= minimumDrag, Double(rect.height) >= minimumDrag else {
-                return nil
+            var rect = Gestures.rect(from: start, to: end).integral
+            // A blur acts on the image's pixels, so one dragged into the gutter keeps to them.
+            if tool == .blur {
+                rect = rect.intersection(
+                    CGRect(x: 0, y: 0, width: original.width, height: original.height))
             }
+            guard !rect.isNull, Double(rect.width) >= minimumDrag,
+                Double(rect.height) >= minimumDrag
+            else { return nil }
             return .region(rect)
         }
     }

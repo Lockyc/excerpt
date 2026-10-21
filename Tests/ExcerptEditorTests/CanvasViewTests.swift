@@ -406,3 +406,59 @@ import Testing
         #expect(shown.fractionDiffering(from: PixelBuffer(exported), tolerance: 16) <= 0.005)
     }
 }
+
+@MainActor
+@Suite struct CanvasMarginFixTests {
+    let backdrop = RGBA(r: 0xE5, g: 0xE5, b: 0xEA, a: 255)
+
+    func canvas(_ annotations: [Annotation]) -> CanvasView {
+        let model = EditorModel(
+            original: Fixtures.sheet(width: 360, height: 400),
+            document: EditDocument(scale: 1, annotations: annotations, salt: 1),
+            marginColor: backdrop)
+        let canvas = CanvasView(model: model)
+        canvas.zoom = 1
+        return canvas
+    }
+
+    func drag(_ c: CanvasView, from: CGPoint, to: CGPoint) {
+        let map = c.map
+        let m = c.model
+        m.mouseDown(Pointer(rendered: from, map: map, slack: CanvasView.gutter), map: map)
+        m.mouseDragged(
+            Pointer(rendered: to, map: map, slack: CanvasView.gutter), map: map, snap: false)
+        m.mouseUp(Pointer(rendered: to, map: map, slack: CanvasView.gutter), map: map, snap: false)
+    }
+
+    @Test func anEdgeTouchingOldDocumentKeepsClippingAndOpensUnchanged() {
+        let edge = Annotation(
+            id: 1, shape: .rectangle(rect: CGRect(x: 0, y: 20, width: 60, height: 40)))
+        let c = canvas([edge])
+        #expect(c.model.document.marginColor == nil)
+        #expect(c.map.margin == .zero)
+    }
+
+    @Test func aBlurDraggedIntoTheGutterStaysInsideTheImage() {
+        let c = canvas([])
+        c.model.tool = .blur
+        drag(c, from: CGPoint(x: -40, y: -40), to: CGPoint(x: 60, y: 60))
+        guard case .blur(let rect)? = c.model.document.annotations.first?.shape else {
+            Issue.record("no blur")
+            return
+        }
+        #expect(rect.minX >= 0 && rect.minY >= 0)
+        #expect(c.map.margin == .zero)
+    }
+
+    @Test func aCropDropsTheArrowItCutsAwayAndUndoBringsItBack() {
+        let arrow = Annotation(
+            id: 1, shape: .arrow(tail: CGPoint(x: 300, y: 300), head: CGPoint(x: 340, y: 340)))
+        let c = canvas([arrow])
+        c.model.tool = .crop
+        drag(c, from: CGPoint(x: 0, y: 0), to: CGPoint(x: 200, y: 200))
+        #expect(c.model.document.crop != nil)
+        #expect(c.model.document.annotations.isEmpty)
+        c.model.undo()
+        #expect(c.model.document.annotations.count == 1 && c.model.document.crop == nil)
+    }
+}

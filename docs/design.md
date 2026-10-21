@@ -255,9 +255,11 @@ margin is drawn in place around the image; it lays out again on release. The mar
 the render map: its placement is offset by the margin's
 leading sides and its rendered size includes them, so hit testing, seams, the For Claude tiles
 and `text.md` all see the same picture. The margin colour is the window backdrop colour from
-Settings, stored in the document the first time an editor opens it; a document without one
-(saved before growing existed) keeps clipping annotations at its edge, so its primary still
-reproduces.
+Settings, stored in the document when an editor opens it unless that would change its render
+(`EditDocument.adoptMarginColor`); a document without one keeps clipping annotations at its
+edge, so its primary still reproduces. Setting or changing a crop drops the annotations it
+takes out of view, while one already outside the previous crop, such as a caption in the
+margin, stays (`EditDocument.setCrop`).
 
 **Border** turns the border on and off, and its chevron drops down an on/off switch, the six
 colours and three widths (2, 4, 8pt); it frames the render in a solid line drawn inside its edge,
