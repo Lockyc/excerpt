@@ -45,7 +45,7 @@ Accessibility in System Settings → Privacy & Security. Your captures stay wher
 | ⌘⇧3 | Window |
 | ⌘⇧4 | Area (the screen freezes while you select) |
 | ⌘⇧5 | Text — OCR straight to the clipboard, no file |
-| ⌘⇧6 | All-in-one selector: area, window, fullscreen, scrolling or text |
+| ⌘⇧6 | Select an area, adjust it, then pick area, scrolling, text, window or fullscreen from a bar over it |
 
 macOS's own screenshot shortcuts hold ⌘⇧3 to ⌘⇧5 until they are turned off in System Settings →
 Keyboard → Keyboard Shortcuts → Screenshots, or Excerpt's are rebound in its Settings. Excerpt's

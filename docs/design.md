@@ -87,7 +87,7 @@ The tear's shape is seeded from the cut's position, so identical edits render id
 | ⌘⇧3 | Window |
 | ⌘⇧4 | Area |
 | ⌘⇧5 | Capture text (OCR → clipboard, no file) |
-| ⌘⇧6 | All-in-one selector (area / window / fullscreen / scrolling / text) |
+| ⌘⇧6 | Mode bar (area / scrolling / text / window / fullscreen) |
 
 Hotkeys use Carbon `RegisterEventHotKey` (no permission, no dependency) and are all rebindable
 in Settings, which refuses a combination another action holds, one of the editor's shortcuts or
@@ -105,8 +105,13 @@ holding one.
 - **Text:** select an area on the frozen screen; its text is copied in reading order and no file
   is saved. A note gives the line count, or says no text was found and leaves the clipboard
   alone.
-- **All-in-one selector:** a menu of the five modes at the pointer, each showing its hotkey,
-  shown once the stills are taken; the mode picked runs on them.
+- **Mode bar:** the frozen screen opens with the area last picked from the bar (this launch)
+  already selected, and a bar of the five modes, each showing its hotkey, centred in it (below
+  or above a small one; below the pointer while nothing is selected). Area, Scrolling and Text
+  run on the selection and are dimmed without one; Window and Fullscreen ignore it and run on
+  the same stills. `Return` runs Area.
+- **Adjusting a selection:** a selection that stays on screen (mode bar, scrolling) moves when
+  dragged from inside and resizes from its edges and corners; a drag outside replaces it.
 - **Switching mode:** another mode's hotkey, pressed while a selection is up, switches to that
   mode on the same stills.
 - Stills exclude desktop icons and excerpt's own windows through the `SCContentFilter`.
