@@ -10,7 +10,8 @@ public enum EditDocumentError: Error, Equatable, LocalizedError {
     /// A cut bound, crop, annotation coordinate or annotation id outside
     /// `EditDocument.coordinateLimit` or `EditDocument.idLimit`, an id used twice, more than
     /// `EditDocument.maximumCutsPerAxis` cuts on an axis, or more than
-    /// `EditDocument.maximumAnnotations` annotations.
+    /// `EditDocument.maximumAnnotations` annotations, or a `firstStep` outside
+    /// `1...EditDocument.firstStepLimit`.
     case invalidGeometry
     /// The edits JSON isn't a readable edit document at all.
     case damaged
@@ -60,9 +61,12 @@ public struct PixelRect: Codable, Hashable, Sendable {
 /// strokes and text.
 public struct EditDocument: Codable, Equatable, Sendable {
     /// Version 2 carries `crop` and `annotations`, version 3 `border`, version 4 text
-    /// backgrounds and steps, version 5 paths; an older build rejects a newer document rather
-    /// than open it without them, so its next save can't erase them.
-    public static let currentVersion = 5
+    /// backgrounds and steps, version 5 paths, version 6 `firstStep` and `restartsSteps`; an
+    /// older build rejects a newer document rather than open it without them, so its next save
+    /// can't erase them.
+    public static let currentVersion = 6
+    /// The largest `firstStep`: more steps than a series of capped documents could hold is damage.
+    public static let firstStepLimit = 10_000
 
     public var scale: Double
     public var cuts: [Cut]
@@ -73,12 +77,20 @@ public struct EditDocument: Codable, Equatable, Sendable {
     /// Random per document and stored with it: seeds blur noise so it can't be recomputed from
     /// the blur rect alone.
     public var salt: UInt64
+    /// The number the first step shows; a series sets it so numbering carries on from the
+    /// capture before. Stored so the capture renders the same numbers when opened on its own.
+    public var firstStep: Int
+    /// In a series, this capture's steps begin again at 1 instead of carrying on.
+    public var restartsSteps: Bool
 
     public init(
         scale: Double, cuts: [Cut] = [], crop: PixelRect? = nil, annotations: [Annotation] = [],
-        border: Border? = nil, salt: UInt64 = .random(in: .min ... .max)
+        border: Border? = nil, firstStep: Int = 1, restartsSteps: Bool = false,
+        salt: UInt64 = .random(in: .min ... .max)
     ) {
         self.salt = salt
+        self.firstStep = firstStep
+        self.restartsSteps = restartsSteps
         self.scale = scale
         self.cuts = cuts
         self.crop = crop
@@ -94,11 +106,13 @@ public struct EditDocument: Codable, Equatable, Sendable {
         case annotations
         case border
         case salt
+        case firstStep
+        case restartsSteps
     }
 
-    /// Version 1 documents have no `crop`, `annotations` or `salt` keys, and versions before 3
-    /// no `border`; the first two read as none, the border as off, and the salt is drawn at
-    /// random.
+    /// Version 1 documents have no `crop`, `annotations` or `salt` keys, versions before 3 no
+    /// `border` and before 6 no `firstStep` or `restartsSteps`; the first two read as none, the
+    /// border as off, the salt is drawn at random, steps number from 1 and don't restart.
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         scale = try container.decode(Double.self, forKey: .scale)
@@ -108,6 +122,9 @@ public struct EditDocument: Codable, Equatable, Sendable {
         border = try Self.decodeBorder(from: container)
         salt =
             try container.decodeIfPresent(UInt64.self, forKey: .salt) ?? .random(in: .min ... .max)
+        firstStep = try container.decodeIfPresent(Int.self, forKey: .firstStep) ?? 1
+        restartsSteps =
+            try container.decodeIfPresent(Bool.self, forKey: .restartsSteps) ?? false
     }
 
     /// A version 3 border was first a bare `true` for one fixed frame, and documents were saved
@@ -131,6 +148,8 @@ public struct EditDocument: Codable, Equatable, Sendable {
         try container.encode(annotations, forKey: .annotations)
         try container.encodeIfPresent(border, forKey: .border)
         try container.encode(salt, forKey: .salt)
+        try container.encode(firstStep, forKey: .firstStep)
+        try container.encode(restartsSteps, forKey: .restartsSteps)
     }
 
     public var isEmpty: Bool { cuts.isEmpty && crop == nil && annotations.isEmpty && border == nil }
@@ -171,9 +190,10 @@ public struct EditDocument: Codable, Equatable, Sendable {
     /// Throws `invalidGeometry` unless every stored coordinate, size and id is in range and
     /// neither axis has more than `maximumCutsPerAxis` cuts nor the document more than
     /// `maximumAnnotations` annotations nor more than `maximumPathPoints` path vertices, and
-    /// every path has at least two.
+    /// every path has at least two, and `firstStep` is in `1...firstStepLimit`.
     private func validateGeometry() throws {
-        guard annotations.count <= Self.maximumAnnotations,
+        guard (1...Self.firstStepLimit).contains(firstStep),
+            annotations.count <= Self.maximumAnnotations,
             pathPointCount <= Self.maximumPathPoints
         else {
             throw EditDocumentError.invalidGeometry

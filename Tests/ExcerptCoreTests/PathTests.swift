@@ -17,7 +17,7 @@ import Testing
             scale: 2, annotations: [path(zigzag, closed: true, fill: true)], salt: 3)
         #expect(try EditDocument.decode(doc.encoded()) == doc)
         let json = try JSONSerialization.jsonObject(with: doc.encoded()) as! [String: Any]
-        #expect(json["version"] as? Int == 5)
+        #expect((json["version"] as? Int ?? 0) >= 5)
     }
 
     @Test func aPathMovesAsAWhole() {

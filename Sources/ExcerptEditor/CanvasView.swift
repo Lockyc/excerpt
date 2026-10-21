@@ -252,7 +252,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
         context.scaleBy(x: 1, y: -1)
         AnnotationRenderer.draw(
             model.displayDocument.annotations, map: base.map, scale: model.document.scale,
-            in: context, canvasHeight: height)
+            firstStep: model.document.firstStep, in: context, canvasHeight: height)
         model.document.border?.draw(
             in: context, width: base.image.width, height: height, scale: model.document.scale)
         context.restoreGState()

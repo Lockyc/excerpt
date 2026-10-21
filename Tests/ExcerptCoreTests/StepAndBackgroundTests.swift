@@ -41,6 +41,22 @@ import Testing
         #expect(AnnotationGeometry.stepNumbers([steps[2], steps[0]]) == [30: 1, 10: 2])
     }
 
+    @Test func stepsNumberOnFromTheFirstStep() {
+        let steps = (1...3).map {
+            Annotation(id: $0 * 10, shape: .step(center: CGPoint(x: $0, y: 0)))
+        }
+        #expect(AnnotationGeometry.stepNumbers([steps[0], steps[2]], first: 4) == [10: 4, 30: 5])
+        #expect(AnnotationGeometry.stepCount([steps[0], steps[2]]) == 2)
+    }
+
+    @Test func aFirstStepChangesTheRenderedNumber() {
+        let step = Annotation(id: 1, shape: .step(center: CGPoint(x: 300, y: 400)))
+        let one = Renderer.render(sheet, edits: EditDocument(scale: 1, annotations: [step]))
+        let seven = Renderer.render(
+            sheet, edits: EditDocument(scale: 1, annotations: [step], firstStep: 7))
+        #expect(PixelBuffer(one.image) != PixelBuffer(seven.image))
+    }
+
     @Test func aStepWhollyInsideACutIsHidden() {
         let map = RenderMap(
             crop: PixelRect(x: 0, y: 0, width: 400, height: 400),
