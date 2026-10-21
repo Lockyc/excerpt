@@ -357,3 +357,45 @@ import Testing
         }
     }
 }
+
+@Suite struct CaptureTextMarginTests {
+    func map(_ margin: Margin) -> RenderMap {
+        RenderMap(
+            crop: PixelRect(x: 0, y: 0, width: 300, height: 200),
+            rows: AxisMap(extent: 200, bands: [], gap: 36),
+            columns: AxisMap(extent: 300, bands: [], gap: 36), margin: margin)
+    }
+
+    @Test func theMarginIsReadWithTheImageBesideIt() {
+        let top = CaptureText.regions(of: map(Margin(top: 40)), scale: 1)
+        #expect(top.map(\.rect) == [PixelRect(x: 0, y: 0, width: 300, height: 240)])
+        #expect(top.first?.owned == 0..<240)
+        let sides = CaptureText.regions(of: map(Margin(left: 30, bottom: 10)), scale: 1)
+        #expect(sides.map(\.rect) == [PixelRect(x: 0, y: 0, width: 330, height: 210)])
+    }
+
+    @Test func aLabelInTheMarginIsWritten() {
+        let cut = RenderMap(
+            crop: PixelRect(x: 0, y: 0, width: 300, height: 200),
+            rows: AxisMap(extent: 200, bands: [80..<120], gap: 36),
+            columns: AxisMap(extent: 300, bands: [], gap: 36), margin: Margin(top: 40))
+        let runs = [
+            RecognizedText("Pin to dashboard", CGRect(x: 10, y: 12, width: 120, height: 16)),
+            RecognizedText("below", CGRect(x: 10, y: 200, width: 40, height: 10)),
+        ]
+        let text = CaptureText.compose(runs, map: cut, scale: 1)
+        #expect(text.hasPrefix("Pin to dashboard\n"))
+        #expect(text.contains("below"))
+    }
+
+    @Test func aMarginAboveATopCutComesBeforeItsMarker() {
+        let topCut = RenderMap(
+            crop: PixelRect(x: 0, y: 0, width: 300, height: 200),
+            rows: AxisMap(extent: 200, bands: [0..<50], gap: 36),
+            columns: AxisMap(extent: 300, bands: [], gap: 36), margin: Margin(top: 40))
+        let label = RecognizedText("Title", CGRect(x: 10, y: 12, width: 60, height: 16))
+        let text = CaptureText.compose([label], map: topCut, scale: 1)
+        #expect(text == "Title\n[⋯ 50 px hidden]\n")
+        #expect(CaptureText.regions(of: topCut, scale: 1).first?.rect.height == 40)
+    }
+}

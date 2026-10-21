@@ -99,29 +99,51 @@ public enum CaptureText {
     /// Regions too thin to hold a line of text are not read.
     public static let minimumRegionSide = 8
 
-    /// Every region to read, top to bottom, then left to right.
+    /// Every region to read, top to bottom, then left to right. The margin is read with the
+    /// image beside it: the first and last segments of each axis reach through it.
     public static func regions(of map: RenderMap, scale: Double) -> [Region] {
         let tile = Int((Double(sliceLength) * scale).rounded())
         let overlap = Int((Double(Tiling.overlap) * scale).rounded())
         let fits = Int((Double(wholeLength) * scale).rounded())
+        let rowSpans = spans(map.rows, leading: map.margin.top, trailing: map.margin.bottom)
+        let columnSpans = spans(
+            map.columns, leading: map.margin.left, trailing: map.margin.right)
         var regions: [Region] = []
-        for rows in map.rows.segments where rows.source.count >= minimumRegionSide {
-            let slices = Tiling.spans(
-                length: rows.source.count, tile: tile, overlap: overlap, fits: fits)
+        for rows in rowSpans where rows.count >= minimumRegionSide {
+            let slices = Tiling.spans(length: rows.count, tile: tile, overlap: overlap, fits: fits)
             for (slice, owned) in zip(slices, Tiling.ownedBands(slices)) {
-                for columns in map.columns.segments where columns.source.count >= minimumRegionSide
-                {
+                for columns in columnSpans where columns.count >= minimumRegionSide {
                     regions.append(
                         Region(
                             rect: PixelRect(
-                                x: columns.destination, y: rows.destination + slice.lowerBound,
-                                width: columns.source.count, height: slice.count),
-                            owned: (rows.destination + owned.lowerBound)..<(rows.destination
+                                x: columns.lowerBound, y: rows.lowerBound + slice.lowerBound,
+                                width: columns.count, height: slice.count),
+                            owned: (rows.lowerBound + owned.lowerBound)..<(rows.lowerBound
                                 + owned.upperBound)))
                 }
             }
         }
         return regions
+    }
+
+    /// Each kept segment's rendered span, shifted past the leading margin. A segment at the
+    /// image's edge reaches on through the margin beside it, so a label straddling the edge is
+    /// read whole; a margin beyond an edge cut is a span of its own.
+    private static func spans(_ axis: AxisMap, leading: Int, trailing: Int) -> [Range<Int>] {
+        let length = axis.renderedLength
+        var spans = axis.segments.map { segment in
+            let start = leading + segment.destination
+            let end = start + segment.source.count
+            return
+                (segment.destination == 0 ? 0 : start)..<(end == leading + length
+                ? end + trailing : end)
+        }
+        if leading > 0, spans.first?.lowerBound != 0 { spans.insert(0..<leading, at: 0) }
+        let total = leading + length + trailing
+        if trailing > 0, spans.last?.upperBound != total {
+            spans.append((leading + length)..<total)
+        }
+        return spans
     }
 
     /// Reads every region of `image`, the render `map` describes, each shown to the recogniser
@@ -216,9 +238,10 @@ public enum CaptureText {
         backgroundChanges: ReadingOrder.BackgroundChange = { _, _ in false }
     ) -> String {
         let runs = runs.filter { usable($0.bounds) }
-        let columnSegments = map.columns.segments
+        let margin = map.margin
+        let columnSpans = spans(map.columns, leading: margin.left, trailing: margin.right)
         func column(_ run: RecognizedText) -> Int {
-            columnSegments.lastIndex { Double($0.destination) <= Double(run.bounds.midX) } ?? 0
+            columnSpans.lastIndex { Double($0.lowerBound) <= Double(run.bounds.midX) } ?? 0
         }
         var spanned = Set<Int>()
         func write(_ line: TextLine) -> String {
@@ -226,10 +249,12 @@ public enum CaptureText {
             for (left, right) in zip(line.runs, line.runs.dropFirst()) {
                 let (a, b) = (column(left), column(right))
                 if a < b {
-                    let end = columnSegments[a].destination + columnSegments[a].source.count
-                    let start = columnSegments[b].destination
+                    let end = columnSpans[a].upperBound
+                    let start = columnSpans[b].lowerBound
                     for (index, gap) in map.columns.gaps.enumerated()
-                    where gap.destination.lowerBound >= end && gap.destination.upperBound <= start {
+                    where gap.destination.lowerBound + margin.left >= end
+                        && gap.destination.upperBound + margin.left <= start
+                    {
                         spanned.insert(index)
                         text += " " + marker(removedPixels: gap.removed, scale: scale)
                     }
@@ -241,12 +266,11 @@ public enum CaptureText {
 
         var body: [String] = []
         var gaps = map.rows.gaps[...]
-        for segment in map.rows.segments {
-            while let gap = gaps.first, gap.destination.lowerBound < segment.destination {
+        for rows in spans(map.rows, leading: margin.top, trailing: margin.bottom) {
+            while let gap = gaps.first, gap.destination.lowerBound + margin.top < rows.lowerBound {
                 body.append(marker(removedPixels: gap.removed, scale: scale))
                 gaps.removeFirst()
             }
-            let rows = segment.destination..<(segment.destination + segment.source.count)
             let blocks = ReadingOrder.blocks(
                 runs.filter { rows.contains(Int($0.bounds.midY)) },
                 backgroundChanges: backgroundChanges)
