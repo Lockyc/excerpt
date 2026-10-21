@@ -8,7 +8,7 @@ enum Pasteboard {
 
     /// Puts the file's PNG on the clipboard, with TIFF for apps that only read TIFF.
     static func copyPNG(at url: URL) throws {
-        try copyPNG(data: Data(contentsOf: url))
+        try copyPNGs([Data(contentsOf: url)])
     }
 
     /// Puts plain text on the clipboard.
@@ -18,25 +18,33 @@ enum Pasteboard {
         guard board.setString(text, forType: .string) else { throw WriteFailed() }
     }
 
-    /// The provider of the TIFF on the clipboard now, held until the pasteboard is done with it.
-    private static var tiffProvider: TIFFProvider?
+    /// The providers of the TIFFs on the clipboard now, held until the pasteboard is done with
+    /// each.
+    private static var tiffProviders: [TIFFProvider] = []
 
-    /// Puts PNG data on the clipboard, with TIFF for apps that only read TIFF. The TIFF is made
-    /// only when such an app asks for it: converting a full-screen capture costs over 100ms.
-    static func copyPNG(data: Data) throws {
+    /// Puts PNG images on the clipboard, one item each in order, with TIFF for apps that only
+    /// read TIFF. The TIFF is made only when such an app asks for it: converting a full-screen
+    /// capture costs over 100ms.
+    static func copyPNGs(_ images: [Data]) throws {
         let board = NSPasteboard.general
         board.clearContents()
-        let item = NSPasteboardItem()
-        let provider = TIFFProvider(png: data)
-        guard item.setData(data, forType: .png),
-            item.setDataProvider(provider, forTypes: [.tiff]),
-            board.writeObjects([item])
-        else { throw WriteFailed() }
-        tiffProvider = provider
+        var items: [NSPasteboardItem] = []
+        var providers: [TIFFProvider] = []
+        for data in images {
+            let item = NSPasteboardItem()
+            let provider = TIFFProvider(png: data)
+            guard item.setData(data, forType: .png),
+                item.setDataProvider(provider, forTypes: [.tiff])
+            else { throw WriteFailed() }
+            items.append(item)
+            providers.append(provider)
+        }
+        guard board.writeObjects(items) else { throw WriteFailed() }
+        tiffProviders = providers
     }
 
     fileprivate static func finished(with provider: TIFFProvider) {
-        if tiffProvider === provider { tiffProvider = nil }
+        tiffProviders.removeAll { $0 === provider }
     }
 }
 

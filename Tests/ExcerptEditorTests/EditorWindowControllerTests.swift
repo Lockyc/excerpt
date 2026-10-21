@@ -13,7 +13,8 @@ import Testing
             original: Fixtures.sheet(width: width, height: 400), edits: EditDocument(scale: 1),
             supersedesMaster: false)
         return EditorWindowController(
-            capture: capture, save: { _ in Data() }, copy: { _ in true }, forClaude: { _, _ in },
+            captures: [capture], save: { _, _ in Data() }, copy: { _ in true },
+            forClaude: { _, _, _ in },
             borderStyle: .initial, rememberBorder: { _ in }, annotationStyle: .initial,
             rememberStyle: { _ in }, onClose: {})
     }

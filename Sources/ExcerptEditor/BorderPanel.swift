@@ -10,7 +10,8 @@ extension Border.Width {
 /// model; `show` brings the controls in line with it.
 @MainActor
 final class BorderPanel: NSViewController {
-    private let model: EditorModel
+    /// The capture in view; a series hands over the next one's model when it switches.
+    var model: EditorModel { didSet { refresh() } }
     private let toggle = NSSwitch()
     private let colors = NSSegmentedControl()
     private let widths = NSSegmentedControl()

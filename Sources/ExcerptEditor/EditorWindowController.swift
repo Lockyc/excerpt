@@ -16,24 +16,53 @@ private final class CenteringClipView: NSClipView {
     }
 }
 
-/// One capture's editor: a floating window fitted to the capture's width, with every tool and
-/// action on a toolbar that is always visible, and the canvas in a scroll view; each item's
-/// colour, size and own options float beside it on the canvas.
+/// One capture in the editor: its model, the canvas that draws it, and what its last save wrote.
+@MainActor
+private final class Page {
+    let capture: LoadedCapture
+    let model: EditorModel
+    let canvas: CanvasView
+    /// The primary's PNG the last save wrote, and the document it renders: what Save copies
+    /// while the document is still that one, instead of rendering and encoding it again.
+    var written: (document: EditDocument, png: Data)?
+
+    init(capture: LoadedCapture, model: EditorModel) {
+        self.capture = capture
+        self.model = model
+        canvas = CanvasView(model: model)
+    }
+
+    /// The PNG Save copies: the one last written while it still renders the document.
+    func png() throws -> Data {
+        let document = model.document
+        if let written, written.document == document { return written.png }
+        let image = Renderer.render(model.original, edits: document).image
+        return try PNGCodec.encode(image, scale: document.scale)
+    }
+}
+
+/// The editor: a floating window fitted to the capture's width, with every tool and action on a
+/// toolbar that is always visible, and the canvas in a scroll view; each item's colour, size and
+/// own options float beside it on the canvas. Over a series of captures a filmstrip along the
+/// bottom moves between them, and step numbers carry on from one capture to the next.
 @MainActor
 public final class EditorWindowController: NSWindowController, NSWindowDelegate {
     static let toolbarHeight: CGFloat = 60
     private static let snapHint = "⌥ places edges without snapping"
 
-    private let capture: LoadedCapture
-    private let save: (EditDocument) throws -> Data
-    private let copy: (() throws -> Data) -> Bool
-    /// The primary's PNG the last save wrote, and the document it renders: what Save copies
-    /// while the document is still that one, instead of rendering and encoding it again.
-    private var written: (document: EditDocument, png: Data)?
-    private let forClaude: (CGImage, EditDocument) -> Void
+    private let pages: [Page]
+    /// The capture in view.
+    public private(set) var current = 0
+    private let save: (LoadedCapture, EditDocument) throws -> Data
+    private let copy: (() throws -> [Data]) -> Bool
+    private let forClaude: (LoadedCapture, CGImage, EditDocument) -> Void
     private let onClose: () -> Void
-    private let model: EditorModel
-    private let canvas: CanvasView
+    private var page: Page { pages[current] }
+    private var model: EditorModel { page.model }
+    private var canvas: CanvasView { page.canvas }
+    /// Only over a series.
+    private let filmstrip: Filmstrip?
+    private var renumbering = false
     private let scrollView = NSScrollView()
     private let tools = NSSegmentedControl()
     /// A split control: "Border" turns the border on and off, the chevron drops down its
@@ -52,34 +81,38 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         didSet { update() }
     }
 
-    /// `save` writes the document (the app's `LibraryStore.saveEdits`) and returns the primary's
-    /// PNG it wrote; `copy`, Save's last
-    /// step, is handed a closure that renders the current PNG, puts it on the pasteboard,
-    /// reports any failure, the render's included, and returns whether it worked; `forClaude`
-    /// exports the original with the current edits; `borderStyle` is the border a capture
-    /// without one gets when turned on, and `rememberBorder` is told each colour or width the
-    /// user picks; `annotationStyle` is what new annotations start with, and `rememberStyle` is
-    /// told each colour, size or background the user picks; `onClose` runs once the window has
-    /// closed.
+    /// `captures` is the series in order, one capture for a plain editor. `save` writes a
+    /// capture's document (the app's `LibraryStore.saveEdits`) and returns the primary's PNG it
+    /// wrote; `copy`, Save's last step, is handed a closure that renders every capture's PNG in
+    /// order, puts them on the pasteboard, reports any failure, the render's included, and
+    /// returns whether it worked; `forClaude` exports the capture in view with its current
+    /// edits; `borderStyle` is the border a capture without one gets when turned on, and
+    /// `rememberBorder` is told each colour or width the user picks; `annotationStyle` is what
+    /// new annotations start with, and `rememberStyle` is told each colour, size or background
+    /// the user picks; `onClose` runs once the window has closed.
     public init(
-        capture: LoadedCapture, save: @escaping (EditDocument) throws -> Data,
-        copy: @escaping (() throws -> Data) -> Bool,
-        forClaude: @escaping (CGImage, EditDocument) -> Void, borderStyle: Border,
-        rememberBorder: @escaping (Border) -> Void, annotationStyle: AnnotationStyle,
-        rememberStyle: @escaping (AnnotationStyle) -> Void, onClose: @escaping () -> Void
+        captures: [LoadedCapture], save: @escaping (LoadedCapture, EditDocument) throws -> Data,
+        copy: @escaping (() throws -> [Data]) -> Bool,
+        forClaude: @escaping (LoadedCapture, CGImage, EditDocument) -> Void,
+        borderStyle: Border, rememberBorder: @escaping (Border) -> Void,
+        annotationStyle: AnnotationStyle, rememberStyle: @escaping (AnnotationStyle) -> Void,
+        onClose: @escaping () -> Void
     ) {
-        self.capture = capture
+        precondition(!captures.isEmpty, "an editor needs a capture")
         self.save = save
         self.copy = copy
         self.forClaude = forClaude
         self.onClose = onClose
-        model = EditorModel(
-            original: capture.original, document: capture.edits, borderStyle: borderStyle,
-            style: annotationStyle)
-        model.onBorderStyleChange = rememberBorder
-        model.onStyleChange = rememberStyle
-        canvas = CanvasView(model: model)
-        borderPanel = BorderPanel(model: model)
+        pages = captures.map { capture in
+            let model = EditorModel(
+                original: capture.original, document: capture.edits, borderStyle: borderStyle,
+                style: annotationStyle)
+            model.onBorderStyleChange = rememberBorder
+            model.onStyleChange = rememberStyle
+            return Page(capture: capture, model: model)
+        }
+        filmstrip = captures.count > 1 ? Filmstrip(count: captures.count) : nil
+        borderPanel = BorderPanel(model: pages[0].model)
         let window = EditorWindow(
             contentRect: CGRect(x: 0, y: 0, width: 800, height: 600),
             styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered,
@@ -89,12 +122,22 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         window.editor = self
         window.level = .floating
         window.isReleasedWhenClosed = false
-        window.title = capture.primary.lastPathComponent
-        window.representedURL = capture.primary
         buildContent(in: window)
-        // The canvas owns the model's change hook and forwards every change here.
-        canvas.onChange = { [weak self] in self?.update() }
+        for (i, page) in pages.enumerated() {
+            // Each canvas owns its model's change hook and forwards every change here.
+            page.canvas.onChange = { [weak self] in self?.changed(i) }
+        }
+        filmstrip?.onSelect = { [weak self] in self?.show(capture: $0) }
+        filmstrip?.onRestart = { [weak self] i, on in
+            guard let self else { return }
+            if i == current { canvas.commitInProgress() }
+            pages[i].model.setRestartsSteps(on)
+        }
+        renumber()
+        for i in pages.indices { refreshThumbnail(i) }
+        present(current)
         sizeToFit(window)
+        window.center()
         update()
     }
 
@@ -104,6 +147,70 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
         window?.makeFirstResponder(canvas)
+    }
+
+    /// Every capture's primary, in series order.
+    public var primaries: [URL] { pages.map(\.capture.primary) }
+
+    func model(at index: Int) -> EditorModel { pages[index].model }
+
+    /// Shows another capture of the series, carrying the tool and style over; out of range
+    /// does nothing.
+    public func show(capture index: Int) {
+        guard pages.indices.contains(index), index != current else { return }
+        canvas.commitInProgress()
+        let tool = model.tool
+        let style = model.style
+        refreshThumbnail(current)
+        current = index
+        model.adopt(tool: tool, style: style)
+        present(index)
+        if let window { sizeToFit(window) }
+        update()
+        window?.makeFirstResponder(canvas)
+    }
+
+    /// Puts capture `index`'s canvas in the scroll view and its name on the window.
+    private func present(_ index: Int) {
+        let page = pages[index]
+        scrollView.documentView = page.canvas
+        borderPanel.model = page.model
+        filmstrip?.current = index
+        window?.title = page.capture.primary.lastPathComponent
+        window?.representedURL = page.capture.primary
+    }
+
+    /// A capture's document, tool or selection changed.
+    private func changed(_ index: Int) {
+        renumber()
+        if index == current { update() }
+    }
+
+    /// Carries step numbers on through the series: each capture's first step follows the
+    /// capture before's last, unless it restarts.
+    private func renumber() {
+        guard !renumbering else { return }
+        renumbering = true
+        defer { renumbering = false }
+        let firsts = SeriesNumbering.firstSteps(
+            stepCounts: pages.map(\.model.stepCount),
+            restarts: pages.map(\.model.document.restartsSteps))
+        for (i, page) in pages.enumerated() {
+            let model = page.model
+            if model.document.firstStep != firsts[i] {
+                model.setFirstStep(firsts[i])
+                if i != current { refreshThumbnail(i) }
+            }
+            filmstrip?.setSteps(
+                first: firsts[i], count: model.stepCount,
+                restarts: model.document.restartsSteps, at: i)
+        }
+    }
+
+    private func refreshThumbnail(_ index: Int) {
+        guard let filmstrip else { return }
+        let model = pages[index].model
+        filmstrip.setImage(Renderer.render(model.original, edits: model.document).image, at: index)
     }
 
     // MARK: Layout
@@ -190,12 +297,11 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         scrollView.hasHorizontalScroller = false
         scrollView.drawsBackground = true
         scrollView.backgroundColor = .underPageBackgroundColor
-        scrollView.documentView = canvas
         NotificationCenter.default.addObserver(
             self, selector: #selector(clipResized), name: NSView.frameDidChangeNotification,
             object: clip)
 
-        for view in [bar, scrollView] as [NSView] {
+        for view in [bar, scrollView, filmstrip].compactMap({ $0 }) as [NSView] {
             view.translatesAutoresizingMaskIntoConstraints = false
             content.addSubview(view)
         }
@@ -207,8 +313,18 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
             scrollView.topAnchor.constraint(equalTo: bar.bottomAnchor),
             scrollView.leadingAnchor.constraint(equalTo: content.leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: content.trailingAnchor),
-            scrollView.bottomAnchor.constraint(equalTo: content.bottomAnchor),
         ])
+        if let filmstrip {
+            NSLayoutConstraint.activate([
+                filmstrip.topAnchor.constraint(equalTo: scrollView.bottomAnchor),
+                filmstrip.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+                filmstrip.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+                filmstrip.bottomAnchor.constraint(equalTo: content.bottomAnchor),
+                filmstrip.heightAnchor.constraint(equalToConstant: Filmstrip.height),
+            ])
+        } else {
+            scrollView.bottomAnchor.constraint(equalTo: content.bottomAnchor).isActive = true
+        }
         window.contentView = content
         // As narrow as the tools and actions fit side by side.
         window.minSize = CGSize(
@@ -243,8 +359,8 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         button.setAccessibilityLabel(label)
     }
 
-    /// Opens at the capture's size in points, shrunk to fit 90% of the screen; tall captures
-    /// scroll.
+    /// Fits the window to the capture in view at its size in points, shrunk to fit 90% of the
+    /// screen, its top edge kept where it was; tall captures scroll.
     private func sizeToFit(_ window: NSWindow) {
         let visible =
             (NSScreen.main ?? NSScreen.screens.first)?.visibleFrame
@@ -253,10 +369,11 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         let rendered = max(canvas.renderedSize.width, 1)
         let width = min(max(rendered / scale, window.minSize.width), visible.width * 0.9)
         let zoom = min(width / rendered, 1 / scale)
-        let height = min(
-            canvas.renderedSize.height * zoom + Self.toolbarHeight, visible.height * 0.9)
+        let chrome = Self.toolbarHeight + (filmstrip == nil ? 0 : Filmstrip.height)
+        let height = min(canvas.renderedSize.height * zoom + chrome, visible.height * 0.9)
+        let topLeft = CGPoint(x: window.frame.minX, y: window.frame.maxY)
         window.setContentSize(CGSize(width: width, height: max(height, 300)))
-        window.center()
+        window.setFrameTopLeftPoint(topLeft)
         window.contentView?.layoutSubtreeIfNeeded()
         fitWidth()
     }
@@ -299,10 +416,10 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
             isPreparingForClaude
             ? "Preparing for Claude…"
             : "Save, copy tiles and text of the image for Claude and close (⇧⌘C)"
+        let images = pages.count == 1 ? "the image" : "the \(pages.count) images"
         saveButton.toolTip =
-            model.isDirty
-            ? "Save, copy the image and close (⌘S)" : "Copy the image and close (⌘S)"
-        window?.isDocumentEdited = model.isDirty
+            isDirty ? "Save, copy \(images) and close (⌘S)" : "Copy \(images) and close (⌘S)"
+        window?.isDocumentEdited = isDirty
         fitWidth()  // a column cut changes the rendered width
     }
 
@@ -350,34 +467,28 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
     /// holds.
     @objc func forClaudePressed() {
         finish {
-            forClaude(model.original, model.document)
+            forClaude(page.capture, model.original, model.document)
             return true
         }
     }
 
-    /// ⌘S: writes unsaved edits, puts the image on the clipboard and closes. With nothing
-    /// unsaved there is nothing to write, so an unedited capture stays one file.
+    /// ⌘S: writes unsaved edits, puts every image on the clipboard in order and closes. With
+    /// nothing unsaved there is nothing to write, so an unedited capture stays one file.
     @objc func saveDocument() {
-        let original = model.original
-        finish {
-            let document = model.document
-            let written = written
-            return copy {
-                if let written, written.document == document { return written.png }
-                let image = Renderer.render(original, edits: document).image
-                return try PNGCodec.encode(image, scale: document.scale)
-            }
-        }
+        let pages = pages
+        finish { copy { try pages.map { try $0.png() } } }
     }
 
-    /// Save and For Claude each end the edit: unsaved edits are written (the master keeps
-    /// the original, so they stay adjustable), then `action` runs, then the window closes. A
-    /// failed save or action leaves it open.
+    /// Save and For Claude each end the edit: every capture's unsaved edits are written (the
+    /// master keeps the original, so they stay adjustable), then `action` runs, then the window
+    /// closes. A failed save or action leaves it open.
     private func finish(_ action: () -> Bool) {
         canvas.commitInProgress()
-        guard !model.isDirty || writeDocument(), action() else { return }
+        guard writeDocuments(), action() else { return }
         window?.close()
     }
+
+    private var isDirty: Bool { pages.contains { $0.model.isDirty } }
 
     func undo() {
         canvas.commitInProgress()
@@ -389,22 +500,25 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         model.redo()
     }
 
-    /// Writes the primary and master; false (after telling the user) when that failed.
-    private func writeDocument() -> Bool {
+    /// Writes the primary and master of every capture with unsaved edits; false (after telling
+    /// the user) at the first that failed.
+    private func writeDocuments() -> Bool {
         canvas.commitInProgress()
-        do {
-            let document = model.document
-            written = (document, try save(document))
-            model.markSaved()
-            update()
-            return true
-        } catch {
-            let alert = NSAlert()
-            alert.messageText = "Couldn't save \(capture.primary.lastPathComponent)"
-            alert.informativeText = error.localizedDescription
-            alert.runModal()
-            return false
+        defer { update() }
+        for page in pages where page.model.isDirty {
+            do {
+                let document = page.model.document
+                page.written = (document, try save(page.capture, document))
+                page.model.markSaved()
+            } catch {
+                let alert = NSAlert()
+                alert.messageText = "Couldn't save \(page.capture.primary.lastPathComponent)"
+                alert.informativeText = error.localizedDescription
+                alert.runModal()
+                return false
+            }
         }
+        return true
     }
 
     public func windowShouldClose(_ sender: NSWindow) -> Bool { confirmClose() }
@@ -413,16 +527,20 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
     /// false on Cancel or a failed save. Shared by the window's close and the app's quit.
     public func confirmClose() -> Bool {
         canvas.commitInProgress()
-        guard model.isDirty else { return true }
+        let dirty = pages.filter(\.model.isDirty)
+        guard let first = dirty.first else { return true }
         show()
         let alert = NSAlert()
-        alert.messageText = "Save changes to \(capture.primary.lastPathComponent)?"
+        alert.messageText =
+            dirty.count == 1
+            ? "Save changes to \(first.capture.primary.lastPathComponent)?"
+            : "Save changes to \(dirty.count) captures?"
         alert.informativeText = "Your edits are lost if you don't save them."
         alert.addButton(withTitle: "Save")
         alert.addButton(withTitle: "Don't Save")
         alert.addButton(withTitle: "Cancel")
         switch alert.runModal() {
-        case .alertFirstButtonReturn: return writeDocument()
+        case .alertFirstButtonReturn: return writeDocuments()
         case .alertSecondButtonReturn: return true
         default: return false
         }
@@ -435,11 +553,13 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
 /// on it, and the app refuses to bind a global hotkey to any, since a global hotkey takes the
 /// press before the editor sees it.
 public enum EditorShortcut: CaseIterable, Sendable {
-    case save, forClaude, close, cut, copy, paste, selectAll, undo, redo
+    case save, forClaude, close, cut, copy, paste, selectAll, undo, redo, previous, next
 
     /// The command as the user knows it.
     public var name: String {
         switch self {
+        case .previous: "Previous Capture"
+        case .next: "Next Capture"
         case .save: "Save"
         case .forClaude: "For Claude"
         case .close: "Close"
@@ -462,6 +582,8 @@ public enum EditorShortcut: CaseIterable, Sendable {
         case .paste: "v"
         case .selectAll: "a"
         case .undo, .redo: "z"
+        case .previous: "["
+        case .next: "]"
         }
     }
 
@@ -497,6 +619,9 @@ final class EditorWindow: NSWindow {
             return true
         case .close:
             performClose(nil)
+            return true
+        case .previous, .next:
+            if let editor { editor.show(capture: editor.current + (shortcut == .next ? 1 : -1)) }
             return true
         default:
             break
