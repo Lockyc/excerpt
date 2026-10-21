@@ -61,10 +61,10 @@ public struct PixelRect: Codable, Hashable, Sendable {
 /// strokes and text.
 public struct EditDocument: Codable, Equatable, Sendable {
     /// Version 2 carries `crop` and `annotations`, version 3 `border`, version 4 text
-    /// backgrounds and steps, version 5 paths, version 6 `firstStep` and `restartsSteps`; an
-    /// older build rejects a newer document rather than open it without them, so its next save
-    /// can't erase them.
-    public static let currentVersion = 6
+    /// backgrounds and steps, version 5 paths, version 6 `firstStep` and `restartsSteps`, version
+    /// 7 `marginColor`; an older build rejects a newer document rather than open it without
+    /// them, so its next save can't erase them.
+    public static let currentVersion = 7
     /// The largest `firstStep`: more steps than a series of capped documents could hold is damage.
     public static let firstStepLimit = 10_000
 
@@ -82,13 +82,18 @@ public struct EditDocument: Codable, Equatable, Sendable {
     public var firstStep: Int
     /// In a series, this capture's steps begin again at 1 instead of carrying on.
     public var restartsSteps: Bool
+    /// What fills the margin annotations past the image's edge grow it by. nil — a document
+    /// saved before the picture could grow — clips them at the edge instead, so its primary
+    /// still reproduces.
+    public var marginColor: RGBA?
 
     public init(
         scale: Double, cuts: [Cut] = [], crop: PixelRect? = nil, annotations: [Annotation] = [],
         border: Border? = nil, firstStep: Int = 1, restartsSteps: Bool = false,
-        salt: UInt64 = .random(in: .min ... .max)
+        marginColor: RGBA? = nil, salt: UInt64 = .random(in: .min ... .max)
     ) {
         self.salt = salt
+        self.marginColor = marginColor
         self.firstStep = firstStep
         self.restartsSteps = restartsSteps
         self.scale = scale
@@ -108,11 +113,13 @@ public struct EditDocument: Codable, Equatable, Sendable {
         case salt
         case firstStep
         case restartsSteps
+        case marginColor
     }
 
     /// Version 1 documents have no `crop`, `annotations` or `salt` keys, versions before 3 no
-    /// `border` and before 6 no `firstStep` or `restartsSteps`; the first two read as none, the
-    /// border as off, the salt is drawn at random, steps number from 1 and don't restart.
+    /// `border`, before 6 no `firstStep` or `restartsSteps` and before 7 no `marginColor`; the
+    /// first two read as none, the border as off, the salt is drawn at random, steps number from
+    /// 1 and don't restart, and annotations clip at the edge.
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         scale = try container.decode(Double.self, forKey: .scale)
@@ -125,6 +132,7 @@ public struct EditDocument: Codable, Equatable, Sendable {
         firstStep = try container.decodeIfPresent(Int.self, forKey: .firstStep) ?? 1
         restartsSteps =
             try container.decodeIfPresent(Bool.self, forKey: .restartsSteps) ?? false
+        marginColor = try container.decodeIfPresent(RGBA.self, forKey: .marginColor)
     }
 
     /// A version 3 border was first a bare `true` for one fixed frame, and documents were saved
@@ -150,6 +158,7 @@ public struct EditDocument: Codable, Equatable, Sendable {
         try container.encode(salt, forKey: .salt)
         try container.encode(firstStep, forKey: .firstStep)
         try container.encode(restartsSteps, forKey: .restartsSteps)
+        try container.encodeIfPresent(marginColor, forKey: .marginColor)
     }
 
     public var isEmpty: Bool { cuts.isEmpty && crop == nil && annotations.isEmpty && border == nil }

@@ -132,8 +132,9 @@ public struct ImageInput {
     /// Refuses a `width`×`height` original past the pixel limits, or one whose edits render it
     /// past them and larger than itself on either side, worked out from its size and the map
     /// before any pixel is decoded or drawn: the app checks every capture it opens in the editor
-    /// this way. Only seams grow a render, so the second check refuses a crafted master's many
-    /// cuts; a render no larger than an original within the limits is let through.
+    /// this way. Only seams and the margin grow a render, so the second check refuses a crafted
+    /// master's many cuts or far-flung annotations; a render no larger than an original within
+    /// the limits is let through.
     public static func checkEditable(
         _ path: String, width: Int, height: Int, edits: EditDocument
     ) throws {
@@ -195,8 +196,8 @@ private struct Limits {
         }
     }
 
-    /// Every cut adds a seam gap, so a render can be far larger than its original: its size is
-    /// checked from the map before anything is drawn.
+    /// Every cut adds a seam gap and an annotation past the edge a margin, so a render can be far
+    /// larger than its original: its size is checked from the map before anything is drawn.
     func checkRender(_ path: String, width: Int, height: Int, edits: EditDocument) throws {
         let map = Renderer.map(width: width, height: height, edits: edits)
         let (renderedWidth, renderedHeight) = (map.renderedWidth, map.renderedHeight)

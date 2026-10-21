@@ -14,7 +14,7 @@ public enum Renderer {
     public static func renderBase(
         _ original: CGImage, edits: EditDocument, style: SeamStyle = .standard
     ) -> RenderResult {
-        let plan = Self.map(
+        let plan = Self.baseMap(
             width: original.width, height: original.height, edits: edits, style: style)
         let crop = plan.crop
         let full = PixelRect(x: 0, y: 0, width: original.width, height: original.height)
@@ -72,10 +72,46 @@ public enum Renderer {
         return RenderResult(image: context.makeImage()!, map: map)
     }
 
-    /// Where a render of a `width`×`height` original would place everything, and so its size,
-    /// worked out without drawing: a caller can refuse a render too large to draw before paying
-    /// for it. `renderBase` draws exactly this map.
+    /// Where a render of a `width`×`height` original would place everything, margin included,
+    /// and so its size, worked out without drawing: a caller can refuse a render too large to
+    /// draw before paying for it. `render` draws exactly this map.
     public static func map(
+        width: Int, height: Int, edits: EditDocument, style: SeamStyle = .standard
+    ) -> RenderMap {
+        let base = baseMap(width: width, height: height, edits: edits, style: style)
+        guard edits.marginColor != nil else { return base }
+        return base.withMargin(
+            margin(annotations: edits.annotations, map: base, scale: edits.scale))
+    }
+
+    /// How far past the furthest annotation the margin reaches, in points.
+    public static let marginGap = 8.0
+
+    /// The margin that holds every annotation drawn past the image's edge, reaching `marginGap`
+    /// past the furthest on each side something overflows. `map` is a base map, without a
+    /// margin. Blurs stay inside the image and hidden annotations draw nothing, so neither
+    /// counts.
+    public static func margin(annotations: [Annotation], map: RenderMap, scale: Double) -> Margin {
+        let width = Double(map.renderedWidth)
+        let height = Double(map.renderedHeight)
+        var reach = CGRect(x: 0, y: 0, width: width, height: height)
+        for annotation in annotations where !annotation.shape.isBlur {
+            guard AnnotationGeometry.isDrawn(annotation, map: map, scale: scale),
+                let rect = map.rect(AnnotationGeometry.bounds(of: annotation, scale: scale))
+            else { continue }
+            reach = reach.union(rect)
+        }
+        let gap = marginGap * scale
+        func side(_ overflow: Double) -> Int {
+            overflow > 0 ? Int((overflow + gap).rounded(.up)) : 0
+        }
+        return Margin(
+            top: side(-reach.minY), left: side(-reach.minX), bottom: side(reach.maxY - height),
+            right: side(reach.maxX - width))
+    }
+
+    /// The base's map: the crop and cuts, without the margin. `renderBase` draws exactly this.
+    static func baseMap(
         width: Int, height: Int, edits: EditDocument, style: SeamStyle = .standard
     ) -> RenderMap {
         let full = PixelRect(x: 0, y: 0, width: width, height: height)
@@ -95,8 +131,8 @@ public enum Renderer {
                 bands: CutSet.normalized(cuts, axis: .vertical, extent: crop.width), gap: gap))
     }
 
-    /// The full render that export writes: the base, then the annotations through its map, then
-    /// the border.
+    /// The full render that export writes: the base inside its margin, then the annotations
+    /// through the map, then the border around the whole picture.
     public static func render(
         _ original: CGImage, edits: EditDocument, style: SeamStyle = .standard
     ) -> RenderResult {
@@ -104,16 +140,28 @@ public enum Renderer {
         guard edits.border != nil || edits.annotations.contains(where: { !$0.shape.isBlur }) else {
             return base
         }
-        let width = base.image.width
-        let height = base.image.height
+        let margin =
+            edits.marginColor == nil
+            ? Margin.zero
+            : Self.margin(annotations: edits.annotations, map: base.map, scale: edits.scale)
+        let map = base.map.withMargin(margin)
+        let width = map.renderedWidth
+        let height = map.renderedHeight
         let context = PixelBuffer.makeContext(width: width, height: height)
-        context.draw(base.image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        if let color = edits.marginColor, !margin.isZero {
+            context.setFillColor(color.cgColor)
+            context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        }
+        context.draw(
+            base.image,
+            in: CGRect(
+                x: margin.left, y: margin.bottom, width: base.image.width,
+                height: base.image.height))
         AnnotationRenderer.draw(
-            edits.annotations, map: base.map, scale: edits.scale, firstStep: edits.firstStep,
-            in: context,
-            canvasHeight: height)
+            edits.annotations, map: map, scale: edits.scale, firstStep: edits.firstStep,
+            in: context, canvasHeight: height)
         edits.border?.draw(in: context, width: width, height: height, scale: edits.scale)
-        return RenderResult(image: context.makeImage()!, map: base.map)
+        return RenderResult(image: context.makeImage()!, map: map)
     }
 
     /// Rendered range of the largest kept segment of `map`; the whole axis when nothing is kept.
