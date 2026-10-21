@@ -222,8 +222,10 @@ them, and the window refits to each. Tool, colour and size carry across; undo is
 **Step numbers carry on through the series**: each capture's first step follows the last step of
 the capture before it, unless its filmstrip cell's **Restart at 1** is on, so adding, deleting or
 reordering a step renumbers every later capture. Each cell shows its step range ("Steps 3–4") and
-the Restart switch, disabled with no steps. For Claude exports the capture in view. A capture
-already open in its own editor is left out of a series and its window brought forward.
+the Restart switch, disabled on the first capture and on one with no steps; a capture with no
+steps keeps first step 1, so renumbering never changes it. For Claude exports the capture in
+view. A capture already open in its own editor is left out of a series and its window brought
+forward.
 
 **Paths** (`P`) are polylines and polygons — routes, boundaries, bent pointers — drawn opaque in
 their colour and width with round joins and caps, no arrowheads. Each click adds a vertex, with a
