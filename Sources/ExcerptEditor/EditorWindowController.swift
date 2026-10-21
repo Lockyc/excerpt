@@ -89,14 +89,15 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
     /// edits; `borderStyle` is the border a capture without one gets when turned on, and
     /// `rememberBorder` is told each colour or width the user picks; `annotationStyle` is what
     /// new annotations start with, and `rememberStyle` is told each colour, size or background
-    /// the user picks; `onClose` runs once the window has closed.
+    /// the user picks; `marginColor` fills the margin of a capture that has none yet; `onClose`
+    /// runs once the window has closed.
     public init(
         captures: [LoadedCapture], save: @escaping (LoadedCapture, EditDocument) throws -> Data,
         copy: @escaping (() throws -> [Data]) -> Bool,
         forClaude: @escaping (LoadedCapture, CGImage, EditDocument) -> Void,
         borderStyle: Border, rememberBorder: @escaping (Border) -> Void,
         annotationStyle: AnnotationStyle, rememberStyle: @escaping (AnnotationStyle) -> Void,
-        onClose: @escaping () -> Void
+        marginColor: RGBA? = nil, onClose: @escaping () -> Void
     ) {
         precondition(!captures.isEmpty, "an editor needs a capture")
         self.save = save
@@ -106,7 +107,7 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         pages = captures.map { capture in
             let model = EditorModel(
                 original: capture.original, document: capture.edits, borderStyle: borderStyle,
-                style: annotationStyle)
+                style: annotationStyle, marginColor: marginColor)
             model.onBorderStyleChange = rememberBorder
             model.onStyleChange = rememberStyle
             return Page(capture: capture, model: model)
@@ -411,7 +412,7 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         let limit = model.tool == .cut ? model.cutLimitNote : ""
         let hint =
             !limit.isEmpty ? limit : model.tool == .cut || model.tool == .crop ? Self.snapHint : ""
-        window?.subtitle = [hint, model.hiddenNote(map: canvas.base.map)]
+        window?.subtitle = [hint, model.hiddenNote(map: canvas.map)]
             .filter { !$0.isEmpty }.joined(separator: " · ")
 
         undoButton.isEnabled = model.canUndo

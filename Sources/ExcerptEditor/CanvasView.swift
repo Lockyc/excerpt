@@ -27,8 +27,18 @@ final class CanvasView: NSView, NSTextViewDelegate {
 
     private static let accent = NSColor.controlAccentColor.cgColor
 
+    /// Room past the picture on every side, in points, where a press can start or a drag end, so
+    /// there is always somewhere to put something past the edge.
+    static let gutter: Double = 48
+
     private(set) var base: RenderResult
     private var baseDocument: EditDocument
+    /// The picture's placement, margin included: the base's map with the margin laid out. It
+    /// holds still while a drag or path is in progress, since laying out again under the
+    /// pointer would move what the pointer maps to and push the item further out; the margin
+    /// the annotations reach meanwhile is `liveMargin`, drawn in place.
+    private(set) var map: RenderMap
+    private var liveMargin = Margin.zero
     /// Takes the typing: input, caret and selection only. Its glyphs are transparent, since the
     /// canvas draws the text being typed through Core like any other annotation.
     private var textView: NSTextView?
@@ -44,7 +54,10 @@ final class CanvasView: NSView, NSTextViewDelegate {
         self.model = model
         baseDocument = model.baseDocument
         base = Renderer.renderBase(model.original, edits: baseDocument)
+        map = base.map
         super.init(frame: .zero)
+        liveMargin = currentMargin()
+        map = base.map.withMargin(liveMargin)
         model.onChange = { [weak self] in self?.refresh() }
         itemBar.onColor = { [weak self] in self?.model.setColor($0) }
         itemBar.onSize = { [weak self] in self?.model.setWidth($0) }
@@ -84,14 +97,38 @@ final class CanvasView: NSView, NSTextViewDelegate {
     override var acceptsFirstResponder: Bool { true }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
-    var renderedSize: CGSize { CGSize(width: base.image.width, height: base.image.height) }
+    /// The canvas in rendered pixels: the picture and the gutter around it.
+    var renderedSize: CGSize {
+        let g = 2 * gutterPixels
+        return CGSize(width: Double(map.renderedWidth) + g, height: Double(map.renderedHeight) + g)
+    }
 
-    /// Re-renders the base only when what it depends on changed, then repaints.
+    private var gutterPixels: Double { Self.gutter * model.document.scale }
+    private var pictureSize: CGSize { CGSize(width: map.renderedWidth, height: map.renderedHeight) }
+
+    /// The margin the annotations shown reach, or none for a document that clips them.
+    private func currentMargin() -> Margin {
+        guard model.document.marginColor != nil else { return .zero }
+        return Renderer.margin(
+            annotations: model.displayDocument.annotations, map: base.map,
+            scale: model.document.scale)
+    }
+
+    /// Re-renders the base only when what it depends on changed, lays the margin out again
+    /// unless a drag or path holds it, then repaints.
     func refresh() {
         let wanted = model.baseDocument
+        var rendered = false
         if wanted != baseDocument {
             baseDocument = wanted
             base = Renderer.renderBase(model.original, edits: wanted)
+            rendered = true
+        }
+        liveMargin = currentMargin()
+        let held = model.drag != nil || model.building != nil
+        let margin = held ? map.margin : liveMargin
+        if rendered || margin != map.margin {
+            map = base.map.withMargin(margin)
             resize()
         }
         needsDisplay = true
@@ -106,9 +143,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
         guard let window, window.isKeyWindow else { return }
         let location = convert(window.mouseLocationOutsideOfEventStream, from: nil)
         guard visibleRect.contains(location) else { return }
-        let p = Pointer(
-            rendered: CGPoint(x: location.x / zoom, y: location.y / zoom), map: base.map)
-        cursor(at: p).set()
+        cursor(at: pointer(at: location)).set()
     }
 
     /// A hand over what a press would move, closed while it moves; a resize arrow on a seam's
@@ -125,7 +160,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
         default: return ToolGlyph.cursor(model.tool)
         }
         let option = NSEvent.modifierFlags.contains(.option)
-        switch model.grab(at: p, map: base.map, option: option) {
+        switch model.grab(at: p, map: map, option: option) {
         case .annotation?, .vertex?: return .openHand
         case .seamEdge(let seam, _)?: return resize(seam)
         case .segment?: return .crosshair
@@ -152,7 +187,6 @@ final class CanvasView: NSView, NSTextViewDelegate {
     /// or the crop under the crop tool; nil during a drag.
     private var barTarget: CGRect? {
         guard model.drag == nil else { return nil }
-        let map = base.map
         let scale = model.document.scale
         if let typing = model.typing {
             let bounds = AnnotationGeometry.bounds(of: typing, scale: scale)
@@ -225,18 +259,35 @@ final class CanvasView: NSView, NSTextViewDelegate {
 
     override func draw(_ dirtyRect: NSRect) {
         guard let context = NSGraphicsContext.current?.cgContext else { return }
-        let height = base.image.height
+        let height = map.renderedHeight
+        let g = gutterPixels
         context.saveGState()
         context.scaleBy(x: zoom, y: zoom)
+        context.translateBy(x: g, y: g)
         context.interpolationQuality = zoom < 1 ? .high : .none
 
+        // The margin the annotations reach now, around the image where the layout put it.
+        let image = CGRect(
+            x: map.margin.left, y: map.margin.top, width: base.image.width,
+            height: base.image.height)
+        let live = liveMargin
+        let picture = CGRect(
+            x: image.minX - Double(live.left), y: image.minY - Double(live.top),
+            width: image.width + Double(live.left + live.right),
+            height: image.height + Double(live.top + live.bottom))
+        if let color = model.document.marginColor, !live.isZero {
+            context.setFillColor(color.cgColor)
+            context.fill(picture)
+        }
+
         // The base, cut to the dirty region so a tall capture draws only what is visible.
-        let bounds = CGRect(origin: .zero, size: renderedSize)
         let visible = CGRect(
-            x: dirtyRect.minX / zoom, y: dirtyRect.minY / zoom, width: dirtyRect.width / zoom,
-            height: dirtyRect.height / zoom
-        ).integral.intersection(bounds)
-        if !visible.isEmpty, let piece = base.image.cropping(to: visible) {
+            x: dirtyRect.minX / zoom - g, y: dirtyRect.minY / zoom - g,
+            width: dirtyRect.width / zoom, height: dirtyRect.height / zoom
+        ).integral.intersection(image)
+        if !visible.isEmpty,
+            let piece = base.image.cropping(to: visible.offsetBy(dx: -image.minX, dy: -image.minY))
+        {
             context.saveGState()
             context.translateBy(x: 0, y: visible.maxY)
             context.scaleBy(x: 1, y: -1)
@@ -251,10 +302,16 @@ final class CanvasView: NSView, NSTextViewDelegate {
         context.translateBy(x: 0, y: CGFloat(height))
         context.scaleBy(x: 1, y: -1)
         AnnotationRenderer.draw(
-            model.displayDocument.annotations, map: base.map, scale: model.document.scale,
+            model.displayDocument.annotations, map: map, scale: model.document.scale,
             firstStep: model.document.firstStep, in: context, canvasHeight: height)
-        model.document.border?.draw(
-            in: context, width: base.image.width, height: height, scale: model.document.scale)
+        if let border = model.document.border {
+            context.saveGState()
+            context.translateBy(x: picture.minX, y: Double(height) - picture.maxY)
+            border.draw(
+                in: context, width: Int(picture.width), height: Int(picture.height),
+                scale: model.document.scale)
+            context.restoreGState()
+        }
         context.restoreGState()
 
         drawChrome(in: context)
@@ -262,14 +319,13 @@ final class CanvasView: NSView, NSTextViewDelegate {
     }
 
     private func drawChrome(in context: CGContext) {
-        let map = base.map
         let line = 1 / zoom
         let accent = Self.accent
         context.setLineWidth(2 * line)
 
         if model.tool == .crop, let crop = model.document.crop, let rect = map.rect(crop.cgRect) {
             let path = CGMutablePath()
-            path.addRect(CGRect(origin: .zero, size: renderedSize))
+            path.addRect(CGRect(origin: .zero, size: pictureSize))
             path.addRect(rect)
             context.addPath(path)
             context.setFillColor(CGColor(gray: 0, alpha: 0.45))
@@ -311,11 +367,11 @@ final class CanvasView: NSView, NSTextViewDelegate {
             context.setStrokeColor(accent)
             if seam.axis == .horizontal {
                 context.strokeLineSegments(between: [
-                    CGPoint(x: 0, y: point.y), CGPoint(x: renderedSize.width, y: point.y),
+                    CGPoint(x: 0, y: point.y), CGPoint(x: pictureSize.width, y: point.y),
                 ])
             } else {
                 context.strokeLineSegments(between: [
-                    CGPoint(x: point.x, y: 0), CGPoint(x: point.x, y: renderedSize.height),
+                    CGPoint(x: point.x, y: 0), CGPoint(x: point.x, y: pictureSize.height),
                 ])
             }
         case nil:
@@ -378,7 +434,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
         for (i, vertex) in points.enumerated() {
             let closes = model.building != nil && i == 0 && points.count >= 3
             drawKnob(
-                at: base.map.point(vertex), radius: (closes ? 7 : 4) * line, in: context,
+                at: map.point(vertex), radius: (closes ? 7 : 4) * line, in: context,
                 active: closes && model.building?.closes == true)
         }
     }
@@ -387,37 +443,48 @@ final class CanvasView: NSView, NSTextViewDelegate {
     func gapRect(_ seam: Seam) -> CGRect {
         seam.axis == .horizontal
             ? CGRect(
-                x: 0, y: seam.gap.lowerBound, width: Int(renderedSize.width), height: seam.gap.count
+                x: 0, y: seam.gap.lowerBound, width: Int(pictureSize.width), height: seam.gap.count
             )
             : CGRect(
                 x: seam.gap.lowerBound, y: 0, width: seam.gap.count,
-                height: Int(renderedSize.height))
+                height: Int(pictureSize.height))
     }
 
     /// The rendered rect a pending cut would remove, across the whole image.
     func bandRect(_ cut: Cut) -> CGRect {
-        let map = base.map
+        let top = Double(map.margin.top)
+        let left = Double(map.margin.left)
         if cut.axis == .horizontal {
-            let top = map.rows.place(Double(cut.lower - map.crop.y), bias: .after)
-            let bottom = map.rows.place(Double(cut.upper - map.crop.y), bias: .before)
+            let upper = map.rows.place(Double(cut.lower - map.crop.y), bias: .after) + top
+            let lower = map.rows.place(Double(cut.upper - map.crop.y), bias: .before) + top
             return CGRect(
-                x: 0, y: top, width: Double(renderedSize.width), height: max(0, bottom - top))
+                x: 0, y: upper, width: Double(pictureSize.width), height: max(0, lower - upper))
         }
-        let left = map.columns.place(Double(cut.lower - map.crop.x), bias: .after)
-        let right = map.columns.place(Double(cut.upper - map.crop.x), bias: .before)
+        let leading = map.columns.place(Double(cut.lower - map.crop.x), bias: .after) + left
+        let trailing = map.columns.place(Double(cut.upper - map.crop.x), bias: .before) + left
         return CGRect(
-            x: left, y: 0, width: max(0, right - left), height: Double(renderedSize.height))
+            x: leading, y: 0, width: max(0, trailing - leading),
+            height: Double(pictureSize.height))
     }
 
     // MARK: Input
 
     private func pointer(_ event: NSEvent) -> Pointer {
-        let p = convert(event.locationInWindow, from: nil)
-        return Pointer(rendered: CGPoint(x: p.x / zoom, y: p.y / zoom), map: base.map)
+        pointer(at: convert(event.locationInWindow, from: nil))
+    }
+
+    /// The pointer at view point `p`, held to the picture and its gutter.
+    private func pointer(at p: CGPoint) -> Pointer {
+        let g = gutterPixels
+        return Pointer(
+            rendered: CGPoint(x: p.x / zoom - g, y: p.y / zoom - g), map: map, slack: g)
     }
 
     /// Rendered pixels to view points.
-    private func viewPoint(_ p: CGPoint) -> CGPoint { CGPoint(x: p.x * zoom, y: p.y * zoom) }
+    private func viewPoint(_ p: CGPoint) -> CGPoint {
+        let g = gutterPixels
+        return CGPoint(x: (p.x + g) * zoom, y: (p.y + g) * zoom)
+    }
 
     private func viewRect(_ r: CGRect) -> CGRect {
         CGRect(
@@ -434,12 +501,12 @@ final class CanvasView: NSView, NSTextViewDelegate {
             beginText(at: p)
             return
         }
-        if model.tool == .select, event.clickCount == 2, model.textID(at: p, map: base.map) != nil {
+        if model.tool == .select, event.clickCount == 2, model.textID(at: p, map: map) != nil {
             beginText(at: p)
             return
         }
         model.mouseDown(
-            p, map: base.map, clickCount: event.clickCount,
+            p, map: map, clickCount: event.clickCount,
             option: event.modifierFlags.contains(.option))
     }
 
@@ -461,31 +528,31 @@ final class CanvasView: NSView, NSTextViewDelegate {
     }
 
     override func mouseMoved(with event: NSEvent) {
-        model.hover(pointer(event), map: base.map)
+        model.hover(pointer(event), map: map)
         updateCursor()
     }
 
     override func mouseExited(with event: NSEvent) {
-        model.hover(nil, map: base.map)
+        model.hover(nil, map: map)
         NSCursor.arrow.set()
     }
 
     override func mouseDragged(with event: NSEvent) {
-        model.mouseDragged(pointer(event), map: base.map, snap: snap(event))
+        model.mouseDragged(pointer(event), map: map, snap: snap(event))
     }
 
     override func mouseUp(with event: NSEvent) {
         let pendingCut: Cut?
         if case .cut(let cut)? = model.pending { pendingCut = cut } else { pendingCut = nil }
         let before = pendingCut.map(bandRect)
-        model.mouseUp(pointer(event), map: base.map, snap: snap(event))
+        model.mouseUp(pointer(event), map: map, snap: snap(event))
         if let cut = pendingCut, let before { animateCollapse(of: cut, from: before) }
     }
 
     /// The shaded band shrinks into its new seam.
     private func animateCollapse(of cut: Cut, from band: CGRect) {
         guard
-            let seam = base.map.seams(cut.axis).first(where: { $0.band.contains(cut.lower) })
+            let seam = map.seams(cut.axis).first(where: { $0.band.contains(cut.lower) })
         else { return }
         let shade = NSView(frame: viewRect(band))
         shade.wantsLayer = true
@@ -525,7 +592,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
 
     func beginText(at p: Pointer) {
         commitInProgress()
-        model.beginTyping(at: p, map: base.map)
+        model.beginTyping(at: p, map: map)
         typingUndo = UndoManager()
         let view = NSTextView(frame: .zero)
         view.drawsBackground = false
@@ -569,7 +636,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
         }
         let ink = background == true ? typing.color.contrastingInk : typing.color.rgba
         view.insertionPointColor = NSColor(cgColor: ink.cgColor) ?? .textColor
-        let topLeft = viewPoint(base.map.point(origin, bias: .after))
+        let topLeft = viewPoint(map.point(origin, bias: .after))
         view.frame = CGRect(
             x: topLeft.x, y: topLeft.y,
             width: rect.width * zoom + CGFloat(pixelSize),  // room for the caret past the end
