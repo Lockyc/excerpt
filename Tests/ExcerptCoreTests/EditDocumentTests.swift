@@ -26,12 +26,12 @@ import Testing
         let doc = EditDocument(scale: 2, cuts: [Cut(axis: .vertical, lower: 1, upper: 2)])
         #expect(try doc.encoded() == doc.encoded())
         let json = String(decoding: try doc.encoded(), as: UTF8.self)
-        #expect(json.contains("\"version\":6") && !json.contains("border"))
+        #expect(json.contains("\"version\":7") && !json.contains("border"))
     }
 
     @Test func rejectsANewerVersion() {
-        let json = Data(#"{"version":7,"scale":2,"cuts":[]}"#.utf8)
-        #expect(throws: EditDocumentError.unsupportedVersion(7)) { try EditDocument.decode(json) }
+        let json = Data(#"{"version":8,"scale":2,"cuts":[]}"#.utf8)
+        #expect(throws: EditDocumentError.unsupportedVersion(8)) { try EditDocument.decode(json) }
     }
 
     @Test func firstStepAndRestartRoundTrip() throws {
@@ -113,7 +113,7 @@ import Testing
         // A missing salt is random, not a public seed, and persists once saved.
         #expect(try EditDocument.decode(json).salt != doc.salt)
         #expect(try EditDocument.decode(doc.encoded()).salt == doc.salt)
-        #expect(String(decoding: try doc.encoded(), as: UTF8.self).contains("\"version\":6"))
+        #expect(String(decoding: try doc.encoded(), as: UTF8.self).contains("\"version\":7"))
     }
 
     @Test func borderRoundTripsAndReadsOffWhenAbsent() throws {

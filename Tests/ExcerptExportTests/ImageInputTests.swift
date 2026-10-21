@@ -450,3 +450,17 @@ import UniformTypeIdentifiers
         #expect(throws: ImageInputError.notAnImage(pdf.path)) { try ImageInput.load(pdf) }
     }
 }
+
+@Suite struct ImageInputMarginTests {
+    @Test func aHugeMarginIsRefusedBeforeDrawing() {
+        let far = Annotation(
+            id: 1,
+            shape: .text(
+                origin: CGPoint(x: -EditDocument.coordinateLimit, y: 10), string: "x"))
+        let edits = EditDocument(
+            scale: 1, annotations: [far], marginColor: RGBA(r: 1, g: 2, b: 3, a: 255), salt: 1)
+        #expect(throws: ImageInputError.self) {
+            try ImageInput.checkEditable("m.png", width: 100, height: 100, edits: edits)
+        }
+    }
+}
