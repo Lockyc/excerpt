@@ -84,6 +84,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private lazy var thumbnails = ThumbnailStack(
         preferences: preferences, onEdit: { [weak self] url in self?.openEditor(url) },
+        onEditAll: { [weak self] urls in self?.openEditors(urls) },
         onClaude: { [weak self] url in self?.forClaude(url) })
     private let claude = ClaudeExporter()
     private lazy var filing = LibraryFiling(preferences: preferences)
@@ -99,37 +100,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task { @MainActor in await coordinator.run(action) }
     }
 
-    /// Files opened with Excerpt from Finder's Open With.
+    /// Files opened with Excerpt from Finder's Open With, or handed over by another app; several
+    /// at once open as a series.
     func application(_ application: NSApplication, open urls: [URL]) {
-        for url in urls { openEditor(url) }
+        openEditors(urls)
     }
 
-    func openEditor(_ url: URL) {
-        // Re-opening an open capture (or its master) focuses its window without decoding.
-        let directory = url.deletingLastPathComponent()
-        let sibling = LibraryNaming.primaryName(forOriginal: url.lastPathComponent)
-            .map { directory.appendingPathComponent($0) }
-        for key in [url, sibling].compactMap({ $0 }) {
-            if let open = editors[key.standardizedFileURL] {
+    func openEditor(_ url: URL) { openEditors([url]) }
+
+    /// Opens the captures in one editor, a series when there are several, in creation order. A
+    /// capture already open (or its master) brings its own window forward and is left out.
+    func openEditors(_ urls: [URL]) {
+        let store = preferences.store
+        var captures: [URL: LoadedCapture] = [:]
+        var items: [(url: URL, created: Date)] = []
+        for url in urls {
+            // An open capture focuses its window without decoding.
+            let directory = url.deletingLastPathComponent()
+            let sibling = LibraryNaming.primaryName(forOriginal: url.lastPathComponent)
+                .map { directory.appendingPathComponent($0) }
+            if let open = [url, sibling].compactMap({ $0 })
+                .lazy.compactMap({ self.editors[$0.standardizedFileURL] }).first
+            {
                 open.show()
-                return
+                continue
+            }
+            do {
+                let capture = try store.loadForRendering(url)
+                let primary = capture.primary.standardizedFileURL
+                captures[primary] = capture
+                let created =
+                    (try? primary.resourceValues(forKeys: [.creationDateKey]).creationDate)
+                    ?? .distantPast
+                items.append((primary, created))
+            } catch {
+                Alerts.openFailed(url, error)
             }
         }
-        let store = preferences.store
-        let capture: LoadedCapture
-        do {
-            capture = try store.loadForRendering(url)
-        } catch {
-            Alerts.openFailed(url, error)
-            return
-        }
-        let primary = capture.primary.standardizedFileURL
-        if let open = editors[primary] {
-            open.show()
-            return
-        }
+        let arranged = SeriesOrder.arrange(items, open: Set(editors.keys))
+        for primary in arranged.alreadyOpen { editors[primary]?.show() }
+        let series = arranged.series.compactMap { captures[$0] }
+        guard let first = series.first else { return }
         let editor = EditorWindowController(
-            captures: [capture],
+            captures: series,
             save: { capture, document in
                 try store.saveEdits(
                     primary: capture.primary, original: capture.original, edits: document,
@@ -140,7 +153,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     try Pasteboard.copyPNGs(makePNGs())
                     return true
                 } catch {
-                    Alerts.copyFailed(capture.primary, error)
+                    Alerts.copyFailed(first.primary, error)
                     return false
                 }
             },
@@ -154,10 +167,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             rememberStyle: { [weak self] in self?.preferences.editorStyle = $0 },
             onClose: { [weak self] in
                 // The window is still mid-close; release it on the next turn, not under itself.
-                DispatchQueue.main.async { self?.editors[primary] = nil }
+                DispatchQueue.main.async {
+                    for primary in arranged.series { self?.editors[primary] = nil }
+                }
             })
-        editors[primary] = editor
-        editor.isPreparingForClaude = claude.isExporting(primary)
+        for primary in arranged.series { editors[primary] = editor }
+        editor.isPreparingForClaude = arranged.series.contains { claude.isExporting($0) }
         editor.show()
     }
 
@@ -176,13 +191,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Each unsaved editor asks Save / Don't Save / Cancel; Cancel keeps the app running.
+    /// Each unsaved editor asks Save / Don't Save / Cancel, once however many captures it holds;
+    /// Cancel keeps the app running.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        for editor in editors.values where !editor.confirmClose() { return .terminateCancel }
+        var asked = Set<ObjectIdentifier>()
+        for editor in editors.values where asked.insert(ObjectIdentifier(editor)).inserted {
+            if !editor.confirmClose() { return .terminateCancel }
+        }
         return .terminateNow
     }
 
-    /// Open Capture…: a panel at the library folder; each PNG chosen opens in the editor.
+    /// Open Capture…: a panel at the library folder; the PNGs chosen open in the editor, several
+    /// as a series.
     func chooseCapture() {
         let panel = NSOpenPanel()
         panel.directoryURL = preferences.libraryFolder
@@ -192,7 +212,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate()
         panel.begin { [weak self] response in
             guard response == .OK else { return }
-            for url in panel.urls { self?.openEditor(url) }
+            self?.openEditors(panel.urls)
         }
     }
 
