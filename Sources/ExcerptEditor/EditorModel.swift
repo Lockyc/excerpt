@@ -61,10 +61,14 @@ final class EditorModel {
     /// The original's pixels, for snapping; read on first use.
     private(set) lazy var pixels = PixelBuffer(original)
 
+    /// A document without a margin colour takes `marginColor`, so the picture can grow from
+    /// here on; that alone is not an edit.
     init(
         original: CGImage, document: EditDocument, borderStyle: Border = .initial,
-        style: AnnotationStyle = .initial
+        style: AnnotationStyle = .initial, marginColor: RGBA? = nil
     ) {
+        var document = document
+        if document.marginColor == nil { document.marginColor = marginColor }
         self.original = original
         self.style = style
         self.document = document

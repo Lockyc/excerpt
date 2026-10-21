@@ -8,12 +8,13 @@ struct Pointer {
     let rendered: CGPoint
     let original: CGPoint
 
-    /// `rendered` is clamped to the render: AppKit keeps sending drag events past the view's
-    /// edge, and a shape moved out there could never be pointed at again.
-    init(rendered: CGPoint, map: RenderMap) {
+    /// `rendered` is clamped to the render and `slack` past it (the canvas's gutter): AppKit
+    /// keeps sending drag events past the view's edge, and a shape moved out there could never
+    /// be pointed at again.
+    init(rendered: CGPoint, map: RenderMap, slack: Double = 0) {
         let clamped = CGPoint(
-            x: min(max(rendered.x, 0), Double(map.columns.renderedLength)),
-            y: min(max(rendered.y, 0), Double(map.rows.renderedLength)))
+            x: min(max(rendered.x, -slack), Double(map.renderedWidth) + slack),
+            y: min(max(rendered.y, -slack), Double(map.renderedHeight) + slack))
         self.rendered = clamped
         self.original = map.original(clamped)
     }

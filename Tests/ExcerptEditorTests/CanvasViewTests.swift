@@ -8,15 +8,18 @@ import Testing
 /// The canvas must show what export writes: one renderer.
 @MainActor
 @Suite struct CanvasViewTests {
-    /// The view drawn at one pixel per point, whatever the screen's backing scale.
-    func snapshot(_ view: NSView) -> PixelBuffer {
+    /// The picture, inside the canvas's gutter, drawn at one pixel per point, whatever the
+    /// screen's backing scale.
+    func snapshot(_ view: CanvasView) -> PixelBuffer {
+        let g = CanvasView.gutter * view.model.document.scale * view.zoom
+        let picture = view.bounds.insetBy(dx: g, dy: g)
         let rep = NSBitmapImageRep(
-            bitmapDataPlanes: nil, pixelsWide: Int(view.bounds.width),
-            pixelsHigh: Int(view.bounds.height), bitsPerSample: 8, samplesPerPixel: 4,
+            bitmapDataPlanes: nil, pixelsWide: Int(picture.width.rounded()),
+            pixelsHigh: Int(picture.height.rounded()), bitsPerSample: 8, samplesPerPixel: 4,
             hasAlpha: true, isPlanar: false, colorSpaceName: .calibratedRGB, bytesPerRow: 0,
             bitsPerPixel: 0)!
-        rep.size = view.bounds.size
-        view.cacheDisplay(in: view.bounds, to: rep)
+        rep.size = picture.size
+        view.cacheDisplay(in: picture, to: rep)
         return PixelBuffer(rep.cgImage!)
     }
 
@@ -66,11 +69,12 @@ import Testing
             Issue.record("no bar")
             return
         }
-        #expect(bar.maxY < 200)  // above the rectangle (the canvas is flipped)
+        #expect(bar.maxY < 200 + CanvasView.gutter)  // above the rectangle (the canvas is flipped)
         #expect(bar.minX >= 0 && bar.maxX <= canvas.bounds.width)
-        // A selection at the very top puts the bar below it.
+        // A selection at the very top of the canvas, in its gutter, puts the bar below it.
         model.apply {
-            $0.annotations[0].shape = .rectangle(rect: CGRect(x: 100, y: 2, width: 80, height: 40))
+            $0.annotations[0].shape = .rectangle(
+                rect: CGRect(x: 100, y: 2 - CanvasView.gutter, width: 80, height: 40))
         }
         #expect((canvas.itemBarFrame?.minY ?? 0) > 42)
     }
@@ -80,7 +84,7 @@ import Testing
         let canvas = CanvasView(model: model)
         canvas.zoom = 1
         model.tool = .text
-        let map = canvas.base.map
+        let map = canvas.map
         model.beginTyping(at: Pointer(rendered: CGPoint(x: 40, y: 60), map: map), map: map)
         model.updateTyping("Total")
         // The bar and the text view float over the canvas; what is under them is the render.
@@ -143,7 +147,9 @@ import Testing
         let model = EditorModel(original: sheet(), document: EditDocument(scale: 2))
         let canvas = CanvasView(model: model)
         canvas.zoom = 0.5
-        #expect(canvas.frame.size == CGSize(width: 180, height: 200))
+        #expect(
+            canvas.frame.size
+                == CGSize(width: 180 + 2 * CanvasView.gutter, height: 200 + 2 * CanvasView.gutter))
         #expect(model.slop == 12)
     }
 
@@ -161,16 +167,16 @@ import Testing
         model.apply { $0.cuts.append(Cut(axis: .horizontal, lower: 100, upper: 200)) }
         canvas.refresh()
         #expect(canvas.base.image !== first)
-        #expect(canvas.frame.height == CGFloat(400 - 100 + 18))
+        #expect(canvas.frame.height == CGFloat(400 - 100 + 18 + 2 * CanvasView.gutter))
     }
 
     @Test func theCanvasFollowsTheModelWithoutBeingTold() {
         let model = EditorModel(original: sheet(), document: EditDocument(scale: 1))
         let canvas = CanvasView(model: model)
         model.apply { $0.cuts.append(Cut(axis: .horizontal, lower: 100, upper: 200)) }
-        #expect(canvas.frame.height == CGFloat(400 - 100 + 18))
+        #expect(canvas.frame.height == CGFloat(400 - 100 + 18 + 2 * CanvasView.gutter))
         model.undo()
-        #expect(canvas.frame.height == 400)
+        #expect(canvas.frame.height == CGFloat(400 + 2 * CanvasView.gutter))
         let first = canvas.base.image
         model.apply {
             $0.annotations.append(
@@ -253,7 +259,7 @@ import Testing
     @Test func deletingWhileTypingHandsTheKeysBackToTheCanvas() {
         let (window, _, canvas) = editor(EditDocument(scale: 1, salt: 7))
         canvas.model.tool = .text
-        let map = canvas.base.map
+        let map = canvas.map
         canvas.beginText(at: Pointer(rendered: CGPoint(x: 40, y: 60), map: map))
         #expect(window.firstResponder is NSTextView)
         canvas.deleteItem()
@@ -263,7 +269,7 @@ import Testing
     @Test func typingLeavesNothingOnTheWindowsUndo() {
         let (window, _, canvas) = editor(EditDocument(scale: 1, salt: 7))
         canvas.model.tool = .text
-        let map = canvas.base.map
+        let map = canvas.map
         canvas.beginText(at: Pointer(rendered: CGPoint(x: 40, y: 60), map: map))
         (window.firstResponder as? NSTextView)?.insertText(
             "abc", replacementRange: NSRange(location: NSNotFound, length: 0))
@@ -285,7 +291,7 @@ import Testing
                 original: Fixtures.sheet(width: 360, height: 400),
                 document: EditDocument(scale: 1, salt: 7)))
         canvas.model.tool = .path
-        let map = canvas.base.map
+        let map = canvas.map
         for (x, y) in points {
             let p = Pointer(rendered: CGPoint(x: x, y: y), map: map)
             canvas.model.mouseDown(p, map: map)
@@ -311,5 +317,92 @@ import Testing
                 == .path(
                     points: [CGPoint(x: 10, y: 10), CGPoint(x: 100, y: 10)], closed: false,
                     fill: false))
+    }
+}
+
+@MainActor
+@Suite struct CanvasMarginTests {
+    let backdrop = RGBA(r: 0xE5, g: 0xE5, b: 0xEA, a: 255)
+    let box = Annotation(
+        id: 1, shape: .rectangle(rect: CGRect(x: 10, y: 100, width: 60, height: 40)))
+
+    func canvas(_ annotations: [Annotation]) -> CanvasView {
+        let model = EditorModel(
+            original: Fixtures.sheet(width: 360, height: 400),
+            document: EditDocument(scale: 1, annotations: annotations, salt: 1),
+            marginColor: backdrop)
+        let canvas = CanvasView(model: model)
+        canvas.zoom = 1
+        return canvas
+    }
+
+    @Test func aDocumentWithoutAColourTakesTheEditorsAndStaysClean() {
+        let model = EditorModel(
+            original: Fixtures.sheet(width: 100, height: 100),
+            document: EditDocument(scale: 2, salt: 1), marginColor: backdrop)
+        #expect(model.document.marginColor == backdrop && !model.isDirty)
+        let kept = EditorModel(
+            original: Fixtures.sheet(width: 100, height: 100),
+            document: EditDocument(scale: 2, marginColor: RGBA(r: 1, g: 2, b: 3, a: 255), salt: 1),
+            marginColor: backdrop)
+        #expect(kept.document.marginColor == RGBA(r: 1, g: 2, b: 3, a: 255))
+    }
+
+    @Test func theCanvasHasAGutterAroundThePicture() {
+        let c = canvas([])
+        let gutter = CanvasView.gutter
+        #expect(c.renderedSize == CGSize(width: 360 + 2 * gutter, height: 400 + 2 * gutter))
+    }
+
+    @Test func movingPastTheEdgeGrowsOnReleaseAndMovingBackShrinks() {
+        let c = canvas([box])
+        let m = c.model
+        m.tool = .select
+        func drag(from: CGPoint, to: CGPoint) {
+            let map = c.map
+            m.mouseDown(Pointer(rendered: from, map: map, slack: CanvasView.gutter), map: map)
+            m.mouseDragged(
+                Pointer(rendered: to, map: map, slack: CanvasView.gutter), map: map, snap: false)
+            #expect(c.map == map, "the layout holds during the drag")
+            m.mouseUp(
+                Pointer(rendered: to, map: map, slack: CanvasView.gutter), map: map, snap: false)
+        }
+        drag(from: CGPoint(x: 40, y: 120), to: CGPoint(x: -40, y: 120))
+        #expect(c.map.margin.left > 0)
+        #expect(c.renderedSize.width > 360 + 2 * CanvasView.gutter)
+        let back = c.map.point(CGPoint(x: -40, y: 120))
+        drag(from: back, to: CGPoint(x: back.x + 200, y: back.y))
+        #expect(c.map.margin == .zero)
+    }
+
+    @Test func aPressInTheGutterStartsAShape() {
+        let c = canvas([])
+        let m = c.model
+        m.tool = .rectangle
+        let map = c.map
+        let start = Pointer(rendered: CGPoint(x: -30, y: -30), map: map, slack: CanvasView.gutter)
+        m.mouseDown(start, map: map)
+        let end = Pointer(rendered: CGPoint(x: 50, y: 50), map: map, slack: CanvasView.gutter)
+        m.mouseDragged(end, map: map, snap: false)
+        m.mouseUp(end, map: map, snap: false)
+        guard case .rectangle(let rect)? = m.document.annotations.first?.shape else {
+            Issue.record("no rectangle")
+            return
+        }
+        #expect(rect.minX < 0 && rect.minY < 0)
+        #expect(c.map.margin.left > 0 && c.map.margin.top > 0)
+    }
+
+    @Test func withAMarginTheCanvasMatchesTheRender() throws {
+        let past = Annotation(
+            id: 1, shape: .text(origin: CGPoint(x: 20, y: -30), string: "Pin to dashboard"),
+            color: .red, width: .thick)
+        let c = canvas([past])
+        let exported = Renderer.render(c.model.original, edits: c.model.document).image
+        #expect(Int(c.renderedSize.width) == exported.width + 2 * Int(CanvasView.gutter))
+        let shown = CanvasViewTests().snapshot(c)
+        #expect(shown.width == exported.width && shown.height == exported.height)
+        guard shown.width == exported.width, shown.height == exported.height else { return }
+        #expect(shown.fractionDiffering(from: PixelBuffer(exported), tolerance: 16) <= 0.005)
     }
 }

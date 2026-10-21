@@ -44,7 +44,7 @@ import Testing
         defer { editor.window?.orderOut(nil) }
         let canvas = try canvas(of: editor)
         try choose(.path, in: editor)
-        let map = canvas.base.map
+        let map = canvas.map
         for x in [10.0, 100] {
             let p = Pointer(rendered: CGPoint(x: x, y: 10), map: map)
             canvas.model.mouseDown(p, map: map)
@@ -60,7 +60,7 @@ import Testing
         defer { editor.window?.orderOut(nil) }
         let canvas = try canvas(of: editor)
         try choose(.text, in: editor)
-        canvas.beginText(at: Pointer(rendered: CGPoint(x: 40, y: 60), map: canvas.base.map))
+        canvas.beginText(at: Pointer(rendered: CGPoint(x: 40, y: 60), map: canvas.map))
         try choose(.arrow, in: editor)
         #expect(canvas.model.tool == .arrow)
     }
@@ -75,9 +75,9 @@ import Testing
         let canvas = try #require(scrollView.documentView)
 
         scrollView.scrollerStyle = .overlay
-        #expect(canvas.frame.width == scrollView.contentSize.width)
+        #expect(abs(canvas.frame.width - scrollView.contentSize.width) < 0.001)
         scrollView.scrollerStyle = .legacy
         #expect(scrollView.contentSize.width < scrollView.frame.width)
-        #expect(canvas.frame.width == scrollView.contentSize.width)
+        #expect(abs(canvas.frame.width - scrollView.contentSize.width) < 0.001)
     }
 }
