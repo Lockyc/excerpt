@@ -66,7 +66,9 @@ drag across the rows or columns to remove; the join becomes a torn seam. Cut and
 content never reaches the saved file. The original and your edits are kept in a separate
 `… original.png`, so you can reopen a capture from the menu bar's **Recent Captures** and
 adjust them. **Border** frames the image in a solid line of your colour and width, so a
-screenshot pasted into an email stands apart from the text around it. **Save** (⌘S) saves, copies the image and closes the editor.
+screenshot pasted into an email stands apart from the text around it. Drawing or dragging
+something past the edge grows the picture to hold it, filled with the window backdrop colour
+from Settings. **Save** (⌘S) saves, copies the image and closes the editor.
 
 Several captures taken in a row open together with the newest thumbnail's **Edit All**, or by
 choosing several in Open Capture…: one editor, a filmstrip along the bottom, `⌘[` / `⌘]` to move
