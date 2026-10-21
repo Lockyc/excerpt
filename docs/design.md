@@ -242,6 +242,21 @@ insert one; a drag elsewhere on the path moves it. A closed path with **Fill** o
 inside it when filled, and is hidden by a cut only when all its vertices lie inside one removed
 band, as an arrow is.
 
+**Past the edge.** An annotation drawn or dragged past the picture's edge grows the picture to
+hold it: on each side something overflows, the render gains a **margin** reaching
+`Renderer.marginGap` (8pt) past the furthest annotation, filled with the document's margin
+colour. The margin is derived from the annotations every render, never stored, so dragging the
+last one back inside shrinks the picture again. Blurs and annotations a cut hides never grow it,
+and a blur stays inside the image. The canvas keeps a **gutter** of `CanvasView.gutter` (48pt) in
+the under-page colour around the render, outside the saved image, where a press can start or a
+drag can end, so there is always room to place something past the current edge; it moves out as
+the margin grows. The margin is part of the render map: its placement is offset by the margin's
+leading sides and its rendered size includes them, so hit testing, seams, the For Claude tiles
+and `text.md` all see the same picture. The margin colour is the window backdrop colour from
+Settings, stored in the document the first time an editor opens it; a document without one
+(saved before growing existed) keeps clipping annotations at its edge, so its primary still
+reproduces.
+
 **Border** turns the border on and off, and its chevron drops down an on/off switch, the six
 colours and three widths (2, 4, 8pt); it frames the render in a solid line drawn inside its edge,
 so a capture pasted into an email stands apart from the message. Choosing a colour or width
@@ -257,10 +272,10 @@ shows the true result.
 
 **The edit document** holds the cuts, an optional crop, the annotations (arrow, rectangle, path,
 text, step, highlight, blur), all in original pixels, an optional border, the first step number
-and whether it restarts a series' numbering, plus the blur salt, so every edit stays adjustable
+and whether it restarts a series' numbering, the margin colour, plus the blur salt, so every edit stays adjustable
 from the master and a capture reopened on its own renders the numbers it was saved with.
-Render order: blur (from original pixels) → crop → cuts and their labels → annotations, placed
-through the coordinate map → border. The canvas caches the render up to the cuts and draws annotations
+Render order: blur (from original pixels) → crop → cuts and their labels → margin → annotations,
+placed through the coordinate map → border, around the whole picture, margin included. The canvas caches the render up to the cuts and draws annotations
 over it through the same Core code, so a drag repaints only annotations; a cut, crop or blur
 change re-renders the cache. Undo is a stack of document values.
 
