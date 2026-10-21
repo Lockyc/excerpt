@@ -116,7 +116,9 @@ holding one.
   mode on the same stills.
 - Stills exclude desktop icons and excerpt's own windows through the `SCContentFilter`.
 - **After every capture that makes a file** it is saved, copied to the clipboard, and shown as
-  a large thumbnail (Edit · For Claude · Close, draggable) that closes after 15s (paused
+  a large thumbnail (Edit · For Claude · Close, draggable; while two or more captures have
+  landed since the stack was last empty, the newest also carries **Edit All**, opening all of
+  them as a series, including any whose thumbnail has already gone) that closes after 15s (paused
   while the pointer is over it), or on drag-out. Shutter sound on. With *Show thumbnail at the
   pointer* on, it first appears centred on the pointer with no timeout, and docks in the corner
   once the pointer strays past `PointerPlacement.safetyMargin` of it (or the next capture lands).
@@ -178,7 +180,8 @@ Accessibility for auto-scroll only.
 Opens from the thumbnail's Edit, from the menu bar's Recent Captures (the library's newest
 `StatusMenu.recentLimit` PNGs by creation date, masters left out, then Open Capture… for any
 other), or by opening a capture (registered as an Open With handler for PNG, not the default). Fits to width; tall captures scroll. Floats above other windows; no
-Dock icon.
+Dock icon. Several captures opened together — the thumbnails' Edit All, a multiple choice in Open
+Capture…, several files handed over at once by Finder or another app — open as one **series**.
 
 Tools: `V` select · `A` arrow · `R` rectangle · `P` path · `T` text · `N` step · `H` highlight ·
 `B` blur · `K` crop · `C` cut, each key shown on its toolbar button. The toolbar is one row: tools
@@ -208,9 +211,19 @@ under it supplies only input, caret and selection, its own glyphs transparent �
 is what saves. Return commits; ⌥Return adds a line.
 
 **Steps** (`N`): each click places a numbered circle in its colour, the number in
-`Palette.contrastingInk`, ringed in white. The number is not stored: it is the step's rank among
-the document's steps in annotation order, so steps always read 1…n, a delete closes the gap and
-Move earlier / later reorder them.
+`Palette.contrastingInk`, ringed in white. The number is not stored: it is the document's first
+step number (1 unless a series set it) plus the step's rank among the document's steps in
+annotation order, so steps always read on without gaps, a delete closes the gap and Move earlier
+/ later reorder them.
+
+**A series** is one editor window over several captures, in the order of their creation dates,
+with a filmstrip of their renders along the bottom; clicking one, or `⌘[` / `⌘]`, moves between
+them, and the window refits to each. Tool, colour and size carry across; undo is per capture.
+**Step numbers carry on through the series**: each capture's first step follows the last step of
+the capture before it, unless its filmstrip cell's **Restart at 1** is on, so adding, deleting or
+reordering a step renumbers every later capture. Each cell shows its step range ("Steps 3–4") and
+the Restart switch, disabled with no steps. For Claude exports the capture in view. A capture
+already open in its own editor is left out of a series and its window brought forward.
 
 **Paths** (`P`) are polylines and polygons — routes, boundaries, bent pointers — drawn opaque in
 their colour and width with round joins and caps, no arrowheads. Each click adds a vertex, with a
@@ -241,15 +254,17 @@ known strings. The noise is seeded from a per-document salt stored in the master
 shows the true result.
 
 **The edit document** holds the cuts, an optional crop, the annotations (arrow, rectangle, path,
-text, step, highlight, blur), all in original pixels, an optional border, plus the blur salt, so
-every edit stays adjustable from the master.
+text, step, highlight, blur), all in original pixels, an optional border, the first step number
+and whether it restarts a series' numbering, plus the blur salt, so every edit stays adjustable
+from the master and a capture reopened on its own renders the numbers it was saved with.
 Render order: blur (from original pixels) → crop → cuts and their labels → annotations, placed
 through the coordinate map → border. The canvas caches the render up to the cuts and draws annotations
 over it through the same Core code, so a drag repaints only annotations; a cut, crop or blur
 change re-renders the cache. Undo is a stack of document values.
 
 `⌘S` (Save) re-renders the primary, writes or updates the master, copies the render and closes
-the editor; with nothing unsaved it only copies and closes. For Claude saves the same way before
+the editor; with nothing unsaved it only copies and closes. In a series it saves every capture
+whose document changed, renumbering included, and copies every render, in order. For Claude saves the same way before
 it exports, then closes. **Discard** closes at once, dropping unsaved edits; closing the window
 any other way with unsaved edits asks.
 
