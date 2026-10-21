@@ -68,6 +68,11 @@ content never reaches the saved file. The original and your edits are kept in a 
 adjust them. **Border** frames the image in a solid line of your colour and width, so a
 screenshot pasted into an email stands apart from the text around it. **Save** (⌘S) saves, copies the image and closes the editor.
 
+Several captures taken in a row open together with the newest thumbnail's **Edit All**, or by
+choosing several in Open Capture…: one editor, a filmstrip along the bottom, `⌘[` / `⌘]` to move
+between them. Step numbers carry on from one capture to the next, and any capture can
+**Restart at 1**. Save writes them all and copies every image, in order.
+
 ![The cut invoice sheet with the two overdue rows highlighted, numbered 1 and 2, and their client names blurred](docs/screenshots/annotate.png)
 
 **For Claude** (⇧⌘C in the editor) writes the capture as tiles sized for Claude to read plus a

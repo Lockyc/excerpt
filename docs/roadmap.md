@@ -29,7 +29,7 @@ Each phase is a shippable slice with an acceptance gate. The design behind every
 | Item bar, steps, text background | The selection's options float beside it; numbered step markers; text on a contrasting pill, previewed through the renderer while typed | Built — hand checks pending |
 | Library filing | Files older than 30 days move from the library's top level into `YYYY/MM-Month/` folders, names unchanged, masters with their primaries; a setting, on by default | Built — hand checks pending |
 | Path tool | `P` draws polylines and polygons by click or freehand, closed paths optionally filled, vertices editable; edit document version 5 | Built — hand checks pending |
-| Series editing | Several captures in one editor with a filmstrip; step numbers carry on across them, each capture able to restart at 1; edit document version 6 | Build it |
+| Series editing | Several captures in one editor with a filmstrip; step numbers carry on across them, each capture able to restart at 1; edit document version 6 | Built — hand checks pending |
 | Growing canvas | Drawing or dragging an annotation past the render's edge extends the picture to hold it, the new area filled with the window-backdrop colour | Design how the coordinate map and renderer pad past the original |
 | Edit from glance | glance's `E` / Edit in Excerpt hands the current image, or the grid's selection, to Excerpt as a series; disabled with its reason on a non-PNG | Add the action in glance once series editing ships |
 | Smart redaction | On-device OCR finds emails, tokens, IPs, names; one-click destructive redaction, toggleable per region before save | Design the detector set and the review UI |
