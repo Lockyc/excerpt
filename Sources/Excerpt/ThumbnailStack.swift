@@ -10,8 +10,12 @@ import ExcerptCapture
 final class ThumbnailStack {
     private let preferences: Preferences
     private let onEdit: (URL) -> Void
+    private let onEditAll: ([URL]) -> Void
     private let onClaude: (URL) -> Void
     private var panels: [ThumbnailPanel] = []
+    /// Every capture shown since the stack was last empty, oldest first, including those whose
+    /// thumbnail has already gone: what Edit All opens.
+    private var run: [URL] = []
     /// The panel held at the pointer, which `layout` leaves where it is.
     private var atPointer: ThumbnailPanel?
     private var pointerMonitors: [Any] = []
@@ -20,10 +24,11 @@ final class ThumbnailStack {
 
     init(
         preferences: Preferences, onEdit: @escaping (URL) -> Void,
-        onClaude: @escaping (URL) -> Void
+        onEditAll: @escaping ([URL]) -> Void, onClaude: @escaping (URL) -> Void
     ) {
         self.preferences = preferences
         self.onEdit = onEdit
+        self.onEditAll = onEditAll
         self.onClaude = onClaude
     }
 
@@ -37,8 +42,11 @@ final class ThumbnailStack {
             guard let self else { return }
             if closing === atPointer { stopWatchingPointer() }
             panels.removeAll { $0 === closing }
+            if panels.isEmpty { run = [] }
             layout()
         }
+        panel.onEditAll = { [weak self] in self?.editAll() }
+        run.append(url)
         panels.insert(panel, at: 0)
         if panels.count > 4 { panels.last?.dismiss() }
         if held { holdAtPointer(panel) }
@@ -96,7 +104,17 @@ final class ThumbnailStack {
         }
     }
 
+    /// Opens the whole run as a series and clears the stack.
+    private func editAll() {
+        let captures = run
+        for panel in panels { panel.dismiss() }
+        onEditAll(captures)
+    }
+
     private func layout(animating moving: ThumbnailPanel? = nil) {
+        for (i, panel) in panels.enumerated() {
+            panel.setEditAll(count: i == 0 && run.count >= 2 ? run.count : nil)
+        }
         guard let screen = NSScreen.main?.visibleFrame else { return }
         var y = screen.minY + Self.margin
         for panel in panels where panel !== atPointer {
@@ -117,7 +135,9 @@ final class ThumbnailPanel: NSPanel {
     let url: URL
     private let onEdit: (URL) -> Void
     private let onClaude: (URL) -> Void
+    var onEditAll: () -> Void = {}
     private let claudeButton: NSButton
+    private let editAllButton: NSButton
     private let onClose: (ThumbnailPanel) -> Void
     private var timer: Timer?
     private let seconds: Double
@@ -133,6 +153,7 @@ final class ThumbnailPanel: NSPanel {
         self.onEdit = onEdit
         self.onClaude = onClaude
         claudeButton = FirstMouseButton(title: "For Claude", target: nil, action: nil)
+        editAllButton = FirstMouseButton(title: "Edit All", target: nil, action: nil)
         self.onClose = onClose
         self.seconds = seconds
         let width = ThumbnailStack.width
@@ -164,8 +185,11 @@ final class ThumbnailPanel: NSPanel {
         container.addSubview(preview)
 
         let bar = NSStackView(frame: CGRect(x: 8, y: 2, width: width - 16, height: barHeight - 4))
-        bar.distribution = .fillEqually
+        bar.distribution = .fillProportionally
         bar.addArrangedSubview(button("Edit", #selector(editTapped)))
+        style(editAllButton, #selector(editAllTapped))
+        editAllButton.isHidden = true
+        bar.addArrangedSubview(editAllButton)
         style(claudeButton, #selector(claudeTapped))
         setPreparingForClaude(false)
         bar.addArrangedSubview(claudeButton)
@@ -226,7 +250,14 @@ final class ThumbnailPanel: NSPanel {
         onEdit(url)
         dismiss()
     }
+    @objc private func editAllTapped() { onEditAll() }
     @objc private func claudeTapped() { onClaude(url) }
+
+    /// Shows Edit All, naming how many captures it opens, or hides it for nil.
+    func setEditAll(count: Int?) {
+        editAllButton.isHidden = count == nil
+        if let count { editAllButton.toolTip = "Edit the last \(count) captures as a series" }
+    }
     @objc private func closeTapped() { dismiss() }
 
     func dismiss() {
