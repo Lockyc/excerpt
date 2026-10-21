@@ -129,22 +129,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         let editor = EditorWindowController(
-            capture: capture,
-            save: { document in
+            captures: [capture],
+            save: { capture, document in
                 try store.saveEdits(
                     primary: capture.primary, original: capture.original, edits: document,
                     replacingMaster: capture.supersedesMaster)
             },
-            copy: { makePNG in
+            copy: { makePNGs in
                 do {
-                    try Pasteboard.copyPNG(data: makePNG())
+                    try Pasteboard.copyPNGs(makePNGs())
                     return true
                 } catch {
                     Alerts.copyFailed(capture.primary, error)
                     return false
                 }
             },
-            forClaude: { [weak self] original, document in
+            forClaude: { [weak self] capture, original, document in
                 self?.claude.export(
                     original: original, edits: document, primary: capture.primary)
             },
