@@ -159,6 +159,8 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
     public func show(capture index: Int) {
         guard pages.indices.contains(index), index != current else { return }
         canvas.commitInProgress()
+        // A drag in flight would end on a canvas no longer in the window.
+        if model.drag != nil { model.cancelDrag() }
         let tool = model.tool
         let style = model.style
         refreshThumbnail(current)
@@ -188,8 +190,9 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
 
     /// Carries step numbers on through the series: each capture's first step follows the
     /// capture before's last, unless it restarts.
+    /// A capture on its own keeps the numbers it was saved with.
     private func renumber() {
-        guard !renumbering else { return }
+        guard !renumbering, pages.count > 1 else { return }
         renumbering = true
         defer { renumbering = false }
         let firsts = SeriesNumbering.firstSteps(
@@ -360,7 +363,8 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
     }
 
     /// Fits the window to the capture in view at its size in points, shrunk to fit 90% of the
-    /// screen, its top edge kept where it was; tall captures scroll.
+    /// screen, its top edge kept where it was unless that would take it off the bottom of the
+    /// screen; tall captures scroll.
     private func sizeToFit(_ window: NSWindow) {
         let visible =
             (NSScreen.main ?? NSScreen.screens.first)?.visibleFrame
@@ -374,6 +378,9 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         let topLeft = CGPoint(x: window.frame.minX, y: window.frame.maxY)
         window.setContentSize(CGSize(width: width, height: max(height, 300)))
         window.setFrameTopLeftPoint(topLeft)
+        if window.frame.minY < visible.minY {
+            window.setFrameOrigin(CGPoint(x: window.frame.minX, y: visible.minY))
+        }
         window.contentView?.layoutSubtreeIfNeeded()
         fitWidth()
     }
