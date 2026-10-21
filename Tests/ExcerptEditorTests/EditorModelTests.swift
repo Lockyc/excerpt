@@ -329,3 +329,49 @@ import Testing
         #expect(m.hiddenNote(map: map) == "")
     }
 }
+
+@Suite struct EditorModelSeriesTests {
+    func model() -> EditorModel {
+        EditorModel(
+            original: Fixtures.sheet(width: 360, height: 400),
+            document: EditDocument(scale: 2, salt: 7))
+    }
+
+    @Test func aFirstStepIsNotAnUndoStep() {
+        let m = model()
+        m.setFirstStep(4)
+        #expect(m.document.firstStep == 4 && m.isDirty && !m.canUndo)
+        m.setFirstStep(4)
+        #expect(!m.canUndo)
+    }
+
+    @Test func restartingIsAnUndoableStep() {
+        let m = model()
+        m.setRestartsSteps(true)
+        #expect(m.document.restartsSteps)
+        m.undo()
+        #expect(!m.document.restartsSteps)
+    }
+
+    @Test func stepCountCountsOnlySteps() {
+        let m = model()
+        m.apply { doc in
+            doc.annotations = [
+                Annotation(id: 1, shape: .step(center: CGPoint(x: 20, y: 20))),
+                note(2, CGRect(x: 0, y: 0, width: 10, height: 10)),
+                Annotation(id: 3, shape: .step(center: CGPoint(x: 40, y: 20))),
+            ]
+        }
+        #expect(m.stepCount == 2)
+    }
+
+    @Test func adoptingAToolAndStyleIsNotAChoice() {
+        let m = model()
+        var told = false
+        m.onStyleChange = { _ in told = true }
+        var style = AnnotationStyle.initial
+        style.width = .thick
+        m.adopt(tool: .step, style: style)
+        #expect(m.tool == .step && m.style == style && !told)
+    }
+}

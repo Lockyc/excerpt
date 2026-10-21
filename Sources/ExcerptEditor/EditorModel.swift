@@ -74,6 +74,30 @@ final class EditorModel {
 
     /// Edits not yet written by ⌘S.
     var isDirty: Bool { document != saved }
+
+    var stepCount: Int { AnnotationGeometry.stepCount(document.annotations) }
+
+    /// Sets the number the first step shows. Not an undo step: a series derives it from the
+    /// captures before this one, and re-derives it after an undo restores an older one.
+    func setFirstStep(_ first: Int) {
+        guard document.firstStep != first else { return }
+        document.firstStep = first
+    }
+
+    /// Sets whether this capture's steps begin again at 1 in a series, as one undoable step.
+    func setRestartsSteps(_ on: Bool) {
+        apply { $0.restartsSteps = on }
+    }
+
+    /// Takes on the tool and the style for new annotations from another capture in a series,
+    /// without telling `onStyleChange`: nothing was chosen.
+    func adopt(tool: Tool, style: AnnotationStyle) {
+        let tell = onStyleChange
+        onStyleChange = nil
+        self.style = style
+        onStyleChange = tell
+        self.tool = tool
+    }
     /// A path being built can be undone: undo finishes it, then removes it.
     var canUndo: Bool { history.canUndo || building != nil }
     /// Not while a path is being built or text typed: finishing either records a step, which
