@@ -3,17 +3,6 @@ import CoreGraphics
 /// AppKit's global space has its origin at the bottom-left of the primary screen; Quartz (and
 /// ScreenCaptureKit / CGWindowList / CGEvent) at the top-left. The conversion is its own inverse.
 public enum DisplayGeometry {
-    /// Whether the displays, by ID and frame, differ between two moments: one added, removed or
-    /// moved makes stills taken at the first stale. Listing order doesn't count.
-    public static func arrangementChanged(
-        from before: [(CGDirectDisplayID, CGRect)], to after: [(CGDirectDisplayID, CGRect)]
-    ) -> Bool {
-        func keyed(_ displays: [(CGDirectDisplayID, CGRect)]) -> [CGDirectDisplayID: CGRect] {
-            Dictionary(displays, uniquingKeysWith: { first, _ in first })
-        }
-        return before.count != after.count || keyed(before) != keyed(after)
-    }
-
     public static func quartzRect(fromAppKit rect: CGRect, primaryHeight: CGFloat) -> CGRect {
         CGRect(x: rect.minX, y: primaryHeight - rect.maxY, width: rect.width, height: rect.height)
     }

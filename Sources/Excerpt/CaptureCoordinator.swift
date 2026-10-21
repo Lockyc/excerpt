@@ -10,8 +10,6 @@ import ExcerptExport
 final class CaptureCoordinator {
     private let preferences: Preferences
     private let capturer = ScreenCapturer()
-    /// Held for the coordinator's life: a menu item's target is weak.
-    private let selector = CaptureSelector()
     private let onDelivered: (URL, CGImage) -> Void
     private var running = false
     /// The overlay waiting on a selection, and the mode it is selecting for.
@@ -24,6 +22,8 @@ final class CaptureCoordinator {
     private var scrollEnd: ScrollEnd?
     /// The last scrolling capture's region, for the next to open on; held for this launch.
     private var lastScrollRegion: ScrollRegion?
+    /// The area last picked from the mode bar, for the next to open on; held for this launch.
+    private var lastModeBarRegion: ScrollRegion?
     static let shutter = NSSound(
         contentsOfFile:
             "/System/Library/Components/CoreAudio.component/Contents/SharedSupport/SystemSounds/system/Screen Capture.aif",
@@ -50,26 +50,6 @@ final class CaptureCoordinator {
         do {
             let stills = try await capturer.stills()
             var action = requested
-            // The selector shows over the stills already taken, so the screen it opened over is
-            // the one captured; Esc or a click outside discards them, as does a display added,
-            // removed or moved while it was open.
-            if action == .selector {
-                let preferences = preferences
-                guard let mode = selector.choose(binding: { preferences.binding(for: $0) })
-                else { return }
-                let current = NSScreen.screens.compactMap { screen in
-                    screen.displayID.map { ($0, screen.frame) }
-                }
-                if DisplayGeometry.arrangementChanged(
-                    from: stills.map { ($0.displayID, $0.frame) }, to: current)
-                {
-                    Toast.show(Alerts.displaysChanged)
-                    return
-                }
-                if mode == .scrolling && !scrollingMayStart() { return }
-                action = mode
-                if action.selects { overlay.cover() }
-            }
             while true {
                 switchedTo = nil
                 try await capture(action, stills: stills, overlay: overlay)
@@ -105,11 +85,11 @@ final class CaptureCoordinator {
         _ action: HotKeyAction, stills: [DisplayStill], overlay: SelectionOverlay
     ) async throws {
         switch action {
-        case .area:
+        case .area, .text:
             if case .area(let still, let rect) = await select(
                 .area, for: action, overlay: overlay, stills: stills)
             {
-                await deliver(try Self.crop(still, to: rect), scale: still.scale)
+                try await use(action, still: still, pixelRect: rect, overlay: overlay)
             }
         case .window:
             let windows = try await capturer.windowsFrontToBack()
@@ -147,22 +127,52 @@ final class CaptureCoordinator {
                 stills: stills)
             {
             case .area(let still, let rect):
-                try await captureScrolling(
-                    still: still, pixelRect: rect, start: .auto, overlay: overlay)
+                try await use(action, still: still, pixelRect: rect, overlay: overlay)
             case .scrolledArea(let still, let rect):
                 try await captureScrolling(
                     still: still, pixelRect: rect, start: .manual, overlay: overlay)
-            case .window, .cancelled:
+            default:
                 break
             }
-        case .text:
-            if case .area(let still, let rect) = await select(
-                .area, for: action, overlay: overlay, stills: stills)
-            {
-                await copyText(of: try Self.crop(still, to: rect), scale: still.scale)
-            }
         case .selector:
-            return  // resolved to the mode picked above
+            let choices = HotKeyAction.modes.map { mode in
+                ModeChoice(
+                    id: mode.id, title: mode.modeName, symbol: mode.symbol,
+                    shortcut: preferences.binding(for: mode)?.display, usesArea: mode.usesArea)
+            }
+            switch await select(
+                .modeBar(previous: lastModeBarRegion, choices: choices), for: action,
+                overlay: overlay, stills: stills)
+            {
+            case .chosenArea(let id, let still, let rect):
+                lastModeBarRegion = ScrollRegion(
+                    displayID: still.displayID, displayFrame: still.frame, scale: still.scale,
+                    pixelRect: rect, primaryHeight: NSScreen.primaryHeight)
+                if let mode = HotKeyAction(rawValue: id), mode != .scrolling || scrollingMayStart()
+                {
+                    try await use(mode, still: still, pixelRect: rect, overlay: overlay)
+                }
+            case .chosen(let id):
+                switchedTo = HotKeyAction(rawValue: id)
+            default:
+                break
+            }
+        }
+    }
+
+    /// Runs an area mode on the area already selected: Area saves it, Text copies its text,
+    /// Scrolling starts following it.
+    private func use(
+        _ mode: HotKeyAction, still: DisplayStill, pixelRect rect: CGRect,
+        overlay: SelectionOverlay
+    ) async throws {
+        switch mode {
+        case .area: await deliver(try Self.crop(still, to: rect), scale: still.scale)
+        case .text: await copyText(of: try Self.crop(still, to: rect), scale: still.scale)
+        case .scrolling:
+            try await captureScrolling(
+                still: still, pixelRect: rect, start: .auto, overlay: overlay)
+        case .window, .fullscreen, .selector: break
         }
     }
 
@@ -314,8 +324,8 @@ final class CaptureCoordinator {
         if scrollEnd == nil { scrollEnd = end }
     }
 
-    /// Without Accessibility, asks how to go on before the stills are taken, or after a pick from
-    /// the selector, so neither the alert nor the system prompt lands in a still. The system
+    /// Without Accessibility, asks how to go on before the stills are taken, or once the overlay
+    /// is out of the way, so neither the alert nor the system prompt lands in a still. The system
     /// prompt is requested once per launch; after an earlier denial macOS may not show it again,
     /// so the alert always does. True when the capture should start: with access, or with the
     /// user scrolling.

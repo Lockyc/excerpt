@@ -37,12 +37,31 @@ enum HotKeyAction: UInt32, CaseIterable {
         }
     }
 
-    /// The modes the all-in-one selector offers: every action but the selector itself.
-    static var modes: [HotKeyAction] { allCases.filter { $0 != .selector } }
+    /// The modes the mode bar offers, in its order: those that use the selected area first.
+    static let modes: [HotKeyAction] = [.area, .scrolling, .text, .window, .fullscreen]
 
-    /// The mode's name in the selector: its title without `Capture `, so each starts with its own
-    /// letter for the menu's type-select.
+    /// The mode's name on the mode bar: its title without `Capture `.
     var modeName: String { title.hasPrefix("Capture ") ? String(title.dropFirst(8)) : title }
+
+    /// The mode's SF Symbol on the mode bar.
+    var symbol: String {
+        switch self {
+        case .area: "rectangle.dashed"
+        case .scrolling: "scroll"
+        case .text: "text.viewfinder"
+        case .window: "macwindow"
+        case .fullscreen: "display"
+        case .selector: "rectangle.3.group"
+        }
+    }
+
+    /// Whether the mode runs on the area selected under the mode bar.
+    var usesArea: Bool {
+        switch self {
+        case .area, .scrolling, .text: true
+        case .window, .fullscreen, .selector: false
+        }
+    }
 }
 
 extension HotKeyAction {
@@ -60,11 +79,12 @@ extension HotKeyAction {
 }
 
 extension HotKeyAction {
-    /// Whether the action selects on the overlay: an area, a window or a scrolling region.
+    /// Whether the action selects on the overlay: an area, a window, a scrolling region, or an
+    /// area under the mode bar.
     var selects: Bool {
         switch self {
-        case .area, .window, .scrolling, .text: true
-        case .fullscreen, .selector: false
+        case .area, .window, .scrolling, .text, .selector: true
+        case .fullscreen: false
         }
     }
 }
