@@ -109,7 +109,8 @@ public enum Renderer {
         let context = PixelBuffer.makeContext(width: width, height: height)
         context.draw(base.image, in: CGRect(x: 0, y: 0, width: width, height: height))
         AnnotationRenderer.draw(
-            edits.annotations, map: base.map, scale: edits.scale, in: context,
+            edits.annotations, map: base.map, scale: edits.scale, firstStep: edits.firstStep,
+            in: context,
             canvasHeight: height)
         edits.border?.draw(in: context, width: width, height: height, scale: edits.scale)
         return RenderResult(image: context.makeImage()!, map: base.map)

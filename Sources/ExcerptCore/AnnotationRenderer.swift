@@ -11,13 +11,14 @@ public enum AnnotationRenderer {
 
     /// Draws every annotation except blurs (the base stage applies those) onto `context`, a
     /// bottom-left-origin canvas `canvasHeight` rendered pixels tall, placed through `map`. An
-    /// annotation the cuts hide (`AnnotationGeometry.isDrawn`) is skipped.
+    /// annotation the cuts hide (`AnnotationGeometry.isDrawn`) is skipped. Steps number from
+    /// `firstStep`.
     public static func draw(
-        _ annotations: [Annotation], map: RenderMap, scale: Double, in context: CGContext,
-        canvasHeight: Int
+        _ annotations: [Annotation], map: RenderMap, scale: Double, firstStep: Int = 1,
+        in context: CGContext, canvasHeight: Int
     ) {
         let flip = CanvasFlip(height: canvasHeight)
-        let numbers = AnnotationGeometry.stepNumbers(annotations)
+        let numbers = AnnotationGeometry.stepNumbers(annotations, first: firstStep)
         for annotation in annotations where !annotation.shape.isBlur {
             guard AnnotationGeometry.isDrawn(annotation, map: map, scale: scale) else { continue }
             let color = annotation.color.rgba.cgColor

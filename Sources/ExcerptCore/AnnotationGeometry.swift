@@ -71,13 +71,17 @@ public enum AnnotationGeometry {
         annotation.width.stepPoints * scale
     }
 
-    /// Each step's number by id: its rank, from 1, among the steps in annotation order.
-    public static func stepNumbers(_ annotations: [Annotation]) -> [Int: Int] {
+    /// Each step's number by id: `first` plus its rank among the steps in annotation order.
+    public static func stepNumbers(_ annotations: [Annotation], first: Int = 1) -> [Int: Int] {
         var numbers: [Int: Int] = [:]
         for annotation in annotations where annotation.shape.isStep {
-            numbers[annotation.id] = numbers.count + 1
+            numbers[annotation.id] = first + numbers.count
         }
         return numbers
+    }
+
+    public static func stepCount(_ annotations: [Annotation]) -> Int {
+        annotations.lazy.filter(\.shape.isStep).count
     }
 
     /// The original-pixel rect an annotation covers, stroke included.
