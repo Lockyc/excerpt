@@ -250,7 +250,9 @@ last one back inside shrinks the picture again. Blurs and annotations a cut hide
 and a blur stays inside the image. The canvas keeps a **gutter** of `CanvasView.gutter` (48pt) in
 the under-page colour around the render, outside the saved image, where a press can start or a
 drag can end, so there is always room to place something past the current edge; it moves out as
-the margin grows. The margin is part of the render map: its placement is offset by the margin's
+the margin grows. While a drag or a path is in progress the canvas's layout holds still and the
+margin is drawn in place around the image; it lays out again on release. The margin is part of
+the render map: its placement is offset by the margin's
 leading sides and its rendered size includes them, so hit testing, seams, the For Claude tiles
 and `text.md` all see the same picture. The margin colour is the window backdrop colour from
 Settings, stored in the document the first time an editor opens it; a document without one
