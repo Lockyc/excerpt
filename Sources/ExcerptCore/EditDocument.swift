@@ -62,9 +62,9 @@ public struct PixelRect: Codable, Hashable, Sendable {
 public struct EditDocument: Codable, Equatable, Sendable {
     /// Version 2 carries `crop` and `annotations`, version 3 `border`, version 4 text
     /// backgrounds and steps, version 5 paths, version 6 `firstStep` and `restartsSteps`, version
-    /// 7 `marginColor`; an older build rejects a newer document rather than open it without
-    /// them, so its next save can't erase them.
-    public static let currentVersion = 7
+    /// 7 `marginColor`, version 8 the border's `outside`; an older build rejects a newer document
+    /// rather than open it without them, so its next save can't erase them.
+    public static let currentVersion = 8
     /// The largest `firstStep`: more steps than a series of capped documents could hold is damage.
     public static let firstStepLimit = 10_000
 
@@ -136,12 +136,12 @@ public struct EditDocument: Codable, Equatable, Sendable {
     }
 
     /// A version 3 border was first a bare `true` for one fixed frame, and documents were saved
-    /// in that shape; it reads as the initial border.
+    /// in that shape; it reads as the initial border, inside the edge.
     private static func decodeBorder(
         from container: KeyedDecodingContainer<CodingKeys>
     ) throws -> Border? {
         if let on = try? container.decodeIfPresent(Bool.self, forKey: .border) {
-            return on ? .initial : nil
+            return on ? Border(color: .black, width: .medium, outside: false) : nil
         }
         return try container.decodeIfPresent(Border.self, forKey: .border)
     }

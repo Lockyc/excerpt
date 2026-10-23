@@ -8,7 +8,8 @@ public struct Seam: Equatable, Sendable {
     public let gap: Range<Int>
 }
 
-/// Rendered pixels added around the image on each side, to hold annotations past its edge.
+/// Rendered pixels added around the image on each side, to hold annotations past its edge and
+/// an outside border.
 public struct Margin: Equatable, Sendable {
     public var top: Int
     public var left: Int
@@ -24,6 +25,12 @@ public struct Margin: Equatable, Sendable {
 
     public static let zero = Margin()
     public var isZero: Bool { self == .zero }
+
+    public static func + (a: Margin, b: Margin) -> Margin {
+        Margin(
+            top: a.top + b.top, left: a.left + b.left, bottom: a.bottom + b.bottom,
+            right: a.right + b.right)
+    }
 }
 
 /// The one original → rendered placement for a whole render: the crop's offset, then each
@@ -36,7 +43,7 @@ public struct RenderMap: Equatable, Sendable {
     public let rows: AxisMap
     /// Over the crop's width.
     public let columns: AxisMap
-    /// Around the image; zero for the base, which annotations haven't grown.
+    /// Around the image; zero for the base, which annotations and the border haven't grown.
     public let margin: Margin
 
     public init(crop: PixelRect, rows: AxisMap, columns: AxisMap, margin: Margin = .zero) {

@@ -79,9 +79,17 @@ public enum Renderer {
         width: Int, height: Int, edits: EditDocument, style: SeamStyle = .standard
     ) -> RenderMap {
         let base = baseMap(width: width, height: height, edits: edits, style: style)
-        guard edits.marginColor != nil else { return base }
-        return base.withMargin(
-            margin(annotations: edits.annotations, map: base, scale: edits.scale))
+        return base.withMargin(margin(edits, map: base))
+    }
+
+    /// The whole margin around a base map: room for the annotations past its edge when the
+    /// document grows to hold them, then an outside border around that.
+    public static func margin(_ edits: EditDocument, map: RenderMap) -> Margin {
+        let annotations =
+            edits.marginColor == nil
+            ? Margin.zero
+            : margin(annotations: edits.annotations, map: map, scale: edits.scale)
+        return annotations + (edits.border?.margin(scale: edits.scale) ?? .zero)
     }
 
     /// How far past the furthest annotation the margin reaches, in points.
@@ -140,10 +148,7 @@ public enum Renderer {
         guard edits.border != nil || edits.annotations.contains(where: { !$0.shape.isBlur }) else {
             return base
         }
-        let margin =
-            edits.marginColor == nil
-            ? Margin.zero
-            : Self.margin(annotations: edits.annotations, map: base.map, scale: edits.scale)
+        let margin = Self.margin(edits, map: base.map)
         let map = base.map.withMargin(margin)
         let width = map.renderedWidth
         let height = map.renderedHeight

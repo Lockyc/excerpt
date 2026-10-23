@@ -16,9 +16,27 @@ import Testing
         #expect(PixelBuffer(result.image) == PixelBuffer(image))
     }
 
-    @Test func borderFramesTheRenderInsideItsEdge() {
+    @Test func borderFramesThePictureOutsideItsEdge() {
         let image = Fixtures.sheet(width: 120, height: 80)
         let border = Border(color: .blue, width: .thin)  // 2pt: 4px at 2×
+        let edits = EditDocument(scale: 2, border: border)
+        let result = Renderer.render(image, edits: edits)
+        let pixels = PixelBuffer(result.image)
+        let plain = PixelBuffer(image)
+        #expect(result.image.width == 128 && result.image.height == 88)
+        #expect(result.map == Renderer.map(width: 120, height: 80, edits: edits))
+        #expect(result.map.point(.zero) == CGPoint(x: 4, y: 4))
+        for (x, y) in [(0, 0), (3, 40), (60, 3), (127, 87), (124, 40), (60, 84)] {
+            #expect(pixels[x: x, y: y] == Palette.blue.rgba)
+        }
+        for (x, y) in [(0, 0), (60, 40), (119, 79)] {
+            #expect(pixels[x: x + 4, y: y + 4] == plain[x: x, y: y])
+        }
+    }
+
+    @Test func aBorderSavedInsideTheEdgeStaysThere() {
+        let image = Fixtures.sheet(width: 120, height: 80)
+        let border = Border(color: .blue, width: .thin, outside: false)
         let result = Renderer.render(image, edits: EditDocument(scale: 2, border: border))
         let pixels = PixelBuffer(result.image)
         let plain = PixelBuffer(image)
