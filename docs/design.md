@@ -262,8 +262,10 @@ takes out of view, while one already outside the previous crop, such as a captio
 margin, stays (`EditDocument.setCrop`).
 
 **Border** turns the border on and off, and its chevron drops down an on/off switch, the six
-colours and three widths (2, 4, 8pt); it frames the render in a solid line drawn inside its edge,
-so a capture pasted into an email stands apart from the message. Choosing a colour or width
+colours and three widths (2, 4, 8pt); it frames the render in a solid line outside it, growing
+the picture by its width on every side through the map's margin, so a capture pasted into an
+email stands apart from the message and no pixel of it is covered. A border saved before it could
+grow the picture stays inside the edge until changed (`Border.outside`). Choosing a colour or width
 turns it on, and the next editor, across launches, starts from the last one chosen.
 
 **Blur is destructive**: pixelation over noise. Blur rects under 12pt apart are one group,

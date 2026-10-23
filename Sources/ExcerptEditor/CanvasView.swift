@@ -106,13 +106,8 @@ final class CanvasView: NSView, NSTextViewDelegate {
     private var gutterPixels: Double { Self.gutter * model.document.scale }
     private var pictureSize: CGSize { CGSize(width: map.renderedWidth, height: map.renderedHeight) }
 
-    /// The margin the annotations shown reach, or none for a document that clips them.
-    private func currentMargin() -> Margin {
-        guard model.document.marginColor != nil else { return .zero }
-        return Renderer.margin(
-            annotations: model.displayDocument.annotations, map: base.map,
-            scale: model.document.scale)
-    }
+    /// The margin the annotations shown reach, and the border around it.
+    private func currentMargin() -> Margin { Renderer.margin(model.displayDocument, map: base.map) }
 
     /// Re-renders the base only when what it depends on changed, lays the margin out again
     /// unless a drag or path holds it, then repaints.

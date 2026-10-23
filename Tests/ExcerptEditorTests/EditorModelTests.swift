@@ -102,6 +102,16 @@ import Testing
         #expect(framed.borderStyle == own)
     }
 
+    @Test func anInsideBorderMovesOutsideOnlyOnceChanged() {
+        let inside = Border(color: .red, width: .thin, outside: false)
+        let m = EditorModel(
+            original: Fixtures.sheet(width: 10, height: 10),
+            document: EditDocument(scale: 1, border: inside))
+        #expect(m.document.border == inside && !m.isDirty)
+        m.setBorderWidth(.thick)
+        #expect(m.document.border == Border(color: .red, width: .thick))
+    }
+
     @Test func aNoOpRecordsNothing() {
         let m = model()
         m.apply { _ in }

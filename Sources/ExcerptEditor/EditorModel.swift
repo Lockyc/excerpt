@@ -40,7 +40,8 @@ final class EditorModel {
     /// Called when the style changes, so the next editor starts with it.
     var onStyleChange: ((AnnotationStyle) -> Void)?
     /// What the border is, or becomes when turned on: the document's own while it has one,
-    /// else the one last chosen.
+    /// else the one last chosen — outside the picture either way, so an inside border from an
+    /// older document moves out once it is changed.
     private(set) var borderStyle: Border {
         didSet { if borderStyle != oldValue { onBorderStyleChange?(borderStyle) } }
     }
@@ -76,7 +77,9 @@ final class EditorModel {
         self.style = style
         self.document = document
         self.saved = document
-        self.borderStyle = document.border ?? borderStyle
+        var borderStyle = document.border ?? borderStyle
+        borderStyle.outside = true
+        self.borderStyle = borderStyle
     }
 
     /// Edits not yet written by ⌘S.

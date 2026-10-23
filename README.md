@@ -65,7 +65,8 @@ crop and **cut** (`C`); a selected item's colour, size and options float beside 
 drag across the rows or columns to remove; the join becomes a torn seam. Cut and blurred
 content never reaches the saved file. The original and your edits are kept in a separate
 `… original.png`, so you can reopen a capture from the menu bar's **Recent Captures** and
-adjust them. **Border** frames the image in a solid line of your colour and width, so a
+adjust them. **Border** frames the image in a solid line of your colour and width, added
+around it rather than over its edge, so a
 screenshot pasted into an email stands apart from the text around it. Drawing or dragging
 something past the edge grows the picture to hold it, filled with the window backdrop colour
 from Settings. **Save** (⌘S) saves, copies the image and closes the editor.

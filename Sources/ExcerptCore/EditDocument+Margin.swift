@@ -9,9 +9,10 @@ extension EditDocument {
         guard marginColor == nil else { return }
         var adopted = self
         adopted.marginColor = color
-        guard Renderer.map(width: width, height: height, edits: adopted).margin.isZero else {
-            return
-        }
+        guard
+            Renderer.map(width: width, height: height, edits: adopted)
+                == Renderer.map(width: width, height: height, edits: self)
+        else { return }
         self = adopted
     }
 
