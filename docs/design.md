@@ -138,8 +138,10 @@ holding one.
    or ~300ms).
 3. **Stitching** (Core): frames reduce to row signatures; the offset from the previous frame is
    the one with the highest share of matching evidence rows (unique, non-uniform) in the overlap,
-   clearly ahead of the others. **Sticky regions** — top/bottom rows unchanged while the rows
-   between them move — are kept once: the header from the first frame, the footer from the last.
+   clearly ahead of the others; a row redrawn at most one level off per channel (a browser
+   re-dithering an image) counts as matching. **Sticky regions** — top/bottom rows unchanged
+   while the rows between them move — are kept once: the header from the first frame, the footer
+   from the last. A bar from the page that pins under the header during a move joins the header.
    **Side panels**: when the changed columns don't move as one (sticky panels still pinning,
    split panes), the widest run of column strips that does, at least
    `StitchMatcher.minimumBandShare` of the width, is the scrolling band, provided what changed

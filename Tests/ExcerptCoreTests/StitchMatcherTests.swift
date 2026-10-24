@@ -38,6 +38,56 @@ import Testing
         #expect(bottom >= 16 && bottom < 22)
     }
 
+    /// The page with a 16-row nav bar in its flow at row 40, scrolled to `offset` under the
+    /// header: the bar pins under the header once the page scrolls it there.
+    func navFrame(_ offset: Int) -> PixelBuffer {
+        let nav = ScrollFixtures.bar(width: 90, height: 16, tone: 200)
+        return ScrollFixtures.overlay(
+            ScrollFixtures.frame(
+                ScrollFixtures.overlay(page, nav, atRow: 40), offset: offset, viewport: 200,
+                header: header),
+            nav, atRow: max(24, 40 - offset))
+    }
+
+    @Test func aBarPinningUnderTheHeaderJoinsIt() {
+        let match = StitchMatcher.match(navFrame(0), navFrame(120), ignoringRightColumns: 0)
+        guard case .moved(let offset, let top, _, _) = match else {
+            Issue.record("expected a move, got \(match)")
+            return
+        }
+        #expect(offset == 120)
+        #expect(top >= 40 && top < 46)  // header and bar, plus any blank rows that coincide
+    }
+
+    /// `buffer` with `rows` re-rasterised: every fifth pixel's red off by `levels`. Over half the
+    /// overlap of a 120-row move, the rows' signatures alone can't convince.
+    func dithered(_ buffer: PixelBuffer, rows: Range<Int>, levels: UInt8 = 1) -> PixelBuffer {
+        var out = buffer
+        for y in rows {
+            for x in stride(from: y % 5, to: buffer.width, by: 5) {
+                let i = (y * buffer.width + x) * 4
+                out.bytes[i] = out.bytes[i] > 127 ? out.bytes[i] - levels : out.bytes[i] + levels
+            }
+        }
+        return out
+    }
+
+    @Test func aMoveRedrawnOneLevelOffStillMatches() {
+        #expect(
+            offset(
+                StitchMatcher.match(
+                    frame(0), dithered(frame(120), rows: 40..<160), ignoringRightColumns: 0))
+                == 120)
+    }
+
+    @Test func aMoveRedrawnTwoLevelsOffIsUncertain() {
+        #expect(
+            StitchMatcher.match(
+                frame(0), dithered(frame(120), rows: 40..<160, levels: 2),
+                ignoringRightColumns: 0)
+                == .uncertain)
+    }
+
     @Test func identicalFramesAreStill() {
         #expect(StitchMatcher.match(frame(40), frame(40), ignoringRightColumns: 0) == .still)
     }

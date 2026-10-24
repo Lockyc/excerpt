@@ -38,6 +38,8 @@ public enum StitchMatcher {
     /// The narrowest scrolling band believed, as a share of the frame's width: narrower, a strip
     /// of content beside something animated could alias an offset.
     public static let minimumBandShare = 1.0 / 3
+    /// The pinned-bar headers tried when the frames' shared header doesn't explain a move.
+    public static let pinnedCandidates = 4
 
     /// The right-edge columns left out of matching for a region `width` pixels wide: the scroll
     /// bar strip at `scale`, never more than an eighth of the width.
@@ -76,6 +78,14 @@ public enum StitchMatcher {
             return .still
         }
         if let moved = believed(whole, previous, next, columns: span) { return moved }
+        for pinned in pinnedHeaders(a, b, after: whole.header, height: height) {
+            let c = candidate(a, b, height: height, header: pinned.end)
+            if let best = c.best, best.offset > pinned.shift,
+                let moved = believed(c, previous, next, columns: span)
+            {
+                return moved
+            }
+        }
         if let moved = band(previous, next, span: span, width: width) { return moved }
         if !whole.convincing,
             isCaretSized(span, rows: changedRows(wholePrevious, wholeNext), of: previous)
@@ -102,9 +112,15 @@ public enum StitchMatcher {
         }
     }
 
-    static func candidate(_ a: RowSignatures, _ b: RowSignatures, height: Int) -> Candidate {
-        var header = 0
-        while header < height && a.hashes[header] == b.hashes[header] { header += 1 }
+    /// `header`, when given, is taken as the sticky rows at the top instead of the rows the two
+    /// frames share there.
+    static func candidate(
+        _ a: RowSignatures, _ b: RowSignatures, height: Int, header given: Int? = nil
+    ) -> Candidate {
+        var header = given ?? 0
+        if given == nil {
+            while header < height && a.hashes[header] == b.hashes[header] { header += 1 }
+        }
         var footer = 0
         while footer < height - header
             && a.hashes[height - 1 - footer] == b.hashes[height - 1 - footer]
@@ -137,10 +153,39 @@ public enum StitchMatcher {
             uniqueB: uniqueB)
     }
 
-    /// `c` as a move over `columns`, when it convinces and no row contradicts it.
+    /// Where `b`'s header could end if a bar from the page's flow pinned under the sticky
+    /// `header` during the move: `b`'s rows from `header` on are `a`'s from `header + shift`, for
+    /// at least `minimumEvidenceRows` rows that aren't blank. The bar scrolled `shift` rows before
+    /// it stuck, so the page's own offset must be larger: the page's content matches the same way
+    /// at its offset. The `pinnedCandidates` longest, on a tie the smallest shift first.
+    static func pinnedHeaders(
+        _ a: RowSignatures, _ b: RowSignatures, after header: Int, height: Int
+    ) -> [(end: Int, shift: Int)] {
+        var runs: [(end: Int, shift: Int)] = []
+        for shift in 1..<max(1, height - header) {
+            var y = header
+            var marked = 0
+            while y + shift < height && a.hashes[y + shift] == b.hashes[y] {
+                if !b.uniform[y] { marked += 1 }
+                y += 1
+            }
+            if marked >= minimumEvidenceRows { runs.append((y, shift)) }
+        }
+        return Array(
+            runs.sorted { ($0.end, -$0.shift) > ($1.end, -$1.shift) }.prefix(pinnedCandidates))
+    }
+
+    /// `c` as a move over `columns`, when it convinces, if need be `rescored`, and no row
+    /// contradicts it.
     static func believed(
         _ c: Candidate, _ previous: PixelBuffer, _ next: PixelBuffer, columns: Range<Int>
     ) -> FrameMatch? {
+        let c =
+            c.convincing
+            ? c
+            : rescored(
+                c, previous, next, columns: columns, a: RowSignatures(previous, columns: columns),
+                b: RowSignatures(next, columns: columns))
         guard c.convincing, let best = c.best else { return nil }
         let content = previous.height - c.header - c.footer
         let found = contradictions(
@@ -289,7 +334,9 @@ public enum StitchMatcher {
     }
 
     /// Evidence row pairs that differ across more than a quarter of `columns`. An animation or a
-    /// caret differs in a patch; text that differs across the width is other content.
+    /// caret differs in a patch; text that differs across the width is other content. A row whose
+    /// pixels all differ by at most one level per channel is the same content re-rasterised (a
+    /// browser dithering a filtered image afresh at each scroll position).
     static func contradictions(
         _ previous: PixelBuffer, _ next: PixelBuffer, columns: Range<Int>, previousStart: Int,
         nextStart: Int, count: Int, previousUnique: [Bool], nextUnique: [Bool]
@@ -313,11 +360,64 @@ public enum StitchMatcher {
                     while !differs(first) { first += 1 }
                     var last = columns.count - 1
                     while !differs(last) { last -= 1 }
-                    if (last - first + 1) * 4 > columns.count { found += 1 }
+                    if (last - first + 1) * 4 > columns.count,
+                        !nearlySame(rowA, rowB, bytes: columns.count * 4)
+                    {
+                        found += 1
+                    }
                 }
             }
         }
         return found
+    }
+
+    /// Whether every byte of two rows differs by at most one level: the same content
+    /// re-rasterised, as a browser dithers an image or a filter afresh at each scroll position.
+    static func nearlySame(_ a: UnsafeRawPointer, _ b: UnsafeRawPointer, bytes: Int) -> Bool {
+        (0..<bytes).allSatisfy {
+            abs(
+                Int(a.load(fromByteOffset: $0, as: UInt8.self))
+                    - Int(b.load(fromByteOffset: $0, as: UInt8.self))) <= 1
+        }
+    }
+
+    /// `c` with its best offset scored again, counting an evidence pair whose signatures differ
+    /// as matching when its rows are `nearlySame`. The other offsets keep their scores: dithering
+    /// doesn't make a wrong offset's rows alike.
+    static func rescored(
+        _ c: Candidate, _ previous: PixelBuffer, _ next: PixelBuffer, columns: Range<Int>,
+        a: RowSignatures, b: RowSignatures
+    ) -> Candidate {
+        guard let best = c.best else { return c }
+        let start = c.header + best.offset
+        let count = previous.height - c.header - c.footer - best.offset
+        var matches = 0
+        var evidence = 0
+        previous.bytes.withUnsafeBytes { pa in
+            next.bytes.withUnsafeBytes { pb in
+                for i in 0..<count {
+                    let p = start + i
+                    let n = c.header + i
+                    guard c.uniqueA[p], c.uniqueB[n] else { continue }
+                    let same = a.hashes[p] == b.hashes[n]
+                    if same && a.uniform[p] && b.uniform[n] { continue }
+                    evidence += 1
+                    if same
+                        || nearlySame(
+                            pa.baseAddress! + (p * previous.width + columns.lowerBound) * 4,
+                            pb.baseAddress! + (n * next.width + columns.lowerBound) * 4,
+                            bytes: columns.count * 4)
+                    {
+                        matches += 1
+                    }
+                }
+            }
+        }
+        guard evidence >= minimumEvidenceRows else { return c }
+        return Candidate(
+            header: c.header, footer: c.footer,
+            best: (best.offset, Double(matches) / Double(evidence)), runnerUp: c.runnerUp,
+            uniqueA: c.uniqueA, uniqueB: c.uniqueB)
     }
 
     /// Which rows of `rows` have a signature no other row of `rows` shares; rows outside it are
