@@ -7,6 +7,7 @@ default:
 
 sign_identity := env("APPLE_SIGNING_IDENTITY", "Developer ID Application")
 app := "build/Excerpt.app"
+info_plist := "Support/Info.plist"
 
 [group("dev")]
 [doc("Compile all targets (debug)")]
@@ -32,14 +33,31 @@ gate:
     swift test
 
 [group("app")]
-[doc("Build the signed Excerpt.app into build/")]
+[doc("Build the signed Excerpt.app, Sparkle embedded, into build/")]
 bundle:
+    #!/usr/bin/env bash
+    set -euo pipefail
     swift build -c release --product Excerpt
+    bin=$(swift build -c release --show-bin-path)
     rm -rf {{app}}
-    mkdir -p {{app}}/Contents/MacOS
-    cp "$(swift build -c release --show-bin-path)/Excerpt" {{app}}/Contents/MacOS/Excerpt
-    sed "s/__VERSION__/$(tr -d '[:space:]' < VERSION)/g" Support/Info.plist > {{app}}/Contents/Info.plist
-    codesign --force --options runtime --timestamp --sign "{{sign_identity}}" {{app}}
+    mkdir -p {{app}}/Contents/MacOS {{app}}/Contents/Frameworks
+    cp "$bin/Excerpt" {{app}}/Contents/MacOS/Excerpt
+    install_name_tool -add_rpath @executable_path/../Frameworks {{app}}/Contents/MacOS/Excerpt
+    ditto "$bin/Sparkle.framework" {{app}}/Contents/Frameworks/Sparkle.framework
+    sed "s/__VERSION__/$(tr -d '[:space:]' < VERSION)/g" {{info_plist}} > {{app}}/Contents/Info.plist
+    # Inside-out: each nested Sparkle helper before the framework, the framework before the app.
+    sign=(codesign --force --options runtime --timestamp --sign "{{sign_identity}}")
+    sparkle={{app}}/Contents/Frameworks/Sparkle.framework
+    "${sign[@]}" "$sparkle/Versions/B/XPCServices/Installer.xpc"
+    "${sign[@]}" --preserve-metadata=entitlements "$sparkle/Versions/B/XPCServices/Downloader.xpc"
+    "${sign[@]}" "$sparkle/Versions/B/Autoupdate" "$sparkle/Versions/B/Updater.app" "$sparkle"
+    "${sign[@]}" {{app}}
+
+[group("app")]
+[doc("Print the directory holding Sparkle's sign_update and generate_keys")]
+sparkle-bin:
+    @swift package resolve >/dev/null
+    @echo "{{justfile_directory()}}/.build/artifacts/sparkle/Sparkle/bin"
 
 [group("app")]
 [doc("Build and launch the app from build/")]

@@ -40,7 +40,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             chooseCapture: { [weak self] in self?.chooseCapture() },
             openLibrary: { [weak self] in self?.openLibrary() },
             openSettings: { [weak self] in self?.openSettings() },
-            hotKeyStates: { [weak self] in self?.hotKeyStates() ?? [:] })
+            hotKeyStates: { [weak self] in self?.hotKeyStates() ?? [:] },
+            updater: Updater.make())
         claude.onBusyChange = { [weak self] primary in self?.showPreparingForClaude(primary) }
         claude.startPruning()
         filing.start()
