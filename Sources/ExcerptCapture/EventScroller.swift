@@ -10,18 +10,18 @@ public final class EventScroller: Scroller {
     private let point: CGPoint
     private let region: CGRect
     private let hud: CGRect
-    /// Moves the pointer to the scroll point once, the first time a step is checked for: the
-    /// window under the pointer takes wheel events, and moving it every step would fight the
-    /// user reaching for Done. A capture the user scrolls never moves it. A failed move shows as
-    /// `.pointerMoved`.
-    private lazy var placed = CGWarpMouseCursorPosition(point) == .success
+    /// Moves the pointer to the scroll point once, the first time a step is checked for, unless
+    /// it is already there: the window under the pointer takes wheel events, and moving it
+    /// every step would fight the user reaching for Done. A capture the user scrolls never
+    /// moves it. A failed move shows as `.pointerMoved`.
+    private lazy var placed =
+        CGEvent(source: nil)?.location == point || CGWarpMouseCursorPosition(point) == .success
 
     /// Stamped on every wheel event Excerpt posts, so the user's own can be told apart.
     public nonisolated static let marker: Int64 = 0x4558_4350  // "EXCP"
 
-    /// `hud` is the HUD's AppKit frame.
-    public init(region: ScrollRegion, hud: CGRect) {
-        let at = ScrollChromeLayout.scrollPoint(region: region.appKitFrame, hud: hud)
+    /// `point` (from `ScrollChromeLayout.scrollPoint`) and `hud` are in AppKit points.
+    public init(region: ScrollRegion, point at: CGPoint, hud: CGRect) {
         point = region.quartz(CGRect(origin: at, size: .zero)).origin
         self.region = region.quartz(region.appKitFrame)
         self.hud = region.quartz(hud)
@@ -44,9 +44,14 @@ public final class EventScroller: Scroller {
     public var blocker: ManualReason? {
         guard Self.isTrusted else { return .accessibility }
         guard placed, let pointer = CGEvent(source: nil)?.location,
-            Self.scrollsPage(at: pointer, region: region, hud: hud)
+            Self.scrollsPage(at: pointer, region: region, hud: hud) || hud.contains(pointer)
         else { return .pointerMoved }
         return nil
+    }
+
+    public var waits: Bool {
+        guard let pointer = CGEvent(source: nil)?.location else { return false }
+        return hud.contains(pointer)
     }
 
     public func scroll(points: Double) -> Bool {

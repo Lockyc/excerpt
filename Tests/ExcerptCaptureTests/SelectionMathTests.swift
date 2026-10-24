@@ -36,23 +36,23 @@ import Testing
                 == CGRect(x: 400, y: 386, width: 200, height: 28))
     }
 
-    @Test func startButtonSitsInTheHUDBelowThenAboveAShortSelection() {
+    @Test func startButtonSitsBelowThenAboveAShortSelection() {
         let bounds = CGRect(x: 0, y: 0, width: 1000, height: 800)
         let size = CGSize(width: 200, height: 28)
-        // The HUD (128 tall) goes 12 below the selection; the button sits at its centre.
+        // 12 below the selection; above it when the screen ends first.
         #expect(
             SelectionMath.startButtonFrame(
                 for: CGRect(x: 100, y: 100, width: 400, height: 100), size: size, in: bounds)
-                == CGRect(x: 200, y: 262, width: 200, height: 28))
+                == CGRect(x: 200, y: 212, width: 200, height: 28))
         #expect(
             SelectionMath.startButtonFrame(
                 for: CGRect(x: 100, y: 690, width: 400, height: 100), size: size, in: bounds)
-                == CGRect(x: 200, y: 600, width: 200, height: 28))
-        // The HUD (520 wide) clamps to the left edge; the button centres in it.
+                == CGRect(x: 200, y: 650, width: 200, height: 28))
+        // Clamped to the screen's left edge.
         #expect(
             SelectionMath.startButtonFrame(
                 for: CGRect(x: 0, y: 100, width: 50, height: 50), size: size, in: bounds
-            ).minX == 160)
+            ).minX == 0)
     }
 
     @Test func aPressGripsTheEdgesItIsNearAndMovesFromInside() {
@@ -139,14 +139,5 @@ import Testing
             SelectionMath.barFrame(
                 for: nil, cursor: CGPoint(x: 950, y: 790), size: size, in: bounds)
                 == CGRect(x: 600, y: 706, width: 400, height: 60))
-    }
-
-    @Test func startButtonLeavesASelectionTooShortForTheHUDToCentre() {
-        // 200 tall: room to centre the 28pt button, not the 128pt HUD.
-        let bounds = CGRect(x: 0, y: 0, width: 1000, height: 800)
-        let frame = SelectionMath.startButtonFrame(
-            for: CGRect(x: 100, y: 100, width: 400, height: 200),
-            size: CGSize(width: 200, height: 28), in: bounds)
-        #expect(frame.minY > 300)
     }
 }

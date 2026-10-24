@@ -130,10 +130,13 @@ holding one.
    until the first frame, so the page hasn't moved when it is taken. The overlay opens on the
    last scrolling region of this launch, already waiting, so the same area can be captured
    again.
-2. The Start button and the HUD (Done, Cancel) sit centred in the region when it is tall enough
-   to leave `ScrollChromeLayout.scrollBand` clear above and below them, else just outside it.
-   **Auto-scroll** posts scroll-wheel events in the region's taller part clear of the HUD, ~60%
-   of its height per step, then waits up to `ScrollCapture.responseTime` for the page to answer
+2. The Start button sits centred in the region when it is tall enough to leave
+   `ScrollChromeLayout.scrollBand` clear above and below it, else just outside it. Scroll events
+   land at the pointer, moved only if it is less than `ScrollChromeLayout.pointerInset` inside
+   the region, and only that far; the HUD (Done, Cancel) sits beside it, never over it, and
+   marks the capture's state: a spinner while it runs, a warning when it needs the user, a check
+   at the page's end. **Auto-scroll** posts ~60%
+   of the region's height per step, then waits up to `ScrollCapture.responseTime` for the page to answer
    (a caret blink isn't an answer) and for the frame to settle (two identical `SCStream` frames,
    or ~300ms).
 3. **Stitching** (Core): frames reduce to row signatures; the offset from the previous frame is
@@ -151,9 +154,10 @@ holding one.
 4. Stops on two consecutive no-movement steps, on `Return`, or at a maximum height (30,000
    image pixels; the stitch is truncated contiguously there).
 5. **Manual fallback** when steps produce no movement before the page has moved, Accessibility is
-   not granted, the pointer left the region or rests on the HUD, the wheel event failed, or the
+   not granted, the pointer left the region, the wheel event failed, or the
    page scrolled a different distance than asked: the HUD reads "Scroll the page yourself · Return when done" and frames
-   are sampled and stitched as the user scrolls, skipping any that don't match. A wheel event
+   are sampled and stitched as the user scrolls, skipping any that don't match. The pointer
+   resting on the HUD only holds the steps until it leaves. A wheel event
    over the region that Excerpt didn't post (its own carry `EventScroller.marker`) hands
    scrolling to the user the same way, during an auto run or after an uncertain stop.
 6. A live preview of the stitch sits beside the region.
@@ -162,7 +166,9 @@ holding one.
    In manual mode a mismatched frame is skipped and the HUD asks to scroll back. In auto mode an
    uncertain stitch halts, and in either mode the cap does: `Return` saves what is stitched,
    `Esc` discards, and after an uncertain stop scrolling the page yourself carries on from where
-   the stitch ends. A stream failure or display change saves what is stitched and says so.
+   the stitch ends. A stream failure or display change saves what is stitched and says so. Every
+   way a scrolling capture fails to start or ends early is said in its HUD, with one OK, never in
+   an alert.
 
 Known limits: a run of content identical except a narrow patch, flung past in manual mode, can
 stitch at a wrong offset (auto mode checks each step's travel); a final short step that aliases

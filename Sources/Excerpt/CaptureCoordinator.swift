@@ -245,10 +245,12 @@ final class CaptureCoordinator {
         let visible =
             NSScreen.screens.first { $0.displayID == region.displayID }?.visibleFrame
             ?? region.appKitFrame
+        let point = ScrollChromeLayout.scrollPoint(
+            pointer: NSEvent.mouseLocation, region: region.appKitFrame)
         let hud = ScrollChromeLayout.hud(
-            size: ScrollChromeLayout.hudSize, region: region.appKitFrame, visible: visible)
+            size: ScrollChromeLayout.hudSize, beside: point, visible: visible)
         let capture = ScrollCapture(
-            source: source, scroller: EventScroller(region: region, hud: hud),
+            source: source, scroller: EventScroller(region: region, point: point, hud: hud),
             stepPoints: region.stepPoints, scale: Double(region.scale), start: start)
         let windows = ScrollWindows(
             region: region.appKitFrame, hud: hud, visible: visible,
@@ -265,8 +267,10 @@ final class CaptureCoordinator {
         do {
             try await source.start(region: region)
         } catch {
+            overlay.dismiss()
+            await windows.explain(.couldNotStart(error))
             windows.close()
-            throw error
+            return
         }
         capture.onChange = { [weak windows] in
             overlay.dismiss()
@@ -302,28 +306,34 @@ final class CaptureCoordinator {
         NotificationCenter.default.removeObserver(observer)
         if let wheel { NSEvent.removeMonitor(wheel) }
         source.onFailure = nil
-        windows.close()
         var stopFailure: Error?
         do {
             try await source.stop()
         } catch {
             stopFailure = error
         }
-        var saved = false
         var stopped: Error?
+        var image: PixelBuffer?
         switch outcome {
-        case .saved(let image):
-            saved = await deliver(image.makeImage(), scale: region.scale)
+        case .saved(let stitch):
+            image = stitch
             if case .stopped(let error) = scrollEnd { stopped = error }
         case .cancelled:
             break
         case .failed(let error, let partial):
-            if let partial { saved = await deliver(partial.makeImage(), scale: region.scale) }
+            image = partial
             stopped = error
         }
         scrollEnd = nil
-        if let stopped { Alerts.scrollingStopped(stopped, savedPartial: saved) }
-        if let stopFailure { Alerts.recordingNotStopped(stopFailure, saved: saved) }
+        // The HUD stays up only to say why the capture ended early.
+        if stopped == nil && stopFailure == nil { windows.close() }
+        var saved = false
+        if let image { saved = await deliver(image.makeImage(), scale: region.scale) }
+        if let stopped { await windows.explain(.stopped(stopped, savedPartial: saved)) }
+        if let stopFailure {
+            await windows.explain(.recordingNotStopped(stopFailure, saved: saved))
+        }
+        windows.close()
     }
 
     private func endScrolling(_ end: ScrollEnd) {

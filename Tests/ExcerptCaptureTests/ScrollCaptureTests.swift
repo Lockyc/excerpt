@@ -19,6 +19,7 @@ final class FakePage: FrameSource, Scroller {
     var footer: PixelBuffer?
     var offset = 0
     var blocker: ManualReason?
+    var waits = false
     var moves = true
     /// Rows the page moves past step `n` (1 first), as momentum or a multiplier would carry it.
     var extraTravel: (Int) -> Int = { _ in 0 }
@@ -90,6 +91,7 @@ final class AnimatedPage: FrameSource, Scroller {
     let viewport: Int
     var offset = 0
     var blocker: ManualReason?
+    let waits = false
     var scrolls = 0
     /// Reads in order; empty reads as a timeout.
     private var reads: [PixelBuffer?]
@@ -149,6 +151,21 @@ final class AnimatedPage: FrameSource, Scroller {
                 ]))
         // Seven steps that move (the last one short, at the end), then two that don't.
         #expect(fake.scrolls.count == 9)
+    }
+
+    @Test func thePointerOnTheHUDHoldsStepsWithoutHandingOver() async {
+        let fake = FakePage(page: page, viewport: 200)
+        fake.waits = true
+        let capture = ScrollCapture(source: fake, scroller: fake, stepPoints: 120, scale: 1)
+        var phases: [ScrollPhase] = []
+        capture.onChange = { phases.append($0.phase) }
+        Task {
+            try? await Task.sleep(for: .milliseconds(300))
+            #expect(fake.scrolls.isEmpty)
+            fake.waits = false
+        }
+        #expect(saved(await capture.run()) == page)
+        #expect(!phases.contains { if case .manual = $0 { true } else { false } })
     }
 
     @Test func aLastStepFarShorterThanTheOthersIsKept() async {

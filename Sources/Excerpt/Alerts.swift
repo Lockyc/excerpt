@@ -47,23 +47,6 @@ enum Alerts {
         )
     }
 
-    /// A capture ended because the displays were added, removed or moved under it.
-    static let displaysChanged = "The displays changed, so the capture ended."
-
-    /// A scrolling capture ended part-way, because its stream stopped or the displays changed;
-    /// says whether what was stitched is saved.
-    static func scrollingStopped(_ error: Error, savedPartial: Bool) {
-        let cause =
-            error as? ScrollCaptureError == .displayChanged
-            ? displaysChanged
-            : sentence("Excerpt lost the picture of the region: \(error.localizedDescription)")
-        show(
-            "Scrolling capture stopped",
-            cause + " "
-                + (savedPartial
-                    ? "What was stitched before that is saved." : "Nothing was saved."))
-    }
-
     enum AccessibilityChoice { case openSettings, scrollYourself, cancel }
 
     /// Accessibility isn't granted, so Excerpt can't scroll the page: open the setting, scroll
@@ -82,14 +65,6 @@ enum Alerts {
         case .alertSecondButtonReturn: return .scrollYourself
         default: return .cancel
         }
-    }
-
-    /// The region's screen recording could not be stopped after a scrolling capture ended.
-    static func recordingNotStopped(_ error: Error, saved: Bool) {
-        show(
-            "Couldn't stop recording the region",
-            sentence("Excerpt couldn't stop recording the screen: \(error.localizedDescription)")
-                + (saved ? " The capture is saved." : ""))
     }
 
     /// The For Claude bundle could not be built: the cache, or text recognition, failed.
@@ -187,5 +162,40 @@ enum Alerts {
         default: reason = sentence(error.localizedDescription)
         }
         show("Couldn't open \(file.lastPathComponent)", reason)
+    }
+}
+
+/// A scrolling capture's own failures, said in its HUD where the user is looking, not an alert.
+@MainActor
+extension ScrollHUDText {
+    /// The region couldn't be streamed, so nothing was captured.
+    static func couldNotStart(_ error: Error) -> ScrollHUDText {
+        ScrollHUDText(
+            title: "Couldn't start the scrolling capture",
+            detail: Alerts.sentence(error.localizedDescription), tone: .attention)
+    }
+
+    /// A scrolling capture ended part-way, because its stream stopped or the displays changed;
+    /// says whether what was stitched is saved.
+    static func stopped(_ error: Error, savedPartial: Bool) -> ScrollHUDText {
+        let cause =
+            error as? ScrollCaptureError == .displayChanged
+            ? "The displays changed, so the capture ended."
+            : Alerts.sentence(
+                "Excerpt lost the picture of the region: \(error.localizedDescription)")
+        return ScrollHUDText(
+            title: "Scrolling capture stopped",
+            detail: cause + " "
+                + (savedPartial ? "What was stitched before that is saved." : "Nothing was saved."),
+            tone: .attention)
+    }
+
+    /// The region's screen recording could not be stopped after a scrolling capture ended.
+    static func recordingNotStopped(_ error: Error, saved: Bool) -> ScrollHUDText {
+        ScrollHUDText(
+            title: "Couldn't stop recording the region",
+            detail: Alerts.sentence(
+                "Excerpt couldn't stop recording the screen: \(error.localizedDescription)")
+                + (saved ? " The capture is saved." : ""), tone: .attention)
     }
 }
