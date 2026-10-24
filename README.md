@@ -30,8 +30,8 @@ notarized by Apple, then installs `/Applications/Excerpt.app`, links the `excerp
 those folders isn't writable. From a clone of this repo, Claude Code's `/excerpt:install` runs
 the same install and checks the command works from a new shell.
 
-**Update** by running the installer again; it quits a running Excerpt, replaces it and starts
-the new one.
+**Updates** install themselves: Excerpt checks daily, and **Check for Updates…** in its menu
+checks now. Running the installer again also updates.
 
 **Uninstall** by quitting Excerpt, deleting `/Applications/Excerpt.app`,
 `/usr/local/bin/excerpt` and the cache `~/Library/Caches/excerpt`, running

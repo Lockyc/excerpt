@@ -1,9 +1,11 @@
 import AppKit
 import QuickLookThumbnailing
+import Sparkle
 
 @MainActor
 final class StatusMenu: NSObject, NSMenuDelegate {
     private let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+    private let updater: SPUStandardUpdaterController?
     private let perform: (HotKeyAction) -> Void
     private let recentCaptures: () throws -> [URL]
     private let openCapture: (URL) -> Void
@@ -22,8 +24,10 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         recentCaptures: @escaping () throws -> [URL], openCapture: @escaping (URL) -> Void,
         chooseCapture: @escaping () -> Void, openLibrary: @escaping () -> Void,
         openSettings: @escaping () -> Void,
-        hotKeyStates: @escaping () -> [HotKeyAction: HotKeyState]
+        hotKeyStates: @escaping () -> [HotKeyAction: HotKeyState],
+        updater: SPUStandardUpdaterController?
     ) {
+        self.updater = updater
         self.perform = perform
         self.recentCaptures = recentCaptures
         self.openCapture = openCapture
@@ -70,6 +74,13 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         ).target = self
         menu.addItem(withTitle: "Settings…", action: #selector(settings), keyEquivalent: ",")
             .target = self
+        // Shown without an updater too (`swift run`), just inert, so the menu reads the same.
+        menu.addItem(
+            withTitle: "Check for Updates…",
+            action: updater.map { _ in #selector(SPUStandardUpdaterController.checkForUpdates(_:))
+            },
+            keyEquivalent: ""
+        ).target = updater
         menu.addItem(.separator())
         menu.addItem(
             withTitle: "Quit Excerpt", action: #selector(NSApplication.terminate(_:)),
