@@ -241,7 +241,6 @@ final class CaptureCoordinator {
             pixelRect: pixelRect, primaryHeight: NSScreen.primaryHeight)
         lastScrollRegion = region
         let source = StreamFrameSource()
-        try await source.start(region: region)
         scrollEnd = nil
         let visible =
             NSScreen.screens.first { $0.displayID == region.displayID }?.visibleFrame
@@ -262,6 +261,13 @@ final class CaptureCoordinator {
                 capture?.cancel()
             },
             onOpenAccessibility: { Self.open(.accessibility) })
+        // `start` needs a window of Excerpt's open: the HUD and preview.
+        do {
+            try await source.start(region: region)
+        } catch {
+            windows.close()
+            throw error
+        }
         capture.onChange = { [weak windows] in
             overlay.dismiss()
             windows?.update($0)

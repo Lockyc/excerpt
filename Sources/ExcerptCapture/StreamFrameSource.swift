@@ -6,11 +6,10 @@ import ScreenCaptureKit
 
 /// Live frames of the scrolling region from an `SCStream`, without any of Excerpt's windows (so
 /// the HUD and preview never appear in a frame) and without the cursor. The stream excludes
-/// Excerpt by application, because the HUD is created after it starts; that filter form can't
+/// Excerpt by application, so windows opened after it starts stay out too; that filter form can't
 /// also exclude Finder's desktop icons the way `ScreenCapturer`'s stills do, so icons under the
-/// region appear in frames. Excerpt is looked up among apps with any window, not only on-screen
-/// ones: once the overlay has closed its only window may be the menu-bar item, which macOS
-/// reports as off-screen whenever the menu bar is hidden.
+/// region appear in frames. Excerpt is looked up among apps with a window, on screen or not, and
+/// its menu-bar item isn't one: `start` needs a window of Excerpt's open.
 @MainActor
 public final class StreamFrameSource: FrameSource {
     private let mailbox = FrameMailbox()
