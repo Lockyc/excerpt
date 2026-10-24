@@ -1,3 +1,5 @@
+<img src="Support/icon.png" alt="excerpt" width="128" height="128">
+
 # excerpt
 
 ![Platform](https://img.shields.io/badge/platform-macOS%2015%2B-000000?logo=apple&logoColor=white)
