@@ -34,14 +34,24 @@ public enum HaltReason: Equatable, Sendable {
     case limit
 }
 
-/// The HUD's two lines.
+/// The HUD's two lines, and how it marks them.
 public struct ScrollHUDText: Equatable, Sendable {
+    /// Under way; something needs the user's attention; finished.
+    public enum Tone: Equatable, Sendable { case progress, attention, done }
+
     public let title: String
     public let detail: String
+    public let tone: Tone
+
+    public init(title: String, detail: String, tone: Tone) {
+        self.title = title
+        self.detail = detail
+        self.tone = tone
+    }
 
     /// The HUD while Excerpt scrolls: also what it shows before the first frame arrives.
     public static let scrolling = ScrollHUDText(
-        title: "Scrolling the page", detail: "Return when done · Esc cancels")
+        title: "Scrolling the page", detail: "Return when done · Esc cancels", tone: .progress)
 }
 
 /// The rules of a scrolling capture over the stitch: when to keep scrolling, when the page has
@@ -179,6 +189,9 @@ public struct ScrollSession: Sendable {
             return .scrolling
         case .manual(let reason):
             let detail: String
+            // The user chose to scroll; any other reason is auto-scroll that couldn't go on.
+            let tone: ScrollHUDText.Tone =
+                offTrack || reason != .userScrolled ? .attention : .progress
             if offTrack {
                 detail = "This part doesn't match: scroll back to where the preview ends"
             } else {
@@ -196,17 +209,18 @@ public struct ScrollSession: Sendable {
                 }
             }
             return ScrollHUDText(
-                title: "Scroll the page yourself · Return when done", detail: detail)
+                title: "Scroll the page yourself · Return when done", detail: detail, tone: tone)
         case .halted(.uncertain):
             return ScrollHUDText(
-                title: "Stopped at \(heightText): the next part didn't match", detail: decide)
+                title: "Stopped at \(heightText): the next part didn't match", detail: decide,
+                tone: .attention)
         case .halted(.limit):
             return ScrollHUDText(
                 title:
                     "Stopped at the \(LengthText.points(stitcher.maximumHeight, scale: scale)) height limit",
-                detail: decide)
+                detail: decide, tone: .attention)
         case .finished:
-            return ScrollHUDText(title: "Reached the end of the page", detail: "")
+            return ScrollHUDText(title: "Reached the end of the page", detail: "", tone: .done)
         }
     }
 }

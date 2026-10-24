@@ -48,7 +48,7 @@ import Testing
             s.hud
                 == ScrollHUDText(
                     title: "Scroll the page yourself · Return when done",
-                    detail: "The page didn't scroll on its own"))
+                    detail: "The page didn't scroll on its own", tone: .attention))
     }
 
     @Test func withoutAccessibilityTheUserScrollsFromTheStart() {
@@ -79,7 +79,7 @@ import Testing
             s.hud
                 == ScrollHUDText(
                     title: "Stopped at 160 px: the next part didn't match",
-                    detail: "Return saves what's stitched · Esc discards it"))
+                    detail: "Return saves what's stitched · Esc discards it", tone: .attention))
         #expect(s.stitcher.height == 320)
     }
 
@@ -128,6 +128,20 @@ import Testing
     @Test func theOpeningHUDIsTheScrollingText() {
         #expect(session().hud == .scrolling)
         #expect(ScrollHUDText.scrolling.title == "Scrolling the page")
+    }
+
+    @Test func theHUDMarksProgressTroubleAndTheEnd() {
+        var s = session()
+        #expect(s.hud.tone == .progress)
+        s.takeOver()
+        #expect(s.hud.tone == .progress)  // the user chose to scroll
+        #expect(session(canAutoScroll: false).hud.tone == .attention)
+        var ended = session()
+        ended.stepped(frame(120), travel: 120)
+        ended.stepped(frame(120), travel: 120)
+        ended.stepped(frame(120), travel: 120)
+        #expect(ended.phase == .finished)
+        #expect(ended.hud.tone == .done)
     }
 
     @Test func aPointerThatLeftTheRegionHasItsOwnWording() {

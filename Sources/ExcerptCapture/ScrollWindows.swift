@@ -3,22 +3,28 @@ import ExcerptCore
 
 /// The HUD and the live preview of a scrolling capture. The HUD's Done and Cancel buttons carry
 /// Return and Esc and also work by click, even while another app is frontmost, so ending the
-/// capture never depends on where keyboard focus went.
+/// capture never depends on where keyboard focus went. Its mark says how the capture is going:
+/// a spinner while it runs, a warning when something needs the user, a check at the page's end.
+/// A capture that couldn't start or ended early says why in the same HUD, with one OK.
 @MainActor
 public final class ScrollWindows {
     private let hud: NSPanel
     private let preview: NSPanel
     private let titleLabel = NSTextField(labelWithString: "")
     private let detailLabel = NSTextField(labelWithString: "")
+    private let spinner = NSProgressIndicator()
+    private let mark = NSImageView()
     private let accessibilityButton: NSButton
+    private let cancelButton: NSButton
+    private let doneButton: NSButton
     private let imageView = NSImageView()
     private let heightLabel = NSTextField(labelWithString: "")
     private let actions: Actions
     private var shownHeight = -1
     private var activeObserver: NSObjectProtocol?
 
-    /// `region`, `hud` (the HUD's frame, from `ScrollChromeLayout.hud` at its `hudSize`) and `visible`
-    /// (its screen's visible frame) in AppKit points.
+    /// `region`, `hud` (the HUD's frame, from `ScrollChromeLayout.hud` at its `hudSize`) and
+    /// `visible` (its screen's visible frame) in AppKit points.
     public init(
         region: CGRect, hud hudFrame: CGRect, visible: CGRect, onDone: @escaping () -> Void,
         onCancel: @escaping () -> Void, onOpenAccessibility: @escaping () -> Void
@@ -29,8 +35,12 @@ public final class ScrollWindows {
             frame: ScrollChromeLayout.preview(region: region, visible: visible), keyable: false)
         preview.ignoresMouseEvents = true
         accessibilityButton = FirstMouseButton(
-            title: "Open Accessibility Settings", target: actions,
+            title: "Accessibility…", target: actions,
             action: #selector(Actions.openAccessibility))
+        cancelButton = FirstMouseButton(
+            title: "Cancel", target: actions, action: #selector(Actions.cancelTapped))
+        doneButton = FirstMouseButton(
+            title: "Done", target: actions, action: #selector(Actions.doneTapped))
         buildHUD()
         buildPreview()
         show(ScrollHUDText.scrolling)
@@ -58,6 +68,28 @@ public final class ScrollWindows {
             cgImage: session.stitcher.bottom(rows: rows).makeImage(), size: .zero)
     }
 
+    /// Shows why the capture couldn't start or ended early, with only OK (Return or Esc), and
+    /// returns once it is pressed. The preview closes: nothing more joins the stitch.
+    public func explain(_ text: ScrollHUDText) async {
+        preview.orderOut(nil)
+        show(text)
+        accessibilityButton.isHidden = true
+        cancelButton.isHidden = true
+        doneButton.title = "OK"
+        hud.makeKeyAndOrderFront(nil)
+        await withCheckedContinuation { (finished: CheckedContinuation<Void, Never>) in
+            var resumed = false
+            let close = {
+                guard !resumed else { return }
+                resumed = true
+                finished.resume()
+            }
+            actions.done = close
+            actions.cancel = close
+            (hud as? KeyablePanel)?.onEscape = close
+        }
+    }
+
     public func close() {
         if let activeObserver { NotificationCenter.default.removeObserver(activeObserver) }
         activeObserver = nil
@@ -68,13 +100,34 @@ public final class ScrollWindows {
     private func show(_ text: ScrollHUDText) {
         titleLabel.stringValue = text.title
         detailLabel.stringValue = text.detail
+        detailLabel.isHidden = text.detail.isEmpty
+        switch text.tone {
+        case .progress:
+            mark.isHidden = true
+            spinner.isHidden = false
+            spinner.startAnimation(nil)
+        case .attention:
+            showMark("exclamationmark.triangle.fill", .systemOrange)
+        case .done:
+            showMark("checkmark.circle.fill", .systemGreen)
+        }
+    }
+
+    private func showMark(_ symbol: String, _ color: NSColor) {
+        spinner.stopAnimation(nil)
+        spinner.isHidden = true
+        mark.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
+        mark.contentTintColor = color
+        mark.isHidden = false
     }
 
     /// Always on screen; enabled only while Excerpt lacks Accessibility access.
     private func updateAccessibilityButton() {
         let trusted = EventScroller.isTrusted
         accessibilityButton.isEnabled = !trusted
-        accessibilityButton.toolTip = trusted ? "Excerpt has Accessibility access" : nil
+        accessibilityButton.toolTip =
+            trusted
+            ? "Excerpt has Accessibility access" : "Open Privacy & Security → Accessibility"
     }
 
     private static func panel(frame: CGRect, keyable: Bool) -> NSPanel {
@@ -98,7 +151,7 @@ public final class ScrollWindows {
         background.material = .hudWindow
         background.state = .active
         background.wantsLayer = true
-        background.layer?.cornerRadius = 10
+        background.layer?.cornerRadius = 12
         background.layer?.masksToBounds = true
         background.autoresizingMask = [.width, .height]
         panel.contentView = background
@@ -107,36 +160,60 @@ public final class ScrollWindows {
 
     private func buildHUD() {
         guard let content = hud.contentView else { return }
-        titleLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+        titleLabel.font = .systemFont(ofSize: 13, weight: .medium)
         detailLabel.font = .systemFont(ofSize: 11)
         detailLabel.textColor = .secondaryLabelColor
+        let textWidth = ScrollChromeLayout.hudSize.width - 58
         for label in [titleLabel, detailLabel] {
             label.lineBreakMode = .byWordWrapping
             label.maximumNumberOfLines = 2
-            label.preferredMaxLayoutWidth = ScrollChromeLayout.hudSize.width - 28
+            label.preferredMaxLayoutWidth = textWidth
         }
         let text = NSStackView(views: [titleLabel, detailLabel])
         text.orientation = .vertical
         text.alignment = .leading
         text.spacing = 2
 
-        let cancel = FirstMouseButton(
-            title: "Cancel", target: actions, action: #selector(Actions.cancelTapped))
-        cancel.keyEquivalent = "\u{1b}"
-        let done = FirstMouseButton(
-            title: "Done", target: actions, action: #selector(Actions.doneTapped))
-        done.keyEquivalent = "\r"
+        spinner.style = .spinning
+        spinner.controlSize = .small
+        spinner.isIndeterminate = true
+        spinner.isDisplayedWhenStopped = false
+        mark.symbolConfiguration = .init(pointSize: 14, weight: .semibold)
+        let status = NSView()
+        for view in [spinner, mark] as [NSView] {
+            view.translatesAutoresizingMaskIntoConstraints = false
+            status.addSubview(view)
+            NSLayoutConstraint.activate([
+                view.centerXAnchor.constraint(equalTo: status.centerXAnchor),
+                view.centerYAnchor.constraint(equalTo: status.centerYAnchor),
+            ])
+        }
+        status.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            status.widthAnchor.constraint(equalToConstant: 18),
+            status.heightAnchor.constraint(equalToConstant: 18),
+        ])
+        let top = NSStackView(views: [status, text])
+        top.orientation = .horizontal
+        top.alignment = .top
+        top.spacing = 10
+
+        cancelButton.keyEquivalent = "\u{1b}"
+        doneButton.keyEquivalent = "\r"
+        for button in [accessibilityButton, cancelButton, doneButton] {
+            button.controlSize = .small
+        }
         let spacer = NSView()
         spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        let buttons = NSStackView(views: [accessibilityButton, spacer, cancel, done])
+        let buttons = NSStackView(views: [accessibilityButton, spacer, cancelButton, doneButton])
         buttons.orientation = .horizontal
-        buttons.spacing = 8
+        buttons.spacing = 6
 
-        let column = NSStackView(views: [text, buttons])
+        let column = NSStackView(views: [top, buttons])
         column.orientation = .vertical
         column.alignment = .leading
-        column.spacing = 12
-        column.edgeInsets = NSEdgeInsets(top: 12, left: 16, bottom: 12, right: 12)
+        column.distribution = .equalSpacing
+        column.edgeInsets = NSEdgeInsets(top: 12, left: 14, bottom: 10, right: 12)
         column.translatesAutoresizingMaskIntoConstraints = false
         content.addSubview(column)
         NSLayoutConstraint.activate([
@@ -144,8 +221,7 @@ public final class ScrollWindows {
             column.trailingAnchor.constraint(equalTo: content.trailingAnchor),
             column.topAnchor.constraint(equalTo: content.topAnchor),
             column.bottomAnchor.constraint(equalTo: content.bottomAnchor),
-            text.widthAnchor.constraint(equalTo: column.widthAnchor, constant: -28),
-            buttons.widthAnchor.constraint(equalTo: column.widthAnchor, constant: -28),
+            buttons.widthAnchor.constraint(equalTo: column.widthAnchor, constant: -26),
         ])
     }
 
@@ -165,11 +241,12 @@ public final class ScrollWindows {
     }
 }
 
-/// The buttons' target: an NSObject the panels can message.
+/// The buttons' target: an NSObject the panels can message. `explain` points Done and Cancel at
+/// its OK.
 @MainActor
 private final class Actions: NSObject {
-    let done: () -> Void
-    let cancel: () -> Void
+    var done: () -> Void
+    var cancel: () -> Void
     let accessibility: () -> Void
 
     init(
@@ -186,7 +263,10 @@ private final class Actions: NSObject {
     @objc func openAccessibility() { accessibility() }
 }
 
-/// A borderless panel that can still be key, so its buttons' Return and Esc work.
+/// A borderless panel that can still be key, so its buttons' Return and Esc work. Esc also
+/// reaches `onEscape` once Cancel is hidden.
 private final class KeyablePanel: NSPanel {
+    var onEscape: (() -> Void)?
     override var canBecomeKey: Bool { true }
+    override func cancelOperation(_ sender: Any?) { onEscape?() }
 }

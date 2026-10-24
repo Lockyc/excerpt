@@ -6,9 +6,13 @@ import Foundation
 public protocol Scroller: AnyObject {
     /// Why a scroll step can't be posted now, read live before every step: `.accessibility`
     /// when Excerpt lacks Accessibility access, `.pointerMoved` when the pointer is outside the
-    /// region or couldn't be moved there (wheel events go to the window under it). Nil when a
+    /// region and off the HUD, or couldn't be moved there (wheel events go to the window under
+    /// it). Nil when a
     /// step can be posted.
     var blocker: ManualReason? { get }
+    /// The pointer rests on the HUD, on its way to Done or Cancel: a step would scroll the HUD,
+    /// so auto-scroll holds until the pointer leaves it.
+    var waits: Bool { get }
     /// Scrolls the page down by `points`; false when the wheel event couldn't be made.
     func scroll(points: Double) -> Bool
 }
@@ -58,6 +62,8 @@ public final class ScrollCapture {
     public static let firstFrameTimeout: Duration = .seconds(3)
     /// How long a manual-mode read waits before checking for Return or Esc again.
     public static let sampleTimeout: Duration = .milliseconds(500)
+    /// How often auto-scroll looks again while the scroller `waits`.
+    public static let holdPoll: Duration = .milliseconds(100)
 
     private enum Request { case finish, cancel }
 
@@ -160,6 +166,10 @@ public final class ScrollCapture {
             do {
                 switch session.phase {
                 case .auto:
+                    if scroller.waits {
+                        try? await Task.sleep(for: Self.holdPoll)
+                        continue
+                    }
                     if let blocker = scroller.blocker {
                         session.fallBack(blocker)
                     } else {
