@@ -72,11 +72,11 @@ not drawn, and the editor reports it ("1 annotation hidden by a cut").
 **Interaction.** Tool key `C`. Drag across the image; the drag's dominant direction picks the
 axis. The band is shaded while dragging and collapses with an animation into a seam on release.
 Band edges **snap to gaps** — the nearest uniform pixel row/column (whitespace or a gridline)
-within ~12pt — so a cut never bisects a line of text or a table row; `⌥` disables snapping.
+within `GapSnapper.radiusPoints` (12pt) — so a cut never bisects a line of text or a table row; `⌥` disables snapping.
 Selecting a seam shows a handle per side; dragging one reveals or hides content on that side.
 `Delete` removes the cut.
 
-**The seam.** Both edges get a jagged torn edge with a soft shadow, separated by an ~18pt gap in
+**The seam.** Both edges get a jagged torn edge with a soft shadow, separated by a `SeamStyle.gapPoints` (18pt) gap in
 a neutral fill holding a pill: `⋯ 1,240 px hidden`, in points (rotated 90° on vertical cuts).
 The tear's shape is seeded from the cut's position, so identical edits render identical pixels.
 
@@ -135,10 +135,10 @@ holding one.
    land at the pointer, moved only if it is less than `ScrollChromeLayout.pointerInset` inside
    the region, and only that far; the HUD (Done, Cancel) sits beside it, never over it, and
    marks the capture's state: a spinner while it runs, a warning when it needs the user, a check
-   at the page's end. **Auto-scroll** posts ~60%
+   at the page's end. **Auto-scroll** posts `ScrollSession.stepShare` (60%)
    of the region's height per step, then waits up to `ScrollCapture.responseTime` for the page to answer
    (a caret blink isn't an answer) and for the frame to settle (two identical `SCStream` frames,
-   or ~300ms).
+   or `ScrollCapture.settleTime` (300ms)).
 3. **Stitching** (Core): frames reduce to row signatures; the offset from the previous frame is
    the one with the highest share of matching evidence rows (unique, non-uniform) in the overlap,
    clearly ahead of the others; a row redrawn at most one level off per channel (a browser
@@ -151,8 +151,8 @@ holding one.
    on each side of it moved by an offset of its own (an animation there halts). Columns that didn't move
    with the band take their commonest colour in appended rows, so a panel shows once, from the
    first frame, with the background running on under it.
-4. Stops on two consecutive no-movement steps, on `Return`, or at a maximum height (30,000
-   image pixels; the stitch is truncated contiguously there).
+4. Stops on two consecutive no-movement steps, on `Return`, or at a maximum height
+   (`Stitcher.defaultMaximumHeight`, 30,000 image pixels; the stitch is truncated contiguously there).
 5. **Manual fallback** when steps produce no movement before the page has moved, Accessibility is
    not granted, the pointer left the region, the wheel event failed, or the
    page scrolled a different distance than asked: the HUD reads "Scroll the page yourself · Return when done" and frames
@@ -305,7 +305,7 @@ any other way with unsaved edits asks.
   **Drag** from the thumbnail or the editor's title bar.
 - **For Claude** (`⌘⇧C`), shaped so Claude reads every tile unscaled:
   - tiles render at **1× (points)** — Retina doubles pixels without adding legible text;
-  - a capture that fits is one image; taller ones split into tiles overlapping ~100px, so every
+  - a capture that fits is one image; taller ones split into tiles overlapping `Tiling.overlap` (100px), so every
     line appears whole in some tile, each as tall as `Tiling.tileLength(width:)` allows: within
     the 2000px side limit Claude enforces once a conversation holds over 20 images, and within
     its visual-token budget;
