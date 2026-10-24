@@ -77,6 +77,28 @@ import Testing
         #expect(PixelBuffer(decoded.image) == PixelBuffer(original))
     }
 
+    @Test func savingKeepsBothFilesCreationDates() throws {
+        let store = LibraryStore(folder: tempFolder(), naming: LibraryNaming(timeZone: utc))
+        let original = Fixtures.sheet(width: 200, height: 400)
+        let primary = try store.saveCapture(original, scale: 2, at: date)
+        let edits = EditDocument(scale: 2, cuts: [Cut(axis: .horizontal, lower: 41, upper: 321)])
+        try store.saveEdits(primary: primary, original: original, edits: edits)
+        let master = primary.deletingLastPathComponent()
+            .appendingPathComponent(
+                LibraryNaming.originalName(forPrimary: primary.lastPathComponent))
+        let born = Date(timeIntervalSince1970: 1_600_000_000)
+        for url in [primary, master] {
+            try FileManager.default.setAttributes([.creationDate: born], ofItemAtPath: url.path)
+        }
+
+        try store.saveEdits(primary: primary, original: original, edits: edits)
+
+        for var url in [primary, master] {
+            url.removeAllCachedResourceValues()
+            #expect(try url.resourceValues(forKeys: [.creationDateKey]).creationDate == born)
+        }
+    }
+
     @Test func reSavingKeepsTheOriginalPixels() throws {
         let store = LibraryStore(folder: tempFolder(), naming: LibraryNaming(timeZone: utc))
         let original = Fixtures.sheet(width: 200, height: 400)

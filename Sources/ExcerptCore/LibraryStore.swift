@@ -122,10 +122,22 @@ public struct LibraryStore: Sendable {
         } else {
             masterData = try MasterFile.encode(original: original, edits: edits)
         }
-        try masterData.write(to: master, options: .atomic)
+        try Self.writeKeepingCreationDate(masterData, to: master)
         let data = try primaryData.value()
-        try data.write(to: primary, options: .atomic)
+        try Self.writeKeepingCreationDate(data, to: primary)
         return data
+    }
+
+    /// An atomic write is a rename over the target, which gives it a new birth time. Recent
+    /// Captures, the library's filing clock and series order all read the creation date, so a save
+    /// carries the file's existing one across.
+    private static func writeKeepingCreationDate(_ data: Data, to url: URL) throws {
+        let created =
+            try? FileManager.default.attributesOfItem(atPath: url.path)[.creationDate] as? Date
+        try data.write(to: url, options: .atomic)
+        if let created {
+            try FileManager.default.setAttributes([.creationDate: created], ofItemAtPath: url.path)
+        }
     }
 
     /// True when the PNG carries the edits chunk; a file that isn't a PNG doesn't.
