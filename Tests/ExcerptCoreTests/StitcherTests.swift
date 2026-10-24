@@ -230,6 +230,26 @@ import Testing
         #expect(stitcher.image == before)
     }
 
+    @Test func aBarPinningUnderTheHeaderShowsOnceInItsPlace() {
+        // A 16-row bar in the page's flow at row 40 pins under the 20-row header once scrolled
+        // there: the stitch is the first frame, the bar in its flow, then the page.
+        let header = ScrollFixtures.bar(width: 90, height: 20, tone: 60)
+        let nav = ScrollFixtures.bar(width: 90, height: 16, tone: 200)
+        let page = ScrollFixtures.overlay(
+            ScrollFixtures.page(width: 90, height: 1000), nav, atRow: 40)
+        func at(_ offset: Int) -> PixelBuffer {
+            ScrollFixtures.overlay(
+                ScrollFixtures.frame(page, offset: offset, viewport: 200, header: header), nav,
+                atRow: max(20, 40 - offset))
+        }
+        var stitcher = Stitcher(first: at(0), scale: 1)
+        #expect(stitcher.add(at(120)) == .appended(rows: 120))
+        #expect(stitcher.add(at(240)) == .appended(rows: 120))
+        #expect(
+            stitcher.image
+                == ScrollFixtures.stack([at(0), ScrollFixtures.rows(page, 200..<440)]))
+    }
+
     @Test func aFooterThatUnsticksUnderTheHeaderIsUncertain() {
         // A 30-row footer that sits in the page's flow at row 240 sticks to the viewport's
         // bottom until the page scrolls it into place; at 230 it shows unstuck, partly under a
