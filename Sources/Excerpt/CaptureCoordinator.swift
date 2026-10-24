@@ -181,13 +181,13 @@ final class CaptureCoordinator {
         var errorDescription: String? { "The selection couldn't be cut from the screen." }
     }
 
-    /// The selection `rect`, in pixels, cut from `still`.
     /// The area `a` and `b` share.
     private static func overlap(_ a: CGRect, _ b: CGRect) -> CGFloat {
         let shared = a.intersection(b)
         return shared.isNull ? 0 : shared.width * shared.height
     }
 
+    /// The selection `rect`, in pixels, cut from `still`.
     private static func crop(_ still: DisplayStill, to rect: CGRect) throws -> CGImage {
         guard let image = still.image.cropping(to: rect) else { throw CropFailed() }
         return image
