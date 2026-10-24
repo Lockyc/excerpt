@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-label="excerpt app icon">
+  <title>excerpt</title>
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ec5a52"/>
+      <stop offset="1" stop-color="#b3203a"/>
+    </linearGradient>
+    <clipPath id="shot"><rect x="192" y="190" width="640" height="644" rx="40"/></clipPath>
+  </defs>
+
+  <!-- macOS squircle tile -->
+  <rect x="0" y="0" width="1024" height="1024" rx="229" fill="url(#tile)"/>
+
+  <!-- a screenshot, its middle cut out and the halves joined at a torn seam -->
+  <g clip-path="url(#shot)">
+    <path d="M 192 190 H 832 V 462 L 768 484 L 704 462 L 640 484 L 576 462 L 512 484 L 448 462 L 384 484 L 320 462 L 256 484 L 192 462 Z" fill="#ffffff"/>
+    <path d="M 192 540 L 256 562 L 320 540 L 384 562 L 448 540 L 512 562 L 576 540 L 640 562 L 704 540 L 768 562 L 832 540 V 834 H 192 Z" fill="#ffffff"/>
+  </g>
+  <g fill="#f0b9bc">
+    <circle cx="246" cy="246" r="15"/>
+    <circle cx="290" cy="246" r="15"/>
+    <circle cx="334" cy="246" r="15"/>
+  </g>
+  <g fill="#f5d0d2">
+    <rect x="246" y="310" width="440" height="30" rx="15"/>
+    <rect x="246" y="374" width="532" height="30" rx="15"/>
+    <rect x="246" y="618" width="500" height="30" rx="15"/>
+    <rect x="246" y="682" width="372" height="30" rx="15"/>
+    <rect x="246" y="746" width="460" height="30" rx="15"/>
+  </g>
+</svg>

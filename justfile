@@ -33,6 +33,11 @@ gate:
     swift test
 
 [group("app")]
+[doc("Render Support/AppIcon.icns and the README's icon.png from the Support/icon.svg master")]
+icons:
+    plate icon --icns Support/AppIcon.icns --png 256:Support/icon.png Support/icon.svg
+
+[group("app")]
 [doc("Build the signed Excerpt.app, Sparkle embedded, into build/")]
 bundle:
     #!/usr/bin/env bash
@@ -40,8 +45,9 @@ bundle:
     swift build -c release --product Excerpt
     bin=$(swift build -c release --show-bin-path)
     rm -rf {{app}}
-    mkdir -p {{app}}/Contents/MacOS {{app}}/Contents/Frameworks
+    mkdir -p {{app}}/Contents/MacOS {{app}}/Contents/Resources {{app}}/Contents/Frameworks
     cp "$bin/Excerpt" {{app}}/Contents/MacOS/Excerpt
+    cp Support/AppIcon.icns {{app}}/Contents/Resources/AppIcon.icns
     install_name_tool -add_rpath @executable_path/../Frameworks {{app}}/Contents/MacOS/Excerpt
     ditto "$bin/Sparkle.framework" {{app}}/Contents/Frameworks/Sparkle.framework
     sed "s/__VERSION__/$(tr -d '[:space:]' < VERSION)/g" {{info_plist}} > {{app}}/Contents/Info.plist
