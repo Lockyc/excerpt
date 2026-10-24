@@ -13,6 +13,7 @@
     <key>LSUIElement</key><true/>
     <key>NSHighResolutionCapable</key><true/>
     <key>SUFeedURL</key><string>https://github.com/lockyc/excerpt/releases/latest/download/appcast.xml</string>
+    <key>SUPublicEDKey</key><string>34xPwGsrTsc/krBJ8ssUlsDyqScJcm1yS7+fwfLbK7w=</string>
     <key>SUEnableAutomaticChecks</key><true/>
     <key>SUScheduledCheckInterval</key><integer>86400</integer>
     <key>CFBundleDocumentTypes</key>
