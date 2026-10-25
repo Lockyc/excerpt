@@ -13,7 +13,8 @@ public protocol Scroller: AnyObject {
     /// The pointer rests on the HUD, on its way to Done or Cancel: a step would scroll the HUD,
     /// so auto-scroll holds until the pointer leaves it.
     var waits: Bool { get }
-    /// Scrolls the page down by `points`; false when the wheel event couldn't be made.
+    /// Scrolls the page down by `points`, up when negative; false when the wheel event couldn't
+    /// be made.
     func scroll(points: Double) -> Bool
 }
 
@@ -56,7 +57,19 @@ public enum ScrollCaptureError: Error, Equatable, LocalizedError {
 public final class ScrollCapture {
     /// The longest wait for the page to answer a scroll step: an app can move it well after the
     /// wheel event, and a step that shows no movement in time counts towards the page's end.
+    /// The whole wait until a step has been answered; after, `responseWait(after:)`.
     public static let responseTime: Duration = .seconds(2)
+    /// Once steps have been answered, a step waits this many times the slowest answer.
+    public static let answerFactor = 3
+    /// The shortest wait for an answer, however fast the page has answered.
+    public static let shortestResponseWait: Duration = .milliseconds(500)
+
+    /// How long a step waits for the page to answer, given the slowest answer so far: a page
+    /// that answers fast shows its end fast, without leaving a slow one less than it took.
+    static func responseWait(after slowest: Duration?) -> Duration {
+        guard let slowest else { return responseTime }
+        return min(responseTime, max(shortestResponseWait, slowest * answerFactor))
+    }
     /// The longest wait for a moving page to settle once it has answered a step.
     public static let settleTime: Duration = .milliseconds(300)
     public static let firstFrameTimeout: Duration = .seconds(3)
@@ -80,6 +93,8 @@ public final class ScrollCapture {
     /// The read in flight, which `cancel()` ends.
     private var reading: Task<PixelBuffer?, Error>?
     private var running = false
+    /// The longest any step of this capture took to show movement after its wheel event.
+    private var slowestAnswer: Duration?
     /// Called with the session after every change, on the main actor.
     public var onChange: ((ScrollSession) -> Void)?
 
@@ -192,6 +207,26 @@ public final class ScrollCapture {
                         }
                     }
                     onChange?(session)
+                case .checkingEnd(let check):
+                    if scroller.waits {
+                        try? await Task.sleep(for: Self.holdPoll)
+                        continue
+                    }
+                    if let blocker = scroller.blocker {
+                        session.fallBack(blocker)
+                    } else if scroller.scroll(points: check == .up ? -stepPoints : stepPoints) {
+                        latest = try await settledFrame(after: latest)
+                        if tookOver {
+                            tookOver = false
+                            session.takeOver()
+                            session.sampled(latest)
+                        } else {
+                            session.checkedEnd(latest)
+                        }
+                    } else {
+                        session.fallBack(.eventFailed)
+                    }
+                    onChange?(session)
                 case .manual:
                     if let frame = try await read(timeout: Self.sampleTimeout) {
                         session.sampled(frame)
@@ -217,7 +252,7 @@ public final class ScrollCapture {
     }
 
     /// The frame once the page has settled after a step. First the page answers: reads run for
-    /// up to `responseTime` until a frame isn't still against `previous` (a caret's blink is);
+    /// up to `responseWait(after:)` until a frame isn't still against `previous` (a caret's blink is);
     /// none means the page didn't move: the newest frame read, else `previous` again. The first
     /// read is any frame that arrived since the last one read: where a step that moved for
     /// longer than `settleTime` came to rest, so the stitch catches up with it. Then it settles:
@@ -226,7 +261,8 @@ public final class ScrollCapture {
     func settledFrame(after previous: PixelBuffer) async throws -> PixelBuffer {
         let clock = ContinuousClock()
         let ignored = StitchMatcher.ignoredRightColumns(width: previous.width, scale: scale)
-        let answered = clock.now + Self.responseTime
+        let posted = clock.now
+        let answered = posted + Self.responseWait(after: slowestAnswer)
         var newest: PixelBuffer?
         while true {
             guard answered > clock.now,
@@ -234,6 +270,7 @@ public final class ScrollCapture {
             else { return newest ?? previous }
             newest = frame
             if StitchMatcher.match(previous, frame, ignoringRightColumns: ignored) != .still {
+                slowestAnswer = max(slowestAnswer ?? .zero, clock.now - posted)
                 break
             }
         }

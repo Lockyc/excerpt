@@ -136,8 +136,9 @@ holding one.
    the region, and only that far; the HUD (Done, Cancel) sits beside it, never over it, and
    marks the capture's state: a spinner while it runs, a warning when it needs the user, a check
    at the page's end. **Auto-scroll** posts `ScrollSession.stepShare` (60%)
-   of the region's height per step, then waits up to `ScrollCapture.responseTime` for the page to answer
-   (a caret blink isn't an answer) and for the frame to settle (two identical `SCStream` frames,
+   of the region's height per step, then waits for the page to answer (a caret blink isn't an
+   answer): up to `ScrollCapture.responseTime` until a step has answered, then
+   `ScrollCapture.responseWait(after:)` of the slowest answer so far and for the frame to settle (two identical `SCStream` frames,
    or `ScrollCapture.settleTime` (300ms)).
 3. **Stitching** (Core): frames reduce to row signatures; the offset from the previous frame is
    the one with the highest share of matching evidence rows (unique, non-uniform) in the overlap,
@@ -151,9 +152,13 @@ holding one.
    on each side of it moved by an offset of its own (an animation there halts). Columns that didn't move
    with the band take their commonest colour in appended rows, so a panel shows once, from the
    first frame, with the background running on under it.
-4. Stops on two consecutive no-movement steps, on `Return`, or at a maximum height
-   (`Stitcher.defaultMaximumHeight`, 30,000 image pixels; the stitch is truncated contiguously there).
-5. **Manual fallback** when steps produce no movement before the page has moved, Accessibility is
+4. Stops on two consecutive no-movement steps, on a step that moved less than posted followed
+   by one that didn't move (`Return` meanwhile keeps that short step), on `Return`, or at a
+   maximum height (`Stitcher.defaultMaximumHeight`, 30,000 image pixels; the stitch is truncated
+   contiguously there). Two no-movement steps before the page has moved check for its end: a
+   step up, and if the page moves, a step back; back where it started, it was already at its
+   end and the capture is the region as it stands.
+5. **Manual fallback** when neither steps down nor the step up move the page, Accessibility is
    not granted, the pointer left the region, the wheel event failed, or the
    page scrolled a different distance than asked: the HUD reads "Scroll the page yourself · Return when done" and frames
    are sampled and stitched as the user scrolls, skipping any that don't match. The pointer
