@@ -157,6 +157,15 @@ public struct ScrollSession: Sendable {
         }
     }
 
+    /// The user saves (Return, Done). A short step still waiting for the next to confirm the
+    /// page ended joins the stitch: the user, looking at the page, takes it as ended there, and
+    /// reaching for Done holds the confirming step.
+    public mutating func finish() {
+        guard let short = shortStep else { return }
+        shortStep = nil
+        _ = stitcher.add(short)
+    }
+
     /// Auto-scroll can't go on (Accessibility was turned off, the pointer left the region, or
     /// a scroll event couldn't be made): the user scrolls from here. A short step not yet
     /// believed is dropped: the user's frames are matched against the stitch's end.

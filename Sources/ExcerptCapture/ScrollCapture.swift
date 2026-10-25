@@ -110,8 +110,8 @@ public final class ScrollCapture {
 
     /// The first request wins: Return then Esc saves. Finishing lets a read in flight end on
     /// its own, so the frame it brings is stitched; cancelling ends it now. Finishing while a
-    /// short step waits for the next to confirm the page ended saves without that frame: an
-    /// unverified frame is never stitched.
+    /// short step waits for the next to confirm the page ended keeps that frame
+    /// (`ScrollSession.finish()`).
     private func stop(_ next: Request) {
         if request == nil { request = next }
         if request == .cancel { reading?.cancel() }
@@ -154,7 +154,9 @@ public final class ScrollCapture {
         onChange?(session)
         while true {
             switch request {
-            case .finish: return .saved(session.stitcher.image)
+            case .finish:
+                session.finish()
+                return .saved(session.stitcher.image)
             case .cancel: return .cancelled
             case nil: break
             }
@@ -204,7 +206,9 @@ public final class ScrollCapture {
                 // A failed or stopped stream is never "nothing changed": it ends the capture,
                 // keeping the stitch, unless the user already asked to end it.
                 switch request {
-                case .finish: return .saved(session.stitcher.image)
+                case .finish:
+                    session.finish()
+                    return .saved(session.stitcher.image)
                 case .cancel: return .cancelled
                 case nil: return .failed(error, partial: session.stitcher.image)
                 }
