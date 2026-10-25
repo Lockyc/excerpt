@@ -235,6 +235,13 @@ import Testing
         #expect(s.stitcher.image == ScrollFixtures.rows(page, 0..<220))
     }
 
+    @Test func finishingKeepsAShortStepNotYetConfirmed() {
+        var s = session()
+        s.stepped(frame(20), travel: 120)
+        s.finish()
+        #expect(s.stitcher.image == ScrollFixtures.rows(page, 0..<220))
+    }
+
     @Test func aShortStepFollowedByMovementAfterMovingHalts() {
         var s = session()
         s.stepped(frame(120), travel: 120)

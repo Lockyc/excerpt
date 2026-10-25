@@ -172,7 +172,7 @@ holding one.
 
 Known limits: a run of content identical except a narrow patch, flung past in manual mode, can
 stitch at a wrong offset (auto mode checks each step's travel); a final short step that aliases
-can be believed when the page ends next; any animation wider than a quarter of the scrolled
+can be believed when the page ends next or Done comes first; any animation wider than a quarter of the scrolled
 span, or several on the same rows, halts the capture; a sticky header with a changing top edge
 (progress bar, clock) reads as content and halts, as can a sticky footer that unsticks into
 the page's flow; the stream excludes only excerpt's windows, so desktop icons under the region

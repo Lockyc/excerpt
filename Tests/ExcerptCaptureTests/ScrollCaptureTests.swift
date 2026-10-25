@@ -176,6 +176,32 @@ final class AnimatedPage: FrameSource, Scroller {
         #expect(fake.scrolls.count == 9)
     }
 
+    @Test func doneWhileAShortLastStepWaitsToBeConfirmedKeepsIt() async {
+        // The page has 20 rows left below the region; Done lands while the next step checks
+        // that the page ended there.
+        let short = ScrollFixtures.page(width: 90, height: 220)
+        let fake = FakePage(page: short, viewport: 200)
+        let capture = ScrollCapture(source: fake, scroller: fake, stepPoints: 120, scale: 1)
+        fake.afterScroll = { if $0 == 2 { capture.finish() } }
+        #expect(saved(await capture.run()) == short)
+    }
+
+    @Test func doneReachedForAfterAShortLastStepKeepsIt() async {
+        // The page ends 20 rows below the region; the user heads for Done once it stops, so
+        // the pointer rests on the HUD and the confirming step never comes.
+        let short = ScrollFixtures.page(width: 90, height: 220)
+        let fake = FakePage(page: short, viewport: 200)
+        let capture = ScrollCapture(source: fake, scroller: fake, stepPoints: 120, scale: 1)
+        fake.afterScroll = { _ in
+            fake.waits = true
+            Task {
+                try? await Task.sleep(for: .milliseconds(300))
+                capture.finish()
+            }
+        }
+        #expect(saved(await capture.run()) == short)
+    }
+
     @Test func retinaStepsInPointsAndStitchesInPixels() async {
         let fake = FakePage(page: page, viewport: 200, pixelsPerPoint: 2)
         let step = ScrollSession.stepPoints(regionHeightPoints: 100)  // 200px at 2×
