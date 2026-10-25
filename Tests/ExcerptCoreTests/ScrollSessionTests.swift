@@ -10,9 +10,12 @@ import Testing
         ScrollFixtures.frame(page, offset: offset, viewport: 200)
     }
 
-    func session(canAutoScroll: Bool = true, maximumHeight: Int = 30_000) -> ScrollSession {
+    func session(
+        at offset: Int = 0, canAutoScroll: Bool = true, maximumHeight: Int = 30_000
+    ) -> ScrollSession {
         ScrollSession(
-            first: frame(0), scale: 1, canAutoScroll: canAutoScroll, maximumHeight: maximumHeight)
+            first: frame(offset), scale: 1, canAutoScroll: canAutoScroll,
+            maximumHeight: maximumHeight)
     }
 
     @Test func stepsAreSixtyPercentOfTheRegionInPoints() {
@@ -38,17 +41,59 @@ import Testing
         #expect(s.phase == .auto)
     }
 
-    @Test func twoStillStepsBeforeAnyMovementHandScrollingToTheUser() {
+    @Test func twoStillStepsBeforeAnyMovementCheckForTheEnd() {
         var s = session()
         s.stepped(frame(0), travel: 120)
         #expect(s.phase == .auto)
         s.stepped(frame(0), travel: 120)
+        #expect(s.phase == .checkingEnd(.up))
+        #expect(s.hud == .scrolling)
+    }
+
+    @Test func aPageThatScrollsNeitherWayHandsScrollingToTheUser() {
+        var s = session()
+        s.stepped(frame(0), travel: 120)
+        s.stepped(frame(0), travel: 120)
+        s.checkedEnd(frame(0))
         #expect(s.phase == .manual(.noMovement))
         #expect(
             s.hud
                 == ScrollHUDText(
                     title: "Scroll the page yourself · Return when done",
                     detail: "The page didn't scroll on its own", tone: .attention))
+    }
+
+    @Test func aPageAlreadyAtItsEndFinishesOnceItIsBack() {
+        var s = session(at: 800)
+        s.stepped(frame(800), travel: 120)
+        s.stepped(frame(800), travel: 120)
+        s.checkedEnd(frame(680))
+        #expect(s.phase == .checkingEnd(.back))
+        s.checkedEnd(frame(800))
+        #expect(s.phase == .finished)
+        #expect(s.stitcher.image == frame(800))
+        #expect(
+            s.hud == ScrollHUDText(title: "Already at the end of the page", detail: "", tone: .done)
+        )
+    }
+
+    @Test func aPageThatDoesNotComeBackFromTheEndCheckHandsOver() {
+        var s = session(at: 800)
+        s.stepped(frame(800), travel: 120)
+        s.stepped(frame(800), travel: 120)
+        s.checkedEnd(frame(680))
+        s.checkedEnd(frame(760))
+        #expect(s.phase == .manual(.unexpectedTravel))
+        s.sampled(frame(800))
+        #expect(s.stitcher.image == frame(800))
+    }
+
+    @Test func aBlockerDuringTheEndCheckHandsOver() {
+        var s = session(at: 800)
+        s.stepped(frame(800), travel: 120)
+        s.stepped(frame(800), travel: 120)
+        s.fallBack(.pointerMoved)
+        #expect(s.phase == .manual(.pointerMoved))
     }
 
     @Test func withoutAccessibilityTheUserScrollsFromTheStart() {
@@ -222,14 +267,11 @@ import Testing
         #expect(s.stitcher.height == 300)
     }
 
-    @Test func aShortStepIsKeptOnceTheNextShowsThePageEnded() {
+    @Test func aShortStepThenAStillOneIsTheEnd() {
         var s = session()
         s.stepped(frame(20), travel: 120)
         #expect(s.phase == .auto)
         #expect(s.stitcher.height == 200)
-        s.stepped(frame(20), travel: 120)
-        #expect(s.phase == .auto)
-        #expect(s.stitcher.height == 220)
         s.stepped(frame(20), travel: 120)
         #expect(s.phase == .finished)
         #expect(s.stitcher.image == ScrollFixtures.rows(page, 0..<220))

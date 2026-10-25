@@ -2,6 +2,9 @@
 public enum ScrollPhase: Equatable, Sendable {
     /// Excerpt scrolls the page a step at a time.
     case auto
+    /// Steps didn't move the page before it had moved at all: Excerpt steps it up, then back
+    /// down, to tell a page already at its end from one that doesn't scroll.
+    case checkingEnd(EndCheck)
     /// The user scrolls; frames are sampled and stitched as they arrive.
     case manual(ManualReason)
     /// Stopped short of the end; waiting for the user to save (Return) or discard (Esc).
@@ -13,7 +16,7 @@ public enum ScrollPhase: Equatable, Sendable {
 public enum ManualReason: Equatable, Sendable {
     /// Excerpt can't post scroll events without Accessibility access.
     case accessibility
-    /// Auto-scroll steps didn't move the page before it had moved at all.
+    /// Auto-scroll steps didn't move the page before it had moved at all, nor did a step up.
     case noMovement
     /// The pointer left the region (or couldn't be moved there), so a scroll step would land
     /// somewhere else.
@@ -26,6 +29,9 @@ public enum ManualReason: Equatable, Sendable {
     /// The user scrolled the page themselves.
     case userScrolled
 }
+
+/// The step an end check waits on: up, away from the end, or back down to where it started.
+public enum EndCheck: Equatable, Sendable { case up, back }
 
 public enum HaltReason: Equatable, Sendable {
     /// The next frame didn't match.
@@ -78,6 +84,8 @@ public struct ScrollSession: Sendable {
     /// Auto: a frame that moved less than a step, held out of the stitch until the next step
     /// shows whether the page ended.
     private var shortStep: PixelBuffer?
+    /// The end check found the page already at its end when the capture started.
+    private var startedAtEnd = false
 
     /// Starts in `.auto` when Excerpt can scroll the page, `.manual(.accessibility)` when not.
     public init(
@@ -106,10 +114,9 @@ public struct ScrollSession: Sendable {
                 offTravel()
                 return
             }
-            // The page ended after the short step: it joins the stitch, and this frame is a still
-            // step.
+            // The page ended after the short step: it joins the stitch, and the capture is done.
             record(stitcher.add(short))
-            if phase == .auto { record(.noMovement) }
+            if phase == .auto { phase = .finished }
             return
         }
         let expected = Double(travel)
@@ -138,7 +145,7 @@ public struct ScrollSession: Sendable {
         case .noMovement:
             stillSteps += 1
             if stillSteps >= Self.stillStepsToStop {
-                phase = moved ? .finished : .manual(.noMovement)
+                phase = moved ? .finished : .checkingEnd(.up)
             }
         case .uncertain: phase = .halted(.uncertain)
         case .unexpectedTravel: offTravel()
@@ -157,6 +164,33 @@ public struct ScrollSession: Sendable {
         }
     }
 
+    /// End check: the settled frame after the step up (`.up`) or back down (`.back`). A page that
+    /// moved up and came back to where it started was already at its end: the capture is the
+    /// first frame, done. One that didn't move up doesn't scroll on its own, and one that came
+    /// back somewhere else can't be trusted to step; either way the user scrolls from here.
+    public mutating func checkedEnd(_ frame: PixelBuffer) {
+        guard case .checkingEnd(let step) = phase else { return }
+        // Nothing has joined the stitch: it is the first frame, where the page started.
+        let start = stitcher.image
+        let ignored = stitcher.ignoredRightColumns
+        switch step {
+        case .up:
+            // Above the start, `start` is `frame` scrolled down.
+            if case .moved = StitchMatcher.match(frame, start, ignoringRightColumns: ignored) {
+                phase = .checkingEnd(.back)
+            } else {
+                phase = .manual(.noMovement)
+            }
+        case .back:
+            if StitchMatcher.match(start, frame, ignoringRightColumns: ignored) == .still {
+                startedAtEnd = true
+                phase = .finished
+            } else {
+                phase = .manual(.unexpectedTravel)
+            }
+        }
+    }
+
     /// The user saves (Return, Done). A short step still waiting for the next to confirm the
     /// page ended joins the stitch: the user, looking at the page, takes it as ended there, and
     /// reaching for Done holds the confirming step.
@@ -170,7 +204,10 @@ public struct ScrollSession: Sendable {
     /// a scroll event couldn't be made): the user scrolls from here. A short step not yet
     /// believed is dropped: the user's frames are matched against the stitch's end.
     public mutating func fallBack(_ reason: ManualReason) {
-        guard phase == .auto else { return }
+        switch phase {
+        case .auto, .checkingEnd: break
+        default: return
+        }
         phase = .manual(reason)
         shortStep = nil
     }
@@ -180,7 +217,7 @@ public struct ScrollSession: Sendable {
     /// height limit stays stopped.
     public mutating func takeOver() {
         switch phase {
-        case .auto: fallBack(.userScrolled)
+        case .auto, .checkingEnd: fallBack(.userScrolled)
         case .halted(.uncertain):
             phase = .manual(.userScrolled)
             offTrack = true
@@ -194,7 +231,7 @@ public struct ScrollSession: Sendable {
     public var hud: ScrollHUDText {
         let decide = "Return saves what's stitched · Esc discards it"
         switch phase {
-        case .auto:
+        case .auto, .checkingEnd:
             return .scrolling
         case .manual(let reason):
             let detail: String
@@ -229,7 +266,10 @@ public struct ScrollSession: Sendable {
                     "Stopped at the \(LengthText.points(stitcher.maximumHeight, scale: scale)) height limit",
                 detail: decide, tone: .attention)
         case .finished:
-            return ScrollHUDText(title: "Reached the end of the page", detail: "", tone: .done)
+            return ScrollHUDText(
+                title: startedAtEnd
+                    ? "Already at the end of the page" : "Reached the end of the page",
+                detail: "", tone: .done)
         }
     }
 }

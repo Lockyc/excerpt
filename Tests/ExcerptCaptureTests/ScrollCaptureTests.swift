@@ -50,9 +50,11 @@ final class FakePage: FrameSource, Scroller {
         if eventFails { return false }
         scrolls.append(points)
         if moves {
-            offset = min(
-                offset + Int(points) * pixelsPerPoint + extraTravel(scrolls.count),
-                page.height - viewport)
+            offset = max(
+                0,
+                min(
+                    offset + Int(points) * pixelsPerPoint + extraTravel(scrolls.count),
+                    page.height - viewport))
         }
         if let block = blockAfterScrolls, scrolls.count == block.count { blocker = block.reason }
         fresh = 2
@@ -108,7 +110,7 @@ final class AnimatedPage: FrameSource, Scroller {
         scrolls += 1
         if let late { reads.append(late) }
         late = nil
-        let target = min(offset + Int(points), page.height - viewport)
+        let target = max(0, min(offset + Int(points), page.height - viewport))
         if target != offset {
             let mid = offset + (target - offset) * 7 / 10
             reads += [ScrollFixtures.frame(page, offset: mid, viewport: viewport), nil]
@@ -173,7 +175,27 @@ final class AnimatedPage: FrameSource, Scroller {
         let fake = FakePage(page: page, viewport: 200)
         let capture = ScrollCapture(source: fake, scroller: fake, stepPoints: 130, scale: 1)
         #expect(saved(await capture.run()) == page)
-        #expect(fake.scrolls.count == 9)
+        // Six full steps, the short one, and one that shows the page ended there.
+        #expect(fake.scrolls.count == 8)
+    }
+
+    @Test func aPageAlreadyAtItsEndIsCapturedAsItIs() async {
+        let fake = FakePage(page: page, viewport: 200)
+        fake.offset = 800
+        let capture = ScrollCapture(source: fake, scroller: fake, stepPoints: 120, scale: 1)
+        var phases: [ScrollPhase] = []
+        capture.onChange = { phases.append($0.phase) }
+        #expect(saved(await capture.run()) == ScrollFixtures.rows(page, 800..<1000))
+        #expect(fake.scrolls == [120, 120, -120, 120])
+        #expect(fake.offset == 800)
+        #expect(phases.last == .finished)
+    }
+
+    @Test func aStepWaitsLongEnoughForTheSlowestAnswerSoFar() {
+        #expect(ScrollCapture.responseWait(after: nil) == ScrollCapture.responseTime)
+        #expect(ScrollCapture.responseWait(after: .milliseconds(40)) == .milliseconds(500))
+        #expect(ScrollCapture.responseWait(after: .milliseconds(300)) == .milliseconds(900))
+        #expect(ScrollCapture.responseWait(after: .seconds(1)) == ScrollCapture.responseTime)
     }
 
     @Test func doneWhileAShortLastStepWaitsToBeConfirmedKeepsIt() async {
@@ -219,7 +241,7 @@ final class AnimatedPage: FrameSource, Scroller {
         capture.onChange = { phases.append($0.phase) }
         fake.onIdle = { capture.finish() }
         #expect(saved(await capture.run()) == ScrollFixtures.rows(page, 0..<400))
-        #expect(fake.scrolls.count == 2)
+        #expect(fake.scrolls == [120, 120, -120])
         #expect(phases.contains(.manual(.noMovement)))
     }
 
