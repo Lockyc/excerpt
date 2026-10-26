@@ -140,4 +140,37 @@ import Testing
                 for: nil, cursor: CGPoint(x: 950, y: 790), size: size, in: bounds)
                 == CGRect(x: 600, y: 706, width: 400, height: 60))
     }
+
+    /// A Retina display to the right of a 400-point primary: 400 × 300 points, 800 × 600 pixels.
+    private static let rightDisplay: DisplayStill = {
+        let context = CGContext(
+            data: nil, width: 800, height: 600, bitsPerComponent: 8, bytesPerRow: 0,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        return DisplayStill(
+            displayID: 2, frame: CGRect(x: 400, y: 0, width: 400, height: 300), scale: 2,
+            image: context.makeImage()!)
+    }()
+
+    @Test func windowAreaClipsToItsDisplay() {
+        // Hanging off the display's right and top edges.
+        #expect(
+            SelectionMath.windowArea(
+                CGRect(x: 750, y: 250, width: 100, height: 80), in: Self.rightDisplay)
+                == CGRect(x: 700, y: 0, width: 100, height: 100))
+        #expect(
+            SelectionMath.windowArea(
+                CGRect(x: 500, y: 100, width: 100, height: 50), in: Self.rightDisplay)
+                == CGRect(x: 200, y: 300, width: 200, height: 100))
+    }
+
+    @Test func windowAreaOffDisplayIsNil() {
+        #expect(
+            SelectionMath.windowArea(
+                CGRect(x: 0, y: 0, width: 300, height: 200), in: Self.rightDisplay) == nil)
+        // Touching the display's left edge covers none of it.
+        #expect(
+            SelectionMath.windowArea(
+                CGRect(x: 300, y: 0, width: 100, height: 200), in: Self.rightDisplay) == nil)
+    }
 }

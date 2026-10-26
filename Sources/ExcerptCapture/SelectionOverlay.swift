@@ -10,11 +10,15 @@ public enum SelectionMode {
     /// An area that stays on screen, with a bar of `choices` over it, until one is picked. It
     /// opens on `previous`, the area last picked from the bar.
     case modeBar(previous: ScrollRegion?, choices: [ModeChoice])
+    /// The area to record: one that stays on screen until Return, Enter or its Record button
+    /// confirms it. A click with no drag selects the area the window under it covers, `F` the
+    /// whole display under the pointer. It opens on `previous`, the last recorded area.
+    case recordingArea(previous: ScrollRegion?, windows: [CapturableWindow])
 
     /// Modes that drag a rectangle.
     var isArea: Bool {
         switch self {
-        case .area, .scrollingArea, .modeBar: true
+        case .area, .scrollingArea, .modeBar, .recordingArea: true
         case .window: false
         }
     }
@@ -22,8 +26,16 @@ public enum SelectionMode {
     /// Modes whose rectangle stays on screen after the drag, to be moved, resized or replaced.
     var settles: Bool {
         switch self {
-        case .scrollingArea, .modeBar: true
+        case .scrollingArea, .modeBar, .recordingArea: true
         case .area, .window: false
+        }
+    }
+
+    /// The windows a press can pick, highlighted under the pointer.
+    var windows: [CapturableWindow] {
+        switch self {
+        case .window(let windows), .recordingArea(_, let windows): windows
+        case .area, .scrollingArea, .modeBar: []
         }
     }
 }
@@ -64,8 +76,10 @@ public enum SelectionResult {
 /// One borderless window per display showing that display's frozen still. Area mode drags a
 /// rectangle (Space held moves it); scrolling-area mode keeps the rectangle until Return, Enter
 /// or its start button; mode-bar mode keeps it under a bar of capture modes until one is picked;
-/// window mode highlights the window under the cursor. A rectangle kept on screen moves when
-/// dragged from inside and resizes when dragged by an edge or corner. Esc cancels.
+/// window mode highlights the window under the cursor; recording-area mode keeps the rectangle
+/// until Return, Enter or its Record button, and highlights the window a click would select. A
+/// rectangle kept on screen moves when dragged from inside and resizes when dragged by an edge or
+/// corner. Esc cancels.
 ///
 /// `cover` puts the windows up clear before the stills exist, so a press made while they are
 /// taken lands on the overlay instead of the window beneath, where it would activate that app and
@@ -91,7 +105,8 @@ public final class SelectionOverlay {
                 finish: { [weak self] result in self?.finish(result) },
                 beginDrag: { [weak self] origin in
                     self?.clearSelections(except: origin) ?? false
-                })
+                },
+                wholeDisplay: { [weak self] in self?.finishWithDisplayUnderPointer() })
             windows.append(window)
             window.orderFrontRegardless()
         }
@@ -186,6 +201,15 @@ public final class SelectionOverlay {
         return cleared
     }
 
+    /// Finishes with the whole still of the display under the pointer, whichever window has the
+    /// keys.
+    private func finishWithDisplayUnderPointer() {
+        let mouse = NSEvent.mouseLocation
+        let shown = windows.filter(\.isVisible)
+        (shown.first { $0.frame.contains(mouse) } ?? shown.first { $0.isKeyWindow })?
+            .overlayView.finishWithWholeStill()
+    }
+
     private func finish(_ result: SelectionResult) {
         if case .chosen = result { return handOff(result) }
         guard self.result == nil else { return }
@@ -206,10 +230,12 @@ final class OverlayWindow: NSWindow {
     init(
         displayID: CGDirectDisplayID, frame: CGRect,
         finish: @escaping (SelectionResult) -> Void,
-        beginDrag: @escaping (OverlayView) -> Bool
+        beginDrag: @escaping (OverlayView) -> Bool,
+        wholeDisplay: @escaping () -> Void
     ) {
         self.displayID = displayID
-        overlayView = OverlayView(size: frame.size, finish: finish, beginDrag: beginDrag)
+        overlayView = OverlayView(
+            size: frame.size, finish: finish, beginDrag: beginDrag, wholeDisplay: wholeDisplay)
         super.init(contentRect: frame, styleMask: .borderless, backing: .buffered, defer: false)
         level = .screenSaver
         // Clear until the still arrives; set explicitly, so the clear window still takes clicks.
@@ -242,6 +268,9 @@ final class OverlayView: NSView {
     private var image: NSImage?
     private let finish: (SelectionResult) -> Void
     private let beginDrag: (OverlayView) -> Bool
+    /// Recording-area mode's `F`: finishes with the display under the pointer, which need not
+    /// be this one.
+    private let wholeDisplay: () -> Void
     /// A press made while covering, in global points: window mode takes the window under it.
     private var earlyPress: CGPoint?
     /// That press was released while covering too, so area modes end its drag once presented.
@@ -266,15 +295,18 @@ final class OverlayView: NSView {
     private var hoveredChoice: Int?
     static let startTitle = "Start Scrolling Capture  ↩"
     static let startButtonSize = CGSize(width: 220, height: 28)
+    static let recordTitle = "Record  ↩"
+    static let recordButtonSize = CGSize(width: 110, height: 28)
     static let choiceSize = CGSize(width: 96, height: 60)
     static let barInset: CGFloat = 6
 
     init(
         size: CGSize, finish: @escaping (SelectionResult) -> Void,
-        beginDrag: @escaping (OverlayView) -> Bool
+        beginDrag: @escaping (OverlayView) -> Bool, wholeDisplay: @escaping () -> Void
     ) {
         self.finish = finish
         self.beginDrag = beginDrag
+        self.wholeDisplay = wholeDisplay
         super.init(frame: CGRect(origin: .zero, size: size))
         addTrackingArea(
             NSTrackingArea(
@@ -312,10 +344,12 @@ final class OverlayView: NSView {
             endDrag()
         } else if earlyPress == nil {
             switch mode {
-            case .scrollingArea(let previous?), .modeBar(let previous?, _):
+            case .scrollingArea(let previous?), .modeBar(let previous?, _),
+                .recordingArea(let previous?, _):
                 settle(previous, on: still)
             default: break
             }
+            updateHover()
             let mouse = NSEvent.mouseLocation
             if case .modeBar = mode, !settled, still.frame.contains(mouse), let window {
                 idlePoint = convert(window.convertPoint(fromScreen: mouse), from: nil)
@@ -329,11 +363,19 @@ final class OverlayView: NSView {
     /// it.
     private func settle(_ previous: ScrollRegion, on still: DisplayStill) {
         guard previous.displayID == still.displayID else { return }
-        let rect = previous.localPoints.intersection(bounds)
-        guard !rect.isNull, SelectionMath.isCapturable(rect) else { return }
+        settle(previous.localPoints)
+    }
+
+    /// Makes `rect`, clipped to the display, the settled selection; false when too little of it
+    /// is on the display.
+    @discardableResult private func settle(_ rect: CGRect) -> Bool {
+        let rect = rect.intersection(bounds)
+        guard !rect.isNull, SelectionMath.isCapturable(rect) else { return false }
         anchor = rect.origin
         current = CGPoint(x: rect.maxX, y: rect.maxY)
         settled = true
+        needsDisplay = true
+        return true
     }
 
     override var isFlipped: Bool { true }  // top-left, matching the still's pixel rows
@@ -349,9 +391,44 @@ final class OverlayView: NSView {
 
     /// The window under the global cursor; the one lookup behind both the highlight and a click.
     private func updateHover() {
-        guard case .window(let list) = mode else { return }
-        let global = NSEvent.mouseLocation
-        hovered = list.first { $0.frame.contains(global) }
+        hovered = window(at: NSEvent.mouseLocation)
+    }
+
+    /// The mode's window at `global`, an AppKit point.
+    private func window(at global: CGPoint) -> CapturableWindow? {
+        mode?.windows.first { $0.frame.contains(global) }
+    }
+
+    /// The window under the pointer as its rect in this view, while recording-area mode has
+    /// nothing selected; nil otherwise.
+    private var hoveredArea: CGRect? {
+        guard case .recordingArea = mode, anchor == nil, let still, let hovered,
+            let pixels = SelectionMath.windowArea(hovered.frame, in: still)
+        else { return nil }
+        return DisplayGeometry.localPoints(forPixelRect: pixels, scale: still.scale)
+    }
+
+    /// Recording-area mode's click with no drag: the area the window under `press` covers
+    /// becomes the selection, settled. False when there is no window there.
+    private func selectWindow(at press: CGPoint) -> Bool {
+        guard let still,
+            let hit = window(
+                at: DisplayGeometry.appKitRect(
+                    forLocalPoints: CGRect(origin: press, size: .zero), displayFrame: still.frame
+                ).origin),
+            let pixels = SelectionMath.windowArea(hit.frame, in: still)
+        else { return false }
+        return settle(DisplayGeometry.localPoints(forPixelRect: pixels, scale: still.scale))
+    }
+
+    /// Finishes with this display's whole still.
+    func finishWithWholeStill() {
+        guard let still else { return }
+        finish(
+            .area(
+                still,
+                pixelRect: CGRect(x: 0, y: 0, width: still.image.width, height: still.image.height))
+        )
     }
 
     // MARK: Events
@@ -491,7 +568,9 @@ final class OverlayView: NSView {
                 let press = anchor
                 clearSelection()
                 idlePoint = press
-            } else if case .scrollingArea = mode, pressClearedSelection {
+            } else if case .recordingArea = mode, let press = anchor, selectWindow(at: press) {
+                // A click on a window selects the area it covers, settled.
+            } else if pressClearedSelection, mode.settles {
                 clearSelection()  // a click on a settled selection clears it
             } else {
                 finish(.cancelled)  // a click or a sliver with nothing settled
@@ -585,7 +664,7 @@ final class OverlayView: NSView {
         else { return }
         switch mode {
         case .scrollingArea, .modeBar: break
-        case .area, .window: return
+        case .area, .window, .recordingArea: return
         }
         confirm(scrolled: true)
     }
@@ -599,20 +678,32 @@ final class OverlayView: NSView {
         return clipped.isNull || clipped.isEmpty ? bounds : clipped
     }
 
-    /// The start button's frame while a scrolling-area selection waits; nil otherwise.
+    /// The start button's title and size: Start Scrolling Capture, or Record; nil in modes
+    /// without one.
+    private var startButtonStyle: (title: String, size: CGSize)? {
+        switch mode {
+        case .scrollingArea: (Self.startTitle, Self.startButtonSize)
+        case .recordingArea: (Self.recordTitle, Self.recordButtonSize)
+        default: nil
+        }
+    }
+
+    /// The start button's frame while a scrolling-area or recording-area selection waits; nil
+    /// otherwise.
     private var startButton: CGRect? {
-        guard case .scrollingArea = mode, settled, reshaping == nil, let selection else {
+        guard let style = startButtonStyle, settled, reshaping == nil, let selection else {
             return nil
         }
-        return SelectionMath.startButtonFrame(
-            for: selection, size: Self.startButtonSize, in: visibleBounds)
+        return SelectionMath.startButtonFrame(for: selection, size: style.size, in: visibleBounds)
     }
 
     override func keyDown(with event: NSEvent) {
         switch Int(event.keyCode) {
         case 53: finish(.cancelled)  // Esc
         case 49: moving = true  // Space
-        case 36, 76:  // Return, Enter: the mode bar's first area choice, else start scrolling
+        case 3:  // F: the display under the pointer, when recording
+            if case .recordingArea = mode { wholeDisplay() } else { super.keyDown(with: event) }
+        case 36, 76:  // Return, Enter: the mode bar's first area choice, else start
             if let first = choices.first(where: \.usesArea) {
                 choose(first)
             } else if settled {
@@ -636,6 +727,7 @@ final class OverlayView: NSView {
         let highlight: CGRect? = {
             switch mode {
             case .area, .scrollingArea, .modeBar: return selection
+            case .recordingArea: return selection ?? hoveredArea
             case .window:
                 guard let hovered, let window = self.window else { return nil }
                 let local = window.convertFromScreen(hovered.frame)
@@ -661,7 +753,9 @@ final class OverlayView: NSView {
             if settled { drawHandles(on: highlight) }
             if mode.isArea { drawSizeLabel(for: highlight, avoiding: startButton ?? bar) }
         }
-        if let startButton { drawStartButton(in: startButton) }
+        if let startButton, let style = startButtonStyle {
+            drawStartButton(style.title, in: startButton)
+        }
         if let bar { drawBar(in: bar) }
         // While drawing or resizing; not while moving, nor over the bar.
         let shaping = !settled || reshaping?.grip.isEmpty == false
@@ -737,7 +831,7 @@ final class OverlayView: NSView {
             withAttributes: attributes)
     }
 
-    private func drawStartButton(in frame: CGRect) {
+    private func drawStartButton(_ title: String, in frame: CGRect) {
         NSColor.controlAccentColor.setFill()
         NSBezierPath(roundedRect: frame, xRadius: frame.height / 2, yRadius: frame.height / 2)
             .fill()
@@ -745,7 +839,7 @@ final class OverlayView: NSView {
             .font: NSFont.systemFont(ofSize: 13, weight: .semibold),
             .foregroundColor: NSColor.white,
         ]
-        let text = Self.startTitle as NSString
+        let text = title as NSString
         let size = text.size(withAttributes: attributes)
         text.draw(
             at: CGPoint(x: frame.midX - size.width / 2, y: frame.midY - size.height / 2),
