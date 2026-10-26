@@ -109,7 +109,8 @@ holding one.
   already selected, and a bar of the five modes, each showing its hotkey, centred in it (below
   or above a small one; below the pointer while nothing is selected). Area, Scrolling and Text
   run on the selection and are dimmed without one; Window and Fullscreen ignore it and run on
-  the same stills. `Return` runs Area.
+  the same stills. `Return` runs Area; scrolling over the selection starts Scrolling with you
+  scrolling, as in scrolling mode.
 - **Adjusting a selection:** a selection that stays on screen (mode bar, scrolling) moves when
   dragged from inside and resizes from its edges and corners; a drag outside replaces it.
 - **Switching mode:** another mode's hotkey, pressed while a selection is up, switches to that
