@@ -205,7 +205,9 @@ the tightest of the three, so a GIF is fitted to it.
 
 - **Record** (⌘⇧7, or Record on the mode bar) opens the frozen screen. A drag selects an area
   (adjustable as on the mode bar, opening on the last recorded area of this launch); a click
-  with no drag records the window under the pointer, hover-highlighted as in Window mode; `F`
+  with no drag selects the window under the pointer, hover-highlighted as in Window mode, as an
+  area: the screen it covers at that moment, fixed, so its menus, popovers and tooltips are in
+  the clip (and anything passing over it), and it doesn't follow the window if it moves; `F`
   records the display under the pointer. `Return` or the selection's Record button starts. An
   area lies on one display.
 - A **3-2-1 countdown** shows in the area before the first frame, so the clip doesn't open on
@@ -224,7 +226,7 @@ the tightest of the three, so a GIF is fitted to it.
   saves; the bar shows the remaining time over its last 30 s.
 - Excerpt's own windows (outline, control bar, countdown, thumbnails) stay out of every frame
   through the stream's filter, as for scrolling capture, wherever they sit. The cursor is
-  recorded. A window recording follows its window when it moves.
+  recorded.
 
 ### Shortcuts and clicks
 
@@ -240,7 +242,7 @@ during the recording, so the screen stays clean and either can be turned off aft
   app doesn't appear over a clip that never showed it; an area or display recording logs them
   from any app. Rendered as a pill at the bottom centre of the frame, held 1.2 s after
   the press, a repeat of the same combination within that time shown as `→ ×3`.
-- **Clicks:** left and right mouse-downs inside the recorded area or window are logged with
+- **Clicks:** left and right mouse-downs inside the recorded area are logged with
   their position; rendered as a ring that expands and fades over 0.4 s (right clicks in a
   second colour).
 - Without Input Monitoring the recording still runs with clicks only, and the editor's
