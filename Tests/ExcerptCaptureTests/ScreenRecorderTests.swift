@@ -140,6 +140,46 @@ import Testing
         #expect(abs(master.duration - 1) < 0.05)
     }
 
+    @Test func aStillScreenIsStillARecording() async throws {
+        // The stream's first picture is `.started`; a screen that never changes sends only
+        // `.idle` after it.
+        let harness = try Harness()
+        try harness.begin()
+        try await harness.receive(at: 0, status: .started)
+        for index in 1..<10 { try await harness.receive(at: Double(index) / 10, status: .idle) }
+        harness.clock.set(seconds: 2)
+        #expect(abs(harness.recorder.recordedTime - 2) < 0.001)
+        try await harness.recorder.stop(log: Self.log)
+        #expect(abs(try await RecordingMaster.read(harness.master).duration - 2) < 0.05)
+    }
+
+    @Test func aStalledStreamFailsOnce() async throws {
+        let harness = try Harness()
+        var failures: [Error] = []
+        harness.recorder.onFailure = { failures.append($0) }
+        try harness.begin()
+        try await harness.receive(at: 0)
+        try await harness.receive(at: 0.1, status: .suspended)
+        try await harness.receive(at: 0.2, status: .stopped)
+        for _ in 0..<200 where failures.isEmpty { try await Task.sleep(for: .milliseconds(5)) }
+        try await Task.sleep(for: .milliseconds(20))
+        #expect(failures.count == 1)
+        #expect(failures.first as? ScrollCaptureError == .streamStalled)
+        try await harness.recorder.stop(log: Self.log)
+        #expect(FileManager.default.fileExists(atPath: harness.master.path))
+    }
+
+    @Test func aFailureAfterStopIsIgnored() async throws {
+        let harness = try Harness()
+        var failures = 0
+        harness.recorder.onFailure = { _ in failures += 1 }
+        try harness.begin()
+        try await harness.receive(at: 0)
+        try await harness.recorder.stop(log: Self.log)
+        harness.recorder.streamFailed(ScrollCaptureError.streamStalled)
+        #expect(failures == 0)
+    }
+
     @Test func discardLeavesNothing() async throws {
         let harness = try Harness()
         try harness.begin()

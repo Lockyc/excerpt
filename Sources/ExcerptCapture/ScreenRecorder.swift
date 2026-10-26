@@ -10,7 +10,7 @@ import os
 /// each new picture appended to a `MasterWriter` on the stream's queue. Pause and Resume go
 /// straight to the writer, which keeps what is on screen while paused out of the master.
 ///
-/// A stream error reaches `onFailure` once; the caller then `stop`s, so what was recorded is
+/// A stream error or stall reaches `onFailure` once; the caller then `stop`s, so what was recorded is
 /// kept. `onLimit` fires once when the recorded time reaches `maximumDuration`, on the clock
 /// alone, as a still screen sends no frames.
 @MainActor
@@ -51,7 +51,7 @@ public final class ScreenRecorder {
     /// `ScrollCaptureError.displayGone` or `.cannotExcludeExcerpt`, or the writer's, leaving no
     /// file behind.
     public func start(region: ScrollRegion, master: URL, shortcutsLogged: Bool) async throws {
-        precondition(stream == nil, "one recording per recorder")
+        precondition(stream == nil, "one recording at a time")
         let filter = try await StreamFrameSource.ownExcludingFilter(displayID: region.displayID)
         try beginWriting(region: region, master: master, shortcutsLogged: shortcutsLogged)
         let configuration = SCStreamConfiguration()
@@ -81,26 +81,38 @@ public final class ScreenRecorder {
 
     /// Creates the writer and starts watching the limit: everything `start` does but the stream.
     func beginWriting(region: ScrollRegion, master: URL, shortcutsLogged: Bool) throws {
-        precondition(current.withLock { $0 } == nil, "one recording per recorder")
+        precondition(current.withLock { $0 } == nil, "one recording at a time")
         let writer = try writerFactory(
             master, Int(region.pixelRect.width), Int(region.pixelRect.height),
             Double(region.scale), shortcutsLogged)
         current.withLock { $0 = writer }
         limitReached = false
         failed = false
-        limitTimer = Timer.scheduledTimer(withTimeInterval: Self.limitInterval, repeats: true) {
-            [weak self] _ in
+        // Common modes, so the limit still fires while the control bar is being dragged.
+        let timer = Timer(timeInterval: Self.limitInterval, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.checkLimit() }
         }
+        RunLoop.main.add(timer, forMode: .common)
+        limitTimer = timer
     }
 
-    /// Appends a stream sample that carries a new picture; any other status writes nothing.
-    /// Called on the stream's queue.
+    /// Appends a stream sample that carries a new picture; an unchanged screen writes nothing,
+    /// and a stalled stream (the display slept or locked) fails the recording. Called on the
+    /// stream's queue.
     nonisolated func receive(_ sample: CMSampleBuffer) {
-        guard FrameConversion.status(sample) == .complete,
+        guard let status = FrameConversion.status(sample),
             let writer = current.withLock({ $0 })
         else { return }
-        writer.append(sample)
+        switch FrameConversion.content(status) {
+        case .picture:
+            writer.append(sample)
+        case .unchanged:
+            return
+        case .stalled:
+            DispatchQueue.main.async { [weak self] in
+                MainActor.assumeIsolated { self?.streamFailed(ScrollCaptureError.streamStalled) }
+            }
+        }
     }
 
     func checkLimit() {
@@ -111,8 +123,10 @@ public final class ScreenRecorder {
         onLimit?()
     }
 
+    /// Reports a failure once, and only while recording: a stream stopping after Stop or Discard
+    /// is no failure.
     func streamFailed(_ error: Error) {
-        guard !failed else { return }
+        guard !failed, current.withLock({ $0 }) != nil else { return }
         failed = true
         onFailure?(error)
     }
