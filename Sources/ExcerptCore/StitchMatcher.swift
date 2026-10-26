@@ -59,7 +59,8 @@ public enum StitchMatcher {
         else { return .uncertain }
         let height = previous.height
         let width = previous.width - min(max(0, ignored), previous.width - 1)
-        guard let span = changedColumns(previous, next, width: width) else { return .still }
+        guard let changed = changedColumns(previous, next, width: width) else { return .still }
+        let span = withoutScrollThumb(changed, previous, next, widest: ignored)
 
         // In place: the whole width, every row. Unchanged sticky rows and a static page around a
         // small animation all count for it.
@@ -107,6 +108,8 @@ public enum StitchMatcher {
         let runnerUp: Double
         let uniqueA: [Bool]
         let uniqueB: [Bool]
+        /// Scored with an overlay limit: `footer` includes the rows the best offset left out.
+        var overlaid = false
 
         /// The best offset clears the confidence threshold, clearly ahead of the others.
         var convincing: Bool {
@@ -117,9 +120,11 @@ public enum StitchMatcher {
     }
 
     /// `header`, when given, is taken as the sticky rows at the top instead of the rows the two
-    /// frames share there.
+    /// frames share there. With an `overlayLimit`, each offset may leave out up to that many rows
+    /// at its overlap's end (`overlayRows`), and they join the footer.
     static func candidate(
-        _ a: RowSignatures, _ b: RowSignatures, height: Int, header given: Int? = nil
+        _ a: RowSignatures, _ b: RowSignatures, height: Int, header given: Int? = nil,
+        overlayLimit: Int = 0
     ) -> Candidate {
         var header = given ?? 0
         if given == nil {
@@ -135,38 +140,32 @@ public enum StitchMatcher {
         let contentRows = header..<(header + content)
         let uniqueA = uniqueRows(a, in: contentRows)
         let uniqueB = uniqueRows(b, in: contentRows)
-        func scan(overlayLimit: Int) -> Candidate {
-            var best: (offset: Int, score: Double)?
-            var bestOverlay = 0
-            var runnerUp = -1.0
-            if content > 1 {
-                for offset in 1..<content {
-                    let overlay = overlayRows(
-                        a, b, start: header, offset: offset, count: content - offset,
-                        limit: overlayLimit, uniqueA: uniqueA, uniqueB: uniqueB)
-                    guard
-                        let s = score(
-                            a, b, previousStart: header + offset, nextStart: header,
-                            count: content - offset - overlay, previousUnique: uniqueA,
-                            nextUnique: uniqueB)
-                    else { continue }
-                    if let current = best, s <= current.score {
-                        runnerUp = max(runnerUp, s)
-                    } else {
-                        runnerUp = max(runnerUp, best?.score ?? -1)
-                        best = (offset, s)
-                        bestOverlay = overlay
-                    }
+        var best: (offset: Int, score: Double)?
+        var bestOverlay = 0
+        var runnerUp = -1.0
+        if content > 1 {
+            for offset in 1..<content {
+                let overlay = overlayRows(
+                    a, b, start: header, offset: offset, count: content - offset,
+                    limit: overlayLimit, uniqueA: uniqueA, uniqueB: uniqueB)
+                guard
+                    let s = score(
+                        a, b, previousStart: header + offset, nextStart: header,
+                        count: content - offset - overlay, previousUnique: uniqueA,
+                        nextUnique: uniqueB)
+                else { continue }
+                if let current = best, s <= current.score {
+                    runnerUp = max(runnerUp, s)
+                } else {
+                    runnerUp = max(runnerUp, best?.score ?? -1)
+                    best = (offset, s)
+                    bestOverlay = overlay
                 }
             }
-            return Candidate(
-                header: header, footer: footer + bestOverlay, best: best, runnerUp: runnerUp,
-                uniqueA: uniqueA, uniqueB: uniqueB)
         }
-        let plain = scan(overlayLimit: 0)
-        guard !plain.convincing else { return plain }
-        let overlaid = scan(overlayLimit: Int(Double(height) * maximumOverlayShare))
-        return overlaid.convincing ? overlaid : plain
+        return Candidate(
+            header: header, footer: footer + bestOverlay, best: best, runnerUp: runnerUp,
+            uniqueA: uniqueA, uniqueB: uniqueB, overlaid: overlayLimit > 0)
     }
 
     /// The rows at the end of an offset's overlap, above the footer, that it doesn't explain:
@@ -209,8 +208,22 @@ public enum StitchMatcher {
     }
 
     /// `c` as a move over `columns`, when it convinces, if need be `rescored`, and no row
-    /// contradicts it.
+    /// contradicts it; failing that, scored again with something that stays in place over the
+    /// page's bottom (a floating button, a composer, a footer's shadow) left out, since its rows
+    /// lower the score or, spanning the width, contradict the move.
     static func believed(
+        _ c: Candidate, _ previous: PixelBuffer, _ next: PixelBuffer, columns: Range<Int>
+    ) -> FrameMatch? {
+        if let moved = verified(c, previous, next, columns: columns) { return moved }
+        guard !c.overlaid else { return nil }
+        let overlaid = candidate(
+            RowSignatures(previous, columns: columns), RowSignatures(next, columns: columns),
+            height: previous.height, header: c.header,
+            overlayLimit: Int(Double(previous.height) * maximumOverlayShare))
+        return verified(overlaid, previous, next, columns: columns)
+    }
+
+    static func verified(
         _ c: Candidate, _ previous: PixelBuffer, _ next: PixelBuffer, columns: Range<Int>
     ) -> FrameMatch? {
         let c =
@@ -313,6 +326,23 @@ public enum StitchMatcher {
                 height: previous.height
             ).convincing
         }
+    }
+
+    /// `span` without a scroll bar's thumb at its right: a run of changed columns no wider than
+    /// `widest` (the scroll-bar strip), set off from the rest by columns that didn't change. A
+    /// scroll bar inside the region (a panel beside it) moves its thumb with every step, unlike
+    /// the content beside it.
+    static func withoutScrollThumb(
+        _ span: Range<Int>, _ previous: PixelBuffer, _ next: PixelBuffer, widest: Int
+    ) -> Range<Int> {
+        func changed(_ x: Int) -> Bool {
+            !columnMoved(x, previous, next, offset: 0, rows: 0..<previous.height)
+        }
+        var x = span.upperBound - 1
+        while x >= span.lowerBound && span.upperBound - x <= widest + 1 && changed(x) { x -= 1 }
+        guard span.upperBound - 1 - x <= widest else { return span }
+        while x >= span.lowerBound && !changed(x) { x -= 1 }
+        return x >= span.lowerBound ? span.lowerBound..<(x + 1) : span
     }
 
     /// Whether column `x` moved up by `offset` from `previous` to `next`: each of `next`'s
@@ -450,7 +480,7 @@ public enum StitchMatcher {
         return Candidate(
             header: c.header, footer: c.footer,
             best: (best.offset, Double(matches) / Double(evidence)), runnerUp: c.runnerUp,
-            uniqueA: c.uniqueA, uniqueB: c.uniqueB)
+            uniqueA: c.uniqueA, uniqueB: c.uniqueB, overlaid: c.overlaid)
     }
 
     /// Which rows of `rows` have a signature no other row of `rows` shares; rows outside it are
