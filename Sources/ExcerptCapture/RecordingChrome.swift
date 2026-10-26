@@ -22,6 +22,8 @@ public final class RecordingChrome {
         var show: (NSWindow, _ key: Bool) -> Void
         /// Gives focus back to the app being demonstrated.
         var restore: (NSRunningApplication) -> Void
+        /// Asks whether to throw away what has been recorded; true discards.
+        var confirmDiscard: (_ recorded: String) -> Bool
 
         static var screen: Stage {
             Stage(
@@ -29,7 +31,16 @@ public final class RecordingChrome {
                 show: { window, key in
                     key ? window.makeKeyAndOrderFront(nil) : window.orderFrontRegardless()
                 },
-                restore: { app in if app != .current { app.activate() } })
+                restore: { app in if app != .current { app.activate() } },
+                confirmDiscard: { recorded in
+                    let alert = NSAlert()
+                    alert.messageText = "Discard this recording?"
+                    alert.informativeText = "The \(recorded) recorded so far will be lost."
+                    alert.addButton(withTitle: "Discard")
+                    alert.addButton(withTitle: "Keep Recording")
+                    alert.buttons[0].hasDestructiveAction = true
+                    return alert.runModal() == .alertFirstButtonReturn
+                })
         }
     }
 
@@ -44,6 +55,8 @@ public final class RecordingChrome {
     private var countdownPanel: ChromePanel?
     private var closed = false
     private var escaped = false
+    /// Seconds recorded at the last `update`.
+    private var recorded: Double = 0
 
     public convenience init(area: CGRect) {
         self.init(area: area, stage: .screen)
@@ -57,8 +70,7 @@ public final class RecordingChrome {
         buildBar()
         actions.pauseToggled = { [weak self] in self?.togglePause() }
         actions.stopped = { [weak self] in self?.onStop() }
-        actions.discarded = { [weak self] in self?.onDiscard() }
-        bar.onEscape = { [weak self] in self?.onDiscard() }
+        actions.discarded = { [weak self] in self?.discardTapped() }
     }
 
     /// Shows 3, 2, 1 for a second each, centred in the area, and returns true once the last
@@ -114,7 +126,22 @@ public final class RecordingChrome {
 
     /// `remaining` is passed only over the recording's last `remainingShown` seconds.
     public func update(recorded: Double, remaining: Double?) {
+        self.recorded = recorded
         timeLabel.stringValue = Self.timeText(recorded: recorded, remaining: remaining)
+    }
+
+    /// Discard drops a recording at once until a second of it exists, then asks first; it is the
+    /// only way to discard once recording, since `Esc` belongs to the app being demonstrated.
+    static func discardNeedsConfirmation(recorded: Double) -> Bool { recorded >= 1 }
+
+    func discardTapped() {
+        guard !closed else { return }
+        if Self.discardNeedsConfirmation(recorded: recorded),
+            !stage.confirmDiscard(Self.timeText(recorded: recorded, remaining: nil))
+        {
+            return
+        }
+        onDiscard()
     }
 
     public func close() {
@@ -222,7 +249,8 @@ private final class ChromeActions: NSObject {
     @objc func discard() { discarded() }
 }
 
-/// A non-activating borderless HUD panel that can still be key, so Esc reaches `onEscape`.
+/// A non-activating borderless HUD panel that can still be key, so Esc reaches `onEscape` (set
+/// on the countdown only).
 private final class ChromePanel: NSPanel {
     var onEscape: (() -> Void)?
     override var canBecomeKey: Bool { true }

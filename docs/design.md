@@ -223,10 +223,10 @@ the tightest of the three, so a GIF is fitted to it.
   for a display recording at that display's bottom (or on another display when there is one).
   It is draggable. The menu-bar icon becomes a stop button with the timer, as a backup.
 - **Stop:** the Record hotkey again, the bar's Stop, or the menu-bar icon. **Discard:** the
-  bar's Discard, dropping everything recorded. Quitting stops and keeps a recording, and waits
-  for every recording's save. No key is taken system-wide while recording —
-  `Esc` belongs to the app being demonstrated — so `Esc` discards only during the countdown
-  or with the control bar focused.
+  bar's Discard, dropping everything recorded, after asking once a second has been recorded.
+  Quitting stops and keeps a recording, and waits for every recording's save. No key is taken
+  while recording — `Esc` belongs to the app being demonstrated — so `Esc` discards only during
+  the countdown.
 - **Pause** stops frames being written; Resume carries on with no gap in the clip's timeline,
   so what is on screen while paused is never recorded, not even in the master.
 - A recording stops itself at `ScreenRecorder.maximumDuration` (5 minutes of recorded time) and

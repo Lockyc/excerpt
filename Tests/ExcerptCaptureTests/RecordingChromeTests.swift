@@ -19,12 +19,18 @@ import Testing
     var activations = 0
     var shown: [(window: NSWindow, key: Bool)] = []
     var restored: [pid_t] = []
+    var confirmations: [String] = []
+    var confirms = false
 
     var stage: RecordingChrome.Stage {
         RecordingChrome.Stage(
             activate: { self.activations += 1 },
             show: { self.shown.append(($0, $1)) },
-            restore: { self.restored.append($0.processIdentifier) })
+            restore: { self.restored.append($0.processIdentifier) },
+            confirmDiscard: {
+                self.confirmations.append($0)
+                return self.confirms
+            })
     }
 }
 
@@ -64,5 +70,30 @@ extension RecordingChromeTests {
         chrome.close()
         #expect(log.shown.count == 2 && log.shown.allSatisfy { !$0.key })
         #expect(log.activations == 0)
+    }
+
+    @Test func discardDropsAnEmptyRecordingAtOnce() {
+        let log = StageLog()
+        let chrome = RecordingChrome(area: Self.area, stage: log.stage)
+        var discarded = 0
+        chrome.onDiscard = { discarded += 1 }
+        chrome.update(recorded: 0.4, remaining: nil)
+        chrome.discardTapped()
+        #expect(discarded == 1)
+        #expect(log.confirmations.isEmpty)
+    }
+
+    @Test func discardAsksOnceSomethingIsRecorded() {
+        let log = StageLog()
+        let chrome = RecordingChrome(area: Self.area, stage: log.stage)
+        var discarded = 0
+        chrome.onDiscard = { discarded += 1 }
+        chrome.update(recorded: 42.5, remaining: nil)
+        chrome.discardTapped()
+        #expect(discarded == 0)
+        #expect(log.confirmations == ["0:42"])
+        log.confirms = true
+        chrome.discardTapped()
+        #expect(discarded == 1)
     }
 }
