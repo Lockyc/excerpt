@@ -183,7 +183,7 @@ public enum RecordingExporter {
         writer.startSession(atSourceTime: .zero)
         let encode = MP4Encode(
             reader: try await FrameReader(master, range: trim), adaptor: adaptor,
-            times: samples(over: trim, fps: mp4Rate).map(\.time), start: trim.lowerBound
+            times: samples(over: trim, fps: mp4Rate).map(\.time)
         ) { frame, time in
             RecordingRenderer.render(
                 frame, at: time, log: master.log, edits: edits, outputScale: outputScale)
@@ -215,7 +215,6 @@ private final class MP4Encode: @unchecked Sendable {
     private let reader: FrameReader
     private let adaptor: AVAssetWriterInputPixelBufferAdaptor
     private let times: [Double]
-    private let start: Double
     private let render: (CGImage, Double) -> CGImage
     private let queue = DispatchQueue(label: "excerpt.recording.mp4")
     private var index = 0
@@ -223,12 +222,11 @@ private final class MP4Encode: @unchecked Sendable {
 
     init(
         reader: FrameReader, adaptor: AVAssetWriterInputPixelBufferAdaptor, times: [Double],
-        start: Double, render: @escaping (CGImage, Double) -> CGImage
+        render: @escaping (CGImage, Double) -> CGImage
     ) {
         self.reader = reader
         self.adaptor = adaptor
         self.times = times
-        self.start = start
         self.render = render
     }
 

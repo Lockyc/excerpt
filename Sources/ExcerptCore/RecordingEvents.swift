@@ -7,12 +7,6 @@ public enum ClickButton: String, Codable, Sendable {
 public enum RecordingEvent: Codable, Equatable, Sendable {
     case shortcut(time: Double, label: String)
     case click(time: Double, x: Double, y: Double, button: ClickButton)
-
-    var time: Double {
-        switch self {
-        case .shortcut(let time, _), .click(let time, _, _, _): time
-        }
-    }
 }
 
 /// A recording's input log, stored in the master and drawn when the clip is rendered.
