@@ -49,18 +49,23 @@ public final class RecordingChrome {
         panel.contentView?.addSubview(numeral)
         countdownPanel = panel
         // Esc reaches only the key window, and a key window needs the app active.
+        // The app being demonstrated gets focus back afterwards, whatever the outcome.
+        let previous = NSWorkspace.shared.frontmostApplication
         NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
         defer {
             panel.orderOut(nil)
             countdownPanel = nil
+            if let previous, previous != NSRunningApplication.current {
+                previous.activate()
+            }
         }
         for digit in (1...3).reversed() {
             numeral.stringValue = String(digit)
             let end = ContinuousClock.now + .seconds(1)
             while ContinuousClock.now < end {
                 if closed || escaped { return false }
-                try? await Task.sleep(for: .milliseconds(25))
+                do { try await Task.sleep(for: .milliseconds(25)) } catch { return false }
             }
         }
         return !(closed || escaped)
@@ -88,6 +93,10 @@ public final class RecordingChrome {
 
     public func close() {
         closed = true
+        onPause = {}
+        onResume = {}
+        onStop = {}
+        onDiscard = {}
         countdownPanel?.orderOut(nil)
         outline.orderOut(nil)
         bar.orderOut(nil)
@@ -138,7 +147,12 @@ public final class RecordingChrome {
     private func buildBar() {
         timeLabel.font = .monospacedDigitSystemFont(ofSize: 13, weight: .medium)
         timeLabel.translatesAutoresizingMaskIntoConstraints = false
-        timeLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 128).isActive = true
+        // Wide enough for the longest reading, so the bar never resizes or truncates.
+        let widest = Self.timeText(recorded: 299, remaining: 29.5)
+        let width = NSAttributedString(
+            string: widest, attributes: [.font: timeLabel.font as Any]
+        ).size().width
+        timeLabel.widthAnchor.constraint(equalToConstant: ceil(width) + 6).isActive = true
         let pause = FirstMouseButton(
             title: "Pause", target: actions, action: #selector(ChromeActions.togglePause))
         let stop = FirstMouseButton(
@@ -185,7 +199,9 @@ private final class ChromeActions: NSObject {
 private final class ChromePanel: NSPanel {
     var onEscape: (() -> Void)?
     override var canBecomeKey: Bool { true }
-    override func cancelOperation(_ sender: Any?) { onEscape?() }
+    override func keyDown(with event: NSEvent) {
+        if Int(event.keyCode) == 53, isKeyWindow { onEscape?() } else { super.keyDown(with: event) }
+    }
 
     init(frame: CGRect) {
         super.init(

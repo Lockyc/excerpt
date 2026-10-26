@@ -1,3 +1,4 @@
+import CoreGraphics
 import Testing
 
 @testable import ExcerptCapture
@@ -10,5 +11,18 @@ import Testing
 
     @Test func lastThirtySecondsShowTimeLeft() {
         #expect(RecordingChrome.timeText(recorded: 282, remaining: 17.6) == "4:42 · 0:18 left")
+    }
+}
+
+extension RecordingChromeTests {
+    @Test func aCancelledCountdownReturnsFalsePromptly() async {
+        let chrome = RecordingChrome(area: CGRect(x: 100, y: 100, width: 400, height: 300))
+        let task = Task { @MainActor in await chrome.countdown() }
+        task.cancel()
+        let started = ContinuousClock.now
+        let finished = await task.value
+        chrome.close()
+        #expect(!finished)
+        #expect(ContinuousClock.now - started < .seconds(2))
     }
 }
