@@ -215,7 +215,9 @@ the tightest of the three, so a GIF is fitted to it.
   pointer) and the previous region are area recordings. `Return` or the selection's Record button starts. An
   area lies on one display.
 - A **3-2-1 countdown** shows in the area before the first frame, so the clip doesn't open on
-  the reach for the mouse. While recording, the area has a thin outline.
+  the reach for the mouse. It takes focus, so `Esc` reaches it, and hands focus back to the app
+  that was frontmost before Record (a window recording's own app). While recording, the area
+  has a thin outline.
 - **The control bar** — elapsed time, Pause/Resume, Stop, Discard — sits centred just below the
   area, above it when the area meets the screen's bottom, beside it when neither has room, and
   for a display recording at that display's bottom (or on another display when there is one).

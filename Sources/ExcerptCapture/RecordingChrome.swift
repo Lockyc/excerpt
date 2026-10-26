@@ -11,6 +11,26 @@ public final class RecordingChrome {
     public var onStop: () -> Void = {}
     public var onDiscard: () -> Void = {}
 
+    /// How the chrome reaches the screen: putting its windows up and moving app focus.
+    struct Stage {
+        /// Makes Excerpt the active app, so the countdown can be key and hear Esc.
+        var activate: () -> Void
+        /// Puts a window on screen, key or not.
+        var show: (NSWindow, _ key: Bool) -> Void
+        /// Gives focus back to the app being demonstrated.
+        var restore: (NSRunningApplication) -> Void
+
+        static var screen: Stage {
+            Stage(
+                activate: { NSApp.activate(ignoringOtherApps: true) },
+                show: { window, key in
+                    key ? window.makeKeyAndOrderFront(nil) : window.orderFrontRegardless()
+                },
+                restore: { app in if app != .current { app.activate() } })
+        }
+    }
+
+    private let stage: Stage
     private let area: CGRect
     private let outline: NSWindow
     private let bar: ChromePanel
@@ -22,7 +42,12 @@ public final class RecordingChrome {
     private var closed = false
     private var escaped = false
 
-    public init(area: CGRect) {
+    public convenience init(area: CGRect) {
+        self.init(area: area, stage: .screen)
+    }
+
+    init(area: CGRect, stage: Stage) {
+        self.stage = stage
         self.area = area
         outline = Self.makeOutline(area: area)
         bar = ChromePanel(frame: .zero)
@@ -34,8 +59,10 @@ public final class RecordingChrome {
     }
 
     /// Shows 3, 2, 1 for a second each, centred in the area, and returns true once the last
-    /// has gone. Returns false when Esc is pressed or `close()` is called meanwhile.
-    public func countdown() async -> Bool {
+    /// has gone. Returns false when Esc is pressed or `close()` is called meanwhile. Excerpt is
+    /// active meanwhile, so Esc reaches it; `restoring`, the app being demonstrated (read before
+    /// any of Excerpt's windows came up), gets focus back afterwards, whatever the outcome.
+    public func countdown(restoring: NSRunningApplication?) async -> Bool {
         guard !closed else { return false }
         let size: CGFloat = 140
         let panel = ChromePanel(
@@ -49,16 +76,12 @@ public final class RecordingChrome {
         panel.contentView?.addSubview(numeral)
         countdownPanel = panel
         // Esc reaches only the key window, and a key window needs the app active.
-        // The app being demonstrated gets focus back afterwards, whatever the outcome.
-        let previous = NSWorkspace.shared.frontmostApplication
-        NSApp.activate(ignoringOtherApps: true)
-        panel.makeKeyAndOrderFront(nil)
+        stage.activate()
+        stage.show(panel, true)
         defer {
             panel.orderOut(nil)
             countdownPanel = nil
-            if let previous, previous != NSRunningApplication.current {
-                previous.activate()
-            }
+            if let restoring { stage.restore(restoring) }
         }
         for digit in (1...3).reversed() {
             numeral.stringValue = String(digit)
@@ -75,7 +98,7 @@ public final class RecordingChrome {
     public func showRecording() {
         guard !closed else { return }
         countdownPanel?.orderOut(nil)
-        outline.orderFrontRegardless()
+        stage.show(outline, false)
         let screens = NSScreen.screens
         let own = Self.screen(containing: area, in: screens)
         let frame = ControlBarPlacement.frame(
@@ -83,7 +106,7 @@ public final class RecordingChrome {
             screen: (own ?? NSScreen.main)?.visibleFrame ?? area,
             otherScreens: screens.filter { $0 !== own }.map(\.visibleFrame))
         bar.setFrame(frame, display: true)
-        bar.orderFrontRegardless()
+        stage.show(bar, false)
     }
 
     /// `remaining` is passed only over the last 30 s of the recording.

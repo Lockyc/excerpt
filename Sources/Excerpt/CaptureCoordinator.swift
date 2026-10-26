@@ -17,6 +17,8 @@ final class CaptureCoordinator {
     /// The recorded time as the menu bar shows it while recording; nil once it has ended.
     private let onRecordingTime: (String?) -> Void
     private var running = false
+    /// The app that was frontmost as this capture began, before any of Excerpt's windows.
+    private var frontmostAtStart: NSRunningApplication?
     /// The recording in progress.
     private var recording: RecordingSession?
     /// The area last recorded, for the next recording to open on; held for this launch.
@@ -68,6 +70,8 @@ final class CaptureCoordinator {
         }
         running = true
         defer { running = false }
+        // Read before the overlay or an alert activates Excerpt.
+        frontmostAtStart = NSWorkspace.shared.frontmostApplication
         started += 1
         guard ensurePermission() else { return }
         if requested == .scrolling && !scrollingMayStart() { return }
@@ -249,9 +253,11 @@ final class CaptureCoordinator {
             Alerts.libraryUnwritable(store.folder, error)
             return
         }
+        let windowPID = window?.window.owningApplication?.processID
         let session = RecordingSession(
-            region: region, paths: paths,
-            frontmostPID: window?.window.owningApplication?.processID,
+            region: region, paths: paths, frontmostPID: windowPID,
+            demonstrated: windowPID.flatMap(NSRunningApplication.init(processIdentifier:))
+                ?? frontmostAtStart,
             ownHotKeys: HotKeyAction.allCases.compactMap { preferences.binding(for: $0) })
         session.onTick = { [weak self] in
             self?.onRecordingTime(RecordingChrome.timeText(recorded: $0, remaining: nil))
