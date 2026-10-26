@@ -13,12 +13,24 @@ import Testing
         #expect(
             ShortcutFilter.label(keyCode: 0x28, modifiers: [.command, .shift], character: "K")
                 == "⇧⌘K")
-        #expect(ShortcutFilter.label(keyCode: 0x00, modifiers: [.option], character: "A") == "⌥A")
+        #expect(
+            ShortcutFilter.label(keyCode: 0x28, modifiers: [.control, .option], character: "k")
+                == "⌃⌥K")
         #expect(ShortcutFilter.label(keyCode: 0x33, modifiers: [.command], character: nil) == "⌘⌫")
         #expect(
             ShortcutFilter.label(
                 keyCode: 0x00, modifiers: [.command, .control, .option, .shift], character: "a")
                 == "⌃⌥⇧⌘A")
+    }
+
+    /// ⌥ and ⌥⇧ type characters (`@`, `{`, `£`, `–` on common layouts), so they log only a
+    /// named key.
+    @Test func optionAloneIsTypingUnlessTheKeyIsNamed() {
+        #expect(ShortcutFilter.label(keyCode: 0x25, modifiers: [.option], character: "l") == nil)
+        #expect(
+            ShortcutFilter.label(keyCode: 0x13, modifiers: [.option, .shift], character: "2")
+                == nil)
+        #expect(ShortcutFilter.label(keyCode: 0x7B, modifiers: [.option], character: nil) == "⌥←")
     }
 
     @Test func navigationKeysAreLoggedAloneOrShifted() {
