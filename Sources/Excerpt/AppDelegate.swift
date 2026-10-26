@@ -261,23 +261,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Each unsaved editor asks Save / Don't Save / Cancel, once however many captures it holds;
     /// Cancel keeps the app running. A recording editor's Save renders before it answers, so
-    /// with one unsaved the quit waits on them, asked in turn.
+    /// with one unsaved the quit waits on them, asked in turn. Then a recording in progress is
+    /// stopped and kept, and the quit waits for every recording's save.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         var asked = Set<ObjectIdentifier>()
         for editor in editors.values where asked.insert(ObjectIdentifier(editor)).inserted {
             if !editor.confirmClose() { return .terminateCancel }
         }
         let unsaved = recordingEditors.values.filter(\.hasUnsavedChanges)
-        guard !unsaved.isEmpty else { return .terminateNow }
+        guard !unsaved.isEmpty || coordinator.isRecordingOrSaving else { return .terminateNow }
         confirmQuit(unsaved[...])
         return .terminateLater
     }
 
-    /// Asks each recording editor in turn, answering the pending quit once all may close or at
-    /// the first that may not.
+    /// Asks each recording editor in turn, answering the pending quit once all may close and
+    /// the recordings are saved, or at the first that may not.
     private func confirmQuit(_ unsaved: ArraySlice<RecordingEditorWindowController>) {
         guard let editor = unsaved.first else {
-            NSApp.reply(toApplicationShouldTerminate: true)
+            Task { @MainActor in
+                await coordinator.finishRecordings()
+                NSApp.reply(toApplicationShouldTerminate: true)
+            }
             return
         }
         editor.confirmClose { [weak self] closes in

@@ -23,6 +23,8 @@ final class CaptureCoordinator {
     private var recording: RecordingSession?
     /// Stopped recordings still being rendered, saved and delivered.
     private var saves: [UUID: Task<Void, Never>] = [:]
+    /// `finishRecordings` calls waiting for the recording and the saves to end.
+    private var settling: [CheckedContinuation<Void, Never>] = []
     /// The area last recorded, for the next recording to open on; held for this launch.
     private var lastRecordRegion: ScrollRegion?
     /// Whether this launch has asked for Input Monitoring.
@@ -59,6 +61,25 @@ final class CaptureCoordinator {
 
     /// Stops the recording in progress, if any, keeping it.
     func stopRecording() { recording?.stop() }
+
+    /// Whether a recording is in progress or a stopped one is still saving.
+    var isRecordingOrSaving: Bool { recording != nil || !saves.isEmpty }
+
+    /// Stops the recording in progress, keeping it, and returns once it and every other
+    /// stopped recording are saved.
+    func finishRecordings() async {
+        recording?.stop()
+        while isRecordingOrSaving {
+            await withCheckedContinuation { settling.append($0) }
+        }
+    }
+
+    /// Wakes `finishRecordings` to look again.
+    private func settled() {
+        let waiting = settling
+        settling = []
+        for continuation in waiting { continuation.resume() }
+    }
 
     func run(_ requested: HotKeyAction) async {
         // The Record hotkey again is one of the ways to stop.
@@ -265,6 +286,8 @@ final class CaptureCoordinator {
             self?.onRecordingTime(RecordingChrome.timeText(recorded: $0, remaining: nil))
         }
         recording = session
+        // After the outcome is handled, so a save it starts is already in `saves`.
+        defer { settled() }
         let outcome = await session.run()
         recording = nil
         onRecordingTime(nil)
@@ -287,6 +310,7 @@ final class CaptureCoordinator {
                 await deliverRecording(
                     master, paths: paths, stoppedEarly: stoppedEarly, eventsSaved: eventsSaved)
                 saves[id] = nil
+                settled()
             }
         }
     }
