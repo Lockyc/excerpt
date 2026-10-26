@@ -45,6 +45,8 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     private let menu = NSMenu()
     private static let icon = NSImage(
         systemSymbolName: "scissors", accessibilityDescription: "Excerpt")
+    /// The icon's font and image position while the item shows a recording, to restore after.
+    private var iconLook: (font: NSFont?, imagePosition: NSControl.ImagePosition)?
     /// Called when the item is clicked while it shows a recording.
     var onStopRecording: () -> Void = {}
 
@@ -53,7 +55,8 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     func showRecording(_ text: String?) {
         guard let button = item.button else { return }
         if let text {
-            if item.menu != nil {
+            if iconLook == nil {
+                iconLook = (button.font, button.imagePosition)
                 item.menu = nil
                 item.length = NSStatusItem.variableLength
                 button.image = NSImage(
@@ -67,9 +70,12 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             }
             button.title = text
         } else {
+            guard let iconLook else { return }
+            self.iconLook = nil
             button.title = ""
             button.image = Self.icon
-            button.imagePosition = .imageOnly
+            button.font = iconLook.font
+            button.imagePosition = iconLook.imagePosition
             button.action = nil
             button.target = nil
             button.toolTip = nil

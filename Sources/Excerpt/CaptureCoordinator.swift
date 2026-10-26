@@ -71,7 +71,6 @@ final class CaptureCoordinator {
         started += 1
         guard ensurePermission() else { return }
         if requested == .scrolling && !scrollingMayStart() { return }
-        if requested == .record { askForInputMonitoring() }
         // Up before the stills are taken, so a click made meanwhile lands on the overlay.
         let overlay = SelectionOverlay()
         defer { overlay.close() }
@@ -164,12 +163,18 @@ final class CaptureCoordinator {
                 break
             }
         case .record:
+            guard !promptedForInputMonitoring(overlay: overlay) else { return }
             let windows = try await capturer.windowsFrontToBack()
-            if case .area(let still, let rect) = await select(
+            switch await select(
                 .recordingArea(previous: lastRecordRegion, windows: windows), for: action,
                 overlay: overlay, stills: stills)
             {
-                await record(still: still, pixelRect: rect, windows: windows, overlay: overlay)
+            case .area(let still, let rect):
+                await record(still: still, pixelRect: rect, window: nil, overlay: overlay)
+            case .windowArea(let window, let still, let rect):
+                await record(still: still, pixelRect: rect, window: window, overlay: overlay)
+            default:
+                break
             }
         case .selector:
             let choices = HotKeyAction.modes.map { mode in
@@ -218,17 +223,17 @@ final class CaptureCoordinator {
             try await captureScrolling(
                 still: still, pixelRect: rect, start: .auto, overlay: overlay)
         case .record:
-            askForInputMonitoring()
-            await record(still: still, pixelRect: rect, windows: [], overlay: overlay)
+            guard !promptedForInputMonitoring(overlay: overlay) else { return }
+            await record(still: still, pixelRect: rect, window: nil, overlay: overlay)
         case .window, .fullscreen, .selector: break
         }
     }
 
     /// Records the selected area until it is stopped or discarded, then saves, copies and shows
-    /// it. A selection that is exactly the area a window in `windows` covers was a click on
-    /// that window, so only that app's shortcuts are logged.
+    /// it. With `window`, the window clicked to select it, only that app's shortcuts are
+    /// logged; an area or display recording logs them from any app.
     private func record(
-        still: DisplayStill, pixelRect rect: CGRect, windows: [CapturableWindow],
+        still: DisplayStill, pixelRect rect: CGRect, window: CapturableWindow?,
         overlay: SelectionOverlay
     ) async {
         overlay.dismiss()
@@ -244,7 +249,6 @@ final class CaptureCoordinator {
             Alerts.libraryUnwritable(store.folder, error)
             return
         }
-        let window = windows.first { SelectionMath.windowArea($0.frame, in: still) == rect }
         let session = RecordingSession(
             region: region, paths: paths,
             frontmostPID: window?.window.owningApplication?.processID,
@@ -262,7 +266,12 @@ final class CaptureCoordinator {
         case .failed(RecordingError.empty):
             Toast.show("Nothing was recorded")
         case .failed(let error):
-            Alerts.show("Recording failed", Alerts.sentence(error.localizedDescription))
+            // A master that was written but can't be read back is still in the library.
+            let kept =
+                FileManager.default.fileExists(atPath: paths.master.path)
+                ? " The recording is kept as \(paths.master.lastPathComponent)." : ""
+            Alerts.show(
+                "Recording failed", Alerts.sentence(error.localizedDescription) + kept)
         case .saved(let master, let stoppedEarly, let eventsSaved):
             await deliverRecording(
                 master, paths: paths, stoppedEarly: stoppedEarly, eventsSaved: eventsSaved)
@@ -279,40 +288,68 @@ final class CaptureCoordinator {
             duration: master.duration, format: preferences.recordingFormat)
         let saving = Toast.show("Saving the recording…", seconds: nil)
         let exported = await Task.detached(priority: .userInitiated) {
-            try await RecordingMaster.writeEdits(edits, to: master.url)
-            return try await RecordingExporter.export(master, edits: edits, to: paths)
-        }.result
+            () async -> Result<ExportResult, ExportFailure> in
+            do {
+                try await RecordingMaster.writeEdits(edits, to: master.url)
+            } catch {
+                return .failure(ExportFailure(step: "save its edits", error: error))
+            }
+            do {
+                return .success(try await RecordingExporter.export(master, edits: edits, to: paths))
+            } catch {
+                return .failure(ExportFailure(step: "render it", error: error))
+            }
+        }.value
         Toast.dismiss(saving)
         let result: ExportResult
         switch exported {
         case .success(let value): result = value
-        case .failure(let error):
+        case .failure(let failure):
             Alerts.show(
                 "Couldn't save the recording",
                 Alerts.sentence(
-                    "The recording is kept as \(master.url.lastPathComponent), but Excerpt couldn't render it: \(error.localizedDescription)"
+                    "The recording is kept as \(master.url.lastPathComponent), but Excerpt couldn't \(failure.step): \(failure.error.localizedDescription)"
                 ))
             return
         }
+        var copied = true
         do {
             try Pasteboard.copyRecording(at: result.url)
         } catch {
+            copied = false
             Alerts.clipboardFailed(result.url, error)
         }
-        guard let poster = await RecordingPoster.firstFrame(of: result.url) else { return }
-        onRecorded(
-            result.url, poster,
-            RecordingNote.text(
-                fellBackToMP4: result.fellBackToMP4, stoppedEarly: stoppedEarly,
-                eventsSaved: eventsSaved))
+        let note = RecordingNote.text(
+            fellBackToMP4: result.fellBackToMP4, stoppedEarly: stoppedEarly,
+            eventsSaved: eventsSaved)
+        guard let poster = await RecordingPoster.firstFrame(of: result.url) else {
+            // No frame to show: the note still reaches the user.
+            Toast.show(
+                [copied ? "Recording saved and copied" : "Recording saved", note].compactMap { $0 }
+                    .joined(separator: " · "))
+            return
+        }
+        onRecorded(result.url, poster, note)
     }
 
-    /// Asks for Input Monitoring once per launch, so shortcuts can be logged; a recording runs
-    /// without it, logging clicks only.
-    private func askForInputMonitoring() {
-        guard !askedForInputMonitoring, !InputMonitoring.hasPermission() else { return }
+    /// Which step of saving a recording failed, as "Excerpt couldn't …" ends.
+    private struct ExportFailure: Error {
+        let step: String
+        let error: Error
+    }
+
+    /// The one place a recording asks for Input Monitoring, at the start of every path into
+    /// Record (its hotkey, a switch to it, the mode bar's Record). While the user has neither
+    /// granted nor denied it, the first recording of a launch takes the overlay down, shows the
+    /// system's prompt and ends there, so the prompt never lands in a recording; the next
+    /// Record records. Denied, or asked already this launch, a recording logs clicks only.
+    /// True when it prompted, so the run ends.
+    private func promptedForInputMonitoring(overlay: SelectionOverlay) -> Bool {
+        guard !askedForInputMonitoring, InputMonitoring.isUndecided() else { return false }
         askedForInputMonitoring = true
-        _ = InputMonitoring.request()
+        overlay.dismiss()
+        InputMonitoring.request()
+        return true
     }
 
     /// A selection that can't be cut from its still.
