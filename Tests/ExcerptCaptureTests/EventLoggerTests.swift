@@ -71,4 +71,14 @@ import Testing
         #expect(log.scale == 2)
         #expect(log.version == RecordingEventLog.version)
     }
+
+    /// Permission granted, but the key tap can't be made: the log mustn't claim shortcuts.
+    @MainActor @Test func aKeyTapThatFailsToStartLogsClicksOnly() {
+        let logger = EventLogger(
+            region: region, frontmostPID: nil, ownHotKeys: [], clock: { 0 },
+            hasInputMonitoring: true, createKeyTap: { _, _ in nil })
+        logger.start()
+        #expect(!logger.shortcutsLogged)
+        #expect(!logger.stop().shortcutsLogged)
+    }
 }
