@@ -1,4 +1,5 @@
 import AppKit
+import ExcerptCore
 import QuickLookThumbnailing
 import Sparkle
 
@@ -161,10 +162,18 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         return item
     }
 
-    /// Fills in the entry's thumbnail once Quick Look has one; the entry shows an empty box
-    /// of the same size until then.
+    /// Fills in the entry's thumbnail once there is one: a recording's poster frame, as its
+    /// floating thumbnail shows it, else Quick Look's; the entry shows an empty box of the same
+    /// size until then.
     private func loadThumbnail(_ url: URL, into entry: NSMenuItem) {
         let size = Self.thumbnailSize
+        if LibraryNaming.recordingExtensions.contains(url.pathExtension.lowercased()) {
+            Task { @MainActor in
+                guard let poster = await RecordingPoster.firstFrame(of: url) else { return }
+                entry.image = Self.fit(poster, in: size)
+            }
+            return
+        }
         let request = QLThumbnailGenerator.Request(
             fileAt: url, size: size, scale: NSScreen.main?.backingScaleFactor ?? 2,
             representationTypes: .thumbnail)

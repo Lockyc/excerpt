@@ -39,6 +39,9 @@ final class ItemBar: NSVisualEffectView {
     var onClosed: (Bool) -> Void = { _ in }
     var onFill: (Bool) -> Void = { _ in }
     var onMove: (_ earlier: Bool) -> Void = { _ in }
+    var onSpanStart: () -> Void = {}
+    var onSpanEnd: () -> Void = {}
+    var onWholeClip: () -> Void = {}
     var onDelete: () -> Void = {}
 
     private let stack = NSStackView()
@@ -134,6 +137,19 @@ final class ItemBar: NSVisualEffectView {
             button.isEnabled = enabled
             button.toolTip = enabled ? "Move later: one number higher" : "Already the last step"
             return wire(button) { [weak self] _ in self?.onMove(false) }
+        case .spanStart:
+            let button = symbolButton("arrow.right.to.line", label: "Start here")
+            button.toolTip = "Start the blur at the playhead"
+            return wire(button) { [weak self] _ in self?.onSpanStart() }
+        case .spanEnd:
+            let button = symbolButton("arrow.left.to.line", label: "End here")
+            button.toolTip = "End the blur at the playhead"
+            return wire(button) { [weak self] _ in self?.onSpanEnd() }
+        case .wholeClip(let enabled):
+            let button = symbolButton("arrow.left.and.right", label: "Whole clip")
+            button.isEnabled = enabled
+            button.toolTip = enabled ? "Blur over the whole clip" : "Already over the whole clip"
+            return wire(button) { [weak self] _ in self?.onWholeClip() }
         case .delete:
             let button = symbolButton("trash", label: "Delete")
             button.contentTintColor = .systemRed

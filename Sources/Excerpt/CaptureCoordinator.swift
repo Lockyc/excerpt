@@ -278,47 +278,18 @@ final class CaptureCoordinator {
         }
     }
 
-    /// Writes the master's first edit document, renders the primary from it off the main
-    /// thread, copies it and shows its thumbnail, saying when it ended early, fell back to MP4
-    /// or lost its shortcuts and clicks. No shutter: the recording's own end is the cue.
+    /// Saves the master's first edit document with `RecordingSave` and shows the thumbnail,
+    /// saying when it ended early, fell back to MP4 or lost its shortcuts and clicks. No
+    /// shutter: the recording's own end is the cue.
     private func deliverRecording(
         _ master: RecordingMaster, paths: RecordingPaths, stoppedEarly: Error?, eventsSaved: Bool
     ) async {
         let edits = RecordingEdits.fresh(
             duration: master.duration, format: preferences.recordingFormat)
         let saving = Toast.show("Saving the recording…", seconds: nil)
-        let exported = await Task.detached(priority: .userInitiated) {
-            () async -> Result<ExportResult, ExportFailure> in
-            do {
-                try await RecordingMaster.writeEdits(edits, to: master.url)
-            } catch {
-                return .failure(ExportFailure(step: "save its edits", error: error))
-            }
-            do {
-                return .success(try await RecordingExporter.export(master, edits: edits, to: paths))
-            } catch {
-                return .failure(ExportFailure(step: "render it", error: error))
-            }
-        }.value
+        let saved = await RecordingSave.run(master, edits: edits, paths: paths)
         Toast.dismiss(saving)
-        let result: ExportResult
-        switch exported {
-        case .success(let value): result = value
-        case .failure(let failure):
-            Alerts.show(
-                "Couldn't save the recording",
-                Alerts.sentence(
-                    "The recording is kept as \(master.url.lastPathComponent), but Excerpt couldn't \(failure.step): \(failure.error.localizedDescription)"
-                ))
-            return
-        }
-        var copied = true
-        do {
-            try Pasteboard.copyRecording(at: result.url)
-        } catch {
-            copied = false
-            Alerts.clipboardFailed(result.url, error)
-        }
+        guard let (result, copied) = saved else { return }
         let note = RecordingNote.text(
             fellBackToMP4: result.fellBackToMP4, stoppedEarly: stoppedEarly,
             eventsSaved: eventsSaved)
@@ -330,12 +301,6 @@ final class CaptureCoordinator {
             return
         }
         onRecorded(result.url, poster, note)
-    }
-
-    /// Which step of saving a recording failed, as "Excerpt couldn't …" ends.
-    private struct ExportFailure: Error {
-        let step: String
-        let error: Error
     }
 
     /// The one place a recording asks for Input Monitoring, at the start of every path into

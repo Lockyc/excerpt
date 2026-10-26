@@ -3,6 +3,7 @@ import ExcerptCapture
 import ExcerptCore
 import ExcerptEditor
 import ExcerptExport
+import ExcerptRecording
 
 /// An action's hotkey and how its registration stands.
 struct HotKeyState: Equatable {
@@ -93,6 +94,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Open editors by primary, so opening a capture again (or its master) brings its window
     /// forward.
     private var editors: [URL: EditorWindowController] = [:]
+    /// Open recording editors by master.
+    private var recordingEditors: [URL: RecordingEditorWindowController] = [:]
+    /// Masters being read for an editor, so opening one again meanwhile doesn't open a second.
+    private var openingRecordings: Set<URL> = []
     private lazy var coordinator = CaptureCoordinator(
         preferences: preferences,
         onDelivered: { [weak self] url, image in self?.thumbnails.show(url: url, image: image) },
@@ -114,12 +119,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func openEditor(_ url: URL) { openEditors([url]) }
 
     /// Opens the captures in one editor, a series when there are several, in creation order. A
-    /// capture already open (or its master) brings its own window forward and is left out.
+    /// capture already open (or its master) brings its own window forward and is left out. A
+    /// recording (its primary or master) opens in a recording editor of its own.
     func openEditors(_ urls: [URL]) {
         let store = preferences.store
         var captures: [URL: LoadedCapture] = [:]
         var items: [(url: URL, created: Date)] = []
         for url in urls {
+            if let paths = store.recordingPaths(for: url) {
+                openRecordingEditor(paths, opened: url)
+                continue
+            }
             // An open capture focuses its window without decoding.
             let directory = url.deletingLastPathComponent()
             let sibling = LibraryNaming.primaryName(forOriginal: url.lastPathComponent)
@@ -182,6 +192,58 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         editor.show()
     }
 
+    /// Opens the recording at `paths` in its editor, or brings its open editor forward. Its
+    /// Save writes the edits and the primary through `RecordingSave`, the path the save after
+    /// stopping takes, and says when the GIF fell back to MP4.
+    private func openRecordingEditor(_ paths: RecordingPaths, opened url: URL) {
+        let key = paths.master.standardizedFileURL
+        if let open = recordingEditors[key] {
+            open.show()
+            return
+        }
+        guard openingRecordings.insert(key).inserted else { return }
+        let defaultFormat = preferences.recordingFormat
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { openingRecordings.remove(key) }
+            let master: RecordingMaster
+            do {
+                master = try await RecordingMaster.read(paths.master)
+            } catch {
+                Alerts.openFailed(url, error)
+                return
+            }
+            let existing = [RecordingFormat.gif, .mp4].map(paths.primary).first {
+                FileManager.default.fileExists(atPath: $0.path)
+            }
+            let editor = RecordingEditorWindowController(
+                master: master,
+                primary: existing ?? paths.primary(master.edits?.format ?? defaultFormat),
+                defaultFormat: defaultFormat,
+                save: { edits, changed in
+                    if !changed, let existing { return RecordingSave.copy(existing) }
+                    guard
+                        let (result, copied) = await RecordingSave.run(
+                            master, edits: edits, paths: paths)
+                    else { return false }
+                    if let note = RecordingNote.text(
+                        fellBackToMP4: result.fellBackToMP4, stoppedEarly: nil, eventsSaved: true)
+                    {
+                        Toast.show(
+                            [copied ? "Recording saved and copied" : "Recording saved", note]
+                                .joined(separator: " · "))
+                    }
+                    return copied
+                },
+                onClose: { [weak self] in
+                    // The window is still mid-close; release it on the next turn, not under itself.
+                    DispatchQueue.main.async { self?.recordingEditors[key] = nil }
+                })
+            recordingEditors[key] = editor
+            editor.show()
+        }
+    }
+
     /// For Claude from a thumbnail: the primary as `excerpt read` takes it, with its master's
     /// edits while it is exactly the master's render, and as its own pixels once changed since.
     func forClaude(_ url: URL) {
@@ -198,21 +260,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Each unsaved editor asks Save / Don't Save / Cancel, once however many captures it holds;
-    /// Cancel keeps the app running.
+    /// Cancel keeps the app running. A recording editor's Save renders before it answers, so
+    /// with one unsaved the quit waits on them, asked in turn.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         var asked = Set<ObjectIdentifier>()
         for editor in editors.values where asked.insert(ObjectIdentifier(editor)).inserted {
             if !editor.confirmClose() { return .terminateCancel }
         }
-        return .terminateNow
+        let unsaved = recordingEditors.values.filter(\.hasUnsavedChanges)
+        guard !unsaved.isEmpty else { return .terminateNow }
+        confirmQuit(unsaved[...])
+        return .terminateLater
+    }
+
+    /// Asks each recording editor in turn, answering the pending quit once all may close or at
+    /// the first that may not.
+    private func confirmQuit(_ unsaved: ArraySlice<RecordingEditorWindowController>) {
+        guard let editor = unsaved.first else {
+            NSApp.reply(toApplicationShouldTerminate: true)
+            return
+        }
+        editor.confirmClose { [weak self] closes in
+            guard closes else {
+                NSApp.reply(toApplicationShouldTerminate: false)
+                return
+            }
+            self?.confirmQuit(unsaved.dropFirst())
+        }
     }
 
     /// Open Capture…: a panel at the library folder; the PNGs chosen open in the editor, several
-    /// as a series.
+    /// as a series, and each recording chosen in its recording editor.
     func chooseCapture() {
         let panel = NSOpenPanel()
         panel.directoryURL = preferences.libraryFolder
-        panel.allowedContentTypes = [.png]
+        panel.allowedContentTypes = [.png, .gif, .mpeg4Movie]
         panel.allowsMultipleSelection = true
         panel.prompt = "Edit"
         NSApp.activate()

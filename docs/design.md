@@ -287,14 +287,18 @@ recording with its reason**, and Edit All gathers screenshots only.
 
 ### The recording editor
 
-A window of its own (not the image editor), opened from the thumbnail's Edit or Recent
-Captures. It shows the frame at the playhead **rendered through Core's recording renderer**, the
-same one that writes the primary, so the preview is what saves.
+A window of its own (not the image editor), opened from the thumbnail's Edit, Recent Captures,
+Open Capture… or by opening the primary or its master. It shows the frame at the playhead
+**rendered through Core's recording renderer**, the same one that writes the primary, so the
+preview is what saves.
 
-- **Trim:** a timeline under the frame, both ends draggable, with play/pause and scrubbing.
-- **Blur:** draw rectangles over the frame, applied by `BlurRenderer` (same grouping, blocks and
-  salt as a screenshot's), each over the whole clip by default or over a time span set from the
-  timeline. Blurs don't track moving content: what a demo needs hidden usually stays put, and
+- **Trim:** a timeline under the frame, both ends draggable, with play/pause (Space) and
+  scrubbing; the playhead stays inside the trim, which keeps at least
+  `RecordingEditorModel.minimumTrim`.
+- **Blur:** draw rectangles over the frame under `B`, applied by `BlurRenderer` (same grouping,
+  blocks and salt as a screenshot's), each over the whole clip by default or over a time span:
+  the selected blur's bar starts or ends it at the playhead, or puts it back over the whole
+  clip. Blurs don't track moving content: what a demo needs hidden usually stays put, and
   a moving secret is covered by a span-limited blur per position until tracking proves needed.
 - **Shortcuts** and **Clicks** toggles, and the output format (GIF / MP4).
 - `⌘S` renders the primary, rewrites the master's edit document, copies and closes; Discard as
@@ -307,7 +311,7 @@ Render order per frame: blur → clicks → shortcuts → scale to the output si
 ## Editor
 
 Opens from the thumbnail's Edit, from the menu bar's Recent Captures (the library's newest
-`StatusMenu.recentLimit` PNGs by creation date, masters left out, then Open Capture… for any
+`StatusMenu.recentLimit` captures by creation date, masters left out, then Open Capture… for any
 other), or by opening a capture (registered as an Open With handler for PNG, not the default). Fits to width; tall captures scroll. Floats above other windows; no
 Dock icon. Several captures opened together — the thumbnails' Edit All, a multiple choice in Open
 Capture…, several files handed over at once by Finder or another app — open as one **series**.

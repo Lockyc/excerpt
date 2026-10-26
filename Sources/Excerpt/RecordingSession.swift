@@ -174,6 +174,59 @@ enum RecordingNote {
     }
 }
 
+/// Saving a recording's edits, the one path for the save after stopping and the recording
+/// editor's Save.
+@MainActor
+enum RecordingSave {
+    /// Writes `edits` into the master and renders the primary from them off the main thread,
+    /// then copies the primary. Nil, after an alert, when the edits or the primary couldn't be
+    /// written; a failed copy is alerted and reported as `copied` false.
+    static func run(
+        _ master: RecordingMaster, edits: RecordingEdits, paths: RecordingPaths
+    ) async -> (result: ExportResult, copied: Bool)? {
+        let exported = await Task.detached(priority: .userInitiated) {
+            () async -> Result<ExportResult, Failure> in
+            do {
+                try await RecordingMaster.writeEdits(edits, to: master.url)
+            } catch {
+                return .failure(Failure(step: "save its edits", error: error))
+            }
+            do {
+                return .success(try await RecordingExporter.export(master, edits: edits, to: paths))
+            } catch {
+                return .failure(Failure(step: "render it", error: error))
+            }
+        }.value
+        switch exported {
+        case .success(let result): return (result, copy(result.url))
+        case .failure(let failure):
+            Alerts.show(
+                "Couldn't save the recording",
+                Alerts.sentence(
+                    "The recording is kept as \(master.url.lastPathComponent), but Excerpt couldn't \(failure.step): \(failure.error.localizedDescription)"
+                ))
+            return nil
+        }
+    }
+
+    /// Puts the primary at `url` on the clipboard; false, after an alert, when it couldn't.
+    static func copy(_ url: URL) -> Bool {
+        do {
+            try Pasteboard.copyRecording(at: url)
+            return true
+        } catch {
+            Alerts.clipboardFailed(url, error)
+            return false
+        }
+    }
+
+    /// Which step of saving failed, as "Excerpt couldn't …" ends.
+    private struct Failure: Error {
+        let step: String
+        let error: Error
+    }
+}
+
 /// The first frame of a recording's primary, for its thumbnail.
 enum RecordingPoster {
     static func firstFrame(of url: URL) async -> CGImage? {

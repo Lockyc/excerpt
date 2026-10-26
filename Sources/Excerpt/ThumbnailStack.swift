@@ -219,12 +219,7 @@ final class ThumbnailPanel: NSPanel {
 
         let bar = NSStackView(frame: CGRect(x: 8, y: 2, width: width - 16, height: barHeight - 4))
         bar.distribution = .fillProportionally
-        let edit = button("Edit", #selector(editTapped))
-        if isRecording {
-            edit.isEnabled = false
-            edit.toolTip = "Recordings can't be edited yet"
-        }
-        bar.addArrangedSubview(edit)
+        bar.addArrangedSubview(button("Edit", #selector(editTapped)))
         style(editAllButton, #selector(editAllTapped))
         editAllButton.isHidden = true
         bar.addArrangedSubview(editAllButton)

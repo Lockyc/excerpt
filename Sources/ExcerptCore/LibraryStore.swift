@@ -76,8 +76,13 @@ public struct LibraryStore: Sendable {
         return RecordingPaths(base: firstFreeBase(at: date))
     }
 
-    /// The paths of the recording whose primary is `url`; nil unless it is a `.gif` or `.mp4`.
-    public func recordingPaths(forPrimary url: URL) -> RecordingPaths? {
+    /// The paths of the recording whose primary (`.gif` or `.mp4`) or master is `url`; nil for
+    /// any other file.
+    public func recordingPaths(for url: URL) -> RecordingPaths? {
+        if let base = LibraryNaming.recordingBase(forMaster: url.lastPathComponent) {
+            return RecordingPaths(
+                base: url.deletingLastPathComponent().appendingPathComponent(base))
+        }
         guard LibraryNaming.recordingExtensions.contains(url.pathExtension.lowercased()) else {
             return nil
         }
