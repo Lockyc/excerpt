@@ -71,6 +71,37 @@ final class RecordingSession {
         } catch {
             return .failed(error)
         }
+        // Stopped or discarded while the stream started: the chrome stays closed.
+        let log = end == nil ? await recordUntilEnded(logger) : logger.stop()
+
+        var stoppedEarly: Error?
+        switch end {
+        case .discard:
+            await recorder.discard()
+            return .discarded
+        case .stopped(let error): stoppedEarly = error
+        case .stop, nil: break
+        }
+        var eventsSaved = true
+        do {
+            try await recorder.stop(log: log)
+        } catch RecordingError.eventsNotSaved {
+            eventsSaved = false
+        } catch {
+            return .failed(error)
+        }
+        do {
+            let master = try await RecordingMaster.read(paths.master)
+            return .saved(master, stoppedEarly: stoppedEarly, eventsSaved: eventsSaved)
+        } catch {
+            return .failed(error)
+        }
+    }
+
+    /// Shows the outline and control bar and logs events until the first end request, then
+    /// takes the chrome down; returns what was logged.
+    private func recordUntilEnded(_ logger: EventLogger) async -> RecordingEventLog {
+        let recorder = recorder
         recorder.onFailure = { [weak self] in self?.finish(.stopped($0)) }
         recorder.onLimit = { [weak self] in self?.finish(.stop) }
         chrome.onPause = { [weak self] in
@@ -104,29 +135,7 @@ final class RecordingSession {
         chrome.close()
         recorder.onFailure = nil
         recorder.onLimit = nil
-
-        var stoppedEarly: Error?
-        switch end {
-        case .discard:
-            await recorder.discard()
-            return .discarded
-        case .stopped(let error): stoppedEarly = error
-        case .stop, nil: break
-        }
-        var eventsSaved = true
-        do {
-            try await recorder.stop(log: log)
-        } catch RecordingError.eventsNotSaved {
-            eventsSaved = false
-        } catch {
-            return .failed(error)
-        }
-        do {
-            let master = try await RecordingMaster.read(paths.master)
-            return .saved(master, stoppedEarly: stoppedEarly, eventsSaved: eventsSaved)
-        } catch {
-            return .failed(error)
-        }
+        return log
     }
 
     /// Ends the recording and keeps it; in the countdown, cancels it.

@@ -62,6 +62,9 @@ public struct ModeChoice: Sendable {
 
 public enum SelectionResult {
     case area(DisplayStill, pixelRect: CGRect)
+    /// Recording-area mode, confirmed on the area a click on `window` selected, unmoved and
+    /// unresized: a window recording. Any other recording area finishes as `area`.
+    case windowArea(CapturableWindow, DisplayStill, pixelRect: CGRect)
     /// Scrolling-area mode, started by the user scrolling over the selection: they scroll.
     case scrolledArea(DisplayStill, pixelRect: CGRect)
     case window(CapturableWindow)
@@ -280,6 +283,9 @@ final class OverlayView: NSView {
     private var cursor: CGPoint?
     private var moving = false
     private var hovered: CapturableWindow?
+    /// Recording-area mode: the window whose area a click selected, while the selection is
+    /// still exactly that area.
+    private var clickedWindow: CapturableWindow?
     /// A settling mode's drag is over: the selection waits to be used, moved or resized.
     private var settled = false
     /// The press that began the current drag cleared a settled selection, so a click ending it
@@ -424,9 +430,11 @@ final class OverlayView: NSView {
                 at: DisplayGeometry.appKitRect(
                     forLocalPoints: CGRect(origin: press, size: .zero), displayFrame: still.frame
                 ).origin),
-            let pixels = SelectionMath.windowArea(hit.frame, in: still)
+            let pixels = SelectionMath.windowArea(hit.frame, in: still),
+            settle(DisplayGeometry.localPoints(forPixelRect: pixels, scale: still.scale))
         else { return false }
-        return settle(DisplayGeometry.localPoints(forPixelRect: pixels, scale: still.scale))
+        clickedWindow = hit
+        return true
     }
 
     /// Finishes with this display's whole still.
@@ -496,6 +504,7 @@ final class OverlayView: NSView {
             return
         }
         if settled, let selection, let grip = SelectionMath.grip(at: point, on: selection) {
+            clickedWindow = nil  // moved or resized, it is an area
             reshaping = (grip, selection, point)
             if grip.isEmpty { NSCursor.closedHand.set() }
             needsDisplay = true
@@ -504,6 +513,7 @@ final class OverlayView: NSView {
         let clearedOther = beginDrag(self)
         pressClearedSelection = settled || clearedOther
         settled = false
+        clickedWindow = nil
         anchor = point
         current = point
         needsDisplay = true
@@ -521,6 +531,7 @@ final class OverlayView: NSView {
     /// Drops the selection and any settled state; the overlay stays up.
     func clearSelection() {
         settled = false
+        clickedWindow = nil
         reshaping = nil
         anchor = nil
         current = nil
@@ -608,6 +619,9 @@ final class OverlayView: NSView {
     /// Finishes with the selection cropped from the still.
     private func confirm(scrolled: Bool = false) {
         guard let picked = selectedPixels else { return }
+        if let clickedWindow {
+            return finish(.windowArea(clickedWindow, picked.still, pixelRect: picked.rect))
+        }
         finish(
             scrolled
                 ? .scrolledArea(picked.still, pixelRect: picked.rect)
