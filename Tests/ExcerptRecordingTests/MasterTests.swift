@@ -87,6 +87,33 @@ import Testing
         }
     }
 
+    /// What a crash mid-recording leaves: the file as written so far, never finished.
+    @Test func aMasterStillBeingWrittenOpensUpToItsLastFragment() async throws {
+        let url = try SyntheticMaster.folder().appendingPathComponent("unfinished.mov")
+        let clock = TestClock()
+        let writer = try SyntheticMaster.writer(url: url, width: 64, height: 48, clock: clock)
+        let frame = SyntheticMaster.solid(Self.grey, width: 64, height: 48)
+        let past = MasterWriter.fragmentInterval * 2.5
+        for index in 0...Int(past * 2) {
+            let seconds = Double(index) / 2
+            clock.set(seconds: seconds)
+            try await SyntheticMaster.append(frame, at: seconds, to: writer)
+        }
+        // The writer flushes its fragments as it goes; give it a moment to reach the disk.
+        var master: RecordingMaster?
+        for _ in 0..<100 where master == nil {
+            master = try? await RecordingMaster.read(url)
+            if master == nil { try await Task.sleep(for: .milliseconds(20)) }
+        }
+        let read = try #require(master, "an unfinished master opens")
+        #expect(read.duration >= MasterWriter.fragmentInterval)
+        // The log as the master starts with it: events are stored only at `finish`.
+        var header = SyntheticMaster.log
+        header.events = []
+        #expect(read.log == header)
+        writer.cancel()
+    }
+
     @Test func emptyMasterThrowsAndLeavesNoFile() async throws {
         let url = try SyntheticMaster.folder().appendingPathComponent("empty.mov")
         let writer = try SyntheticMaster.writer(url: url, width: 64, height: 48)
