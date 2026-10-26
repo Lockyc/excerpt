@@ -120,6 +120,16 @@ extension SelectionMath {
             ScrollChromeLayout.startButton(size: size, region: flip(selection), visible: bounds))
     }
 
+    /// Whether a press at `point` starts a new selection rather than using the `settled` one: it
+    /// lands off the selection's grips and off its start button. True with nothing settled.
+    public static func pressStartsNewSelection(
+        at point: CGPoint, settled selection: CGRect?, startButton: CGRect?
+    ) -> Bool {
+        if startButton?.contains(point) == true { return false }
+        guard let selection else { return true }
+        return grip(at: point, on: selection) == nil
+    }
+
     /// The part of `still`'s display a window covers, as a pixel rect of the still: its AppKit
     /// `windowFrame` clipped to the display. Nil when it covers none of it.
     public static func windowArea(_ windowFrame: CGRect, in still: DisplayStill) -> CGRect? {

@@ -399,12 +399,20 @@ final class OverlayView: NSView {
         mode?.windows.first { $0.frame.contains(global) }
     }
 
-    /// The window under the pointer as its rect in this view, while recording-area mode has
-    /// nothing selected; nil otherwise.
+    /// The area a click would select in recording-area mode: the window under the pointer as
+    /// its rect in this view, while nothing is selected or while the pointer is where a press
+    /// starts a new selection rather than using the settled one; nil otherwise.
     private var hoveredArea: CGRect? {
-        guard case .recordingArea = mode, anchor == nil, let still, let hovered,
-            let pixels = SelectionMath.windowArea(hovered.frame, in: still)
-        else { return nil }
+        guard case .recordingArea = mode, reshaping == nil, let still, let hovered else {
+            return nil
+        }
+        if anchor != nil {
+            guard settled, let cursor,
+                SelectionMath.pressStartsNewSelection(
+                    at: cursor, settled: selection, startButton: startButton)
+            else { return nil }
+        }
+        guard let pixels = SelectionMath.windowArea(hovered.frame, in: still) else { return nil }
         return DisplayGeometry.localPoints(forPixelRect: pixels, scale: still.scale)
     }
 
@@ -698,11 +706,16 @@ final class OverlayView: NSView {
     }
 
     override func keyDown(with event: NSEvent) {
+        // F, by character so any layout's F: the display under the pointer, when recording.
+        if case .recordingArea = mode,
+            event.modifierFlags.isDisjoint(with: [.command, .control, .option]),
+            event.charactersIgnoringModifiers?.lowercased() == "f"
+        {
+            return wholeDisplay()
+        }
         switch Int(event.keyCode) {
         case 53: finish(.cancelled)  // Esc
         case 49: moving = true  // Space
-        case 3:  // F: the display under the pointer, when recording
-            if case .recordingArea = mode { wholeDisplay() } else { super.keyDown(with: event) }
         case 36, 76:  // Return, Enter: the mode bar's first area choice, else start
             if let first = choices.first(where: \.usesArea) {
                 choose(first)
@@ -753,6 +766,7 @@ final class OverlayView: NSView {
             if settled { drawHandles(on: highlight) }
             if mode.isArea { drawSizeLabel(for: highlight, avoiding: startButton ?? bar) }
         }
+        if selection != nil, let target = hoveredArea { drawWindowTarget(target) }
         if let startButton, let style = startButtonStyle {
             drawStartButton(style.title, in: startButton)
         }
@@ -763,6 +777,16 @@ final class OverlayView: NSView {
             if selection == nil { drawCrosshair(at: cursor) }
             drawLoupe(at: cursor, in: still)
         }
+    }
+
+    /// The window a click would select while another selection is settled: a dashed outline, so
+    /// it doesn't read as the selection.
+    private func drawWindowTarget(_ rect: CGRect) {
+        NSColor.white.withAlphaComponent(0.8).setStroke()
+        let outline = NSBezierPath(rect: rect.insetBy(dx: 1, dy: 1))
+        outline.lineWidth = 2
+        outline.setLineDash([6, 4], count: 2, phase: 0)
+        outline.stroke()
     }
 
     /// Squares at the corners and edge midpoints of a settled selection: what can be dragged.
