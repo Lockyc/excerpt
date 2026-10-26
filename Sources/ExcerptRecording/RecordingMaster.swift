@@ -9,6 +9,8 @@ public enum RecordingError: Error, Equatable, LocalizedError {
     case unreadableMaster(URL)
     /// The master couldn't be written; the reason is the writer's.
     case recordingFailed(String)
+    /// Asked to finish a master already finished or cancelled; the file is left as it is.
+    case alreadyStopped
     /// The master is saved and opens, but without its shortcuts and clicks.
     case eventsNotSaved(String)
     case exportFailed(String)
@@ -18,6 +20,7 @@ public enum RecordingError: Error, Equatable, LocalizedError {
         case .empty: "Nothing was recorded."
         case .unreadableMaster(let url): "\(url.lastPathComponent) isn't a readable recording."
         case .recordingFailed(let reason): "The recording couldn't be saved: \(reason)"
+        case .alreadyStopped: "The recording was already stopped."
         case .eventsNotSaved(let reason):
             "The recording was saved without its shortcuts and clicks: \(reason)"
         case .exportFailed(let reason): reason
