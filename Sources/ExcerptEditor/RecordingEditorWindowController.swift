@@ -1,237 +1,6 @@
-import AVFoundation
 import AppKit
 import ExcerptCore
 import ExcerptRecording
-
-/// The master's frame at a time, rendered with the edits through `RecordingRenderer`, the
-/// renderer that writes the primary. Only the latest request renders: one asked for while
-/// another is rendering replaces any still waiting, so scrubbing and playback never queue.
-@MainActor
-private final class FramePreview {
-    private let generator: AVAssetImageGenerator
-    private let log: RecordingEventLog
-    /// The last time a frame can be read at.
-    private let lastTime: Double
-    /// The last frame decoded, kept so a change of edits re-renders without decoding.
-    private var decoded: (time: Double, image: CGImage)?
-    private var pending: (time: Double, edits: RecordingEdits)?
-    private var busy = false
-    var onFrame: (CGImage) -> Void = { _ in }
-
-    init(master: RecordingMaster) {
-        generator = AVAssetImageGenerator(asset: AVURLAsset(url: master.url))
-        generator.requestedTimeToleranceBefore = .zero
-        generator.requestedTimeToleranceAfter = .zero
-        log = master.log
-        lastTime = max(master.duration - 1.0 / 600, 0)
-    }
-
-    func request(at t: Double, edits: RecordingEdits) {
-        pending = (t, edits)
-        guard !busy else { return }
-        busy = true
-        Task { await drain() }
-    }
-
-    private func drain() async {
-        while let next = pending {
-            pending = nil
-            guard let frame = await frame(at: next.time) else { continue }
-            let log = log
-            let rendered = await Task.detached(priority: .userInitiated) {
-                RecordingRenderer.render(
-                    frame, at: next.time, log: log, edits: next.edits, outputScale: 1)
-            }.value
-            onFrame(rendered)
-        }
-        busy = false
-    }
-
-    private func frame(at t: Double) async -> CGImage? {
-        if let decoded, decoded.time == t { return decoded.image }
-        let time = CMTime(seconds: min(t, lastTime), preferredTimescale: 600)
-        guard let image = try? await generator.image(at: time).image else { return nil }
-        decoded = (t, image)
-        return image
-    }
-}
-
-/// The rendered frame, fitted to the view, with every blur's outline over it: drawn under the
-/// blur tool, selected with a click, the selection's item bar above it.
-@MainActor
-private final class RecordingFrameView: NSView {
-    static let gutter: CGFloat = 12
-
-    let pixelSize: CGSize
-    var image: CGImage? {
-        didSet { needsDisplay = true }
-    }
-    var blurs: [RecordingBlur] = [] {
-        didSet { needsDisplay = true }
-    }
-    var playhead: Double = 0 {
-        didSet { needsDisplay = true }
-    }
-    var selection: Int? {
-        didSet { needsDisplay = true }
-    }
-    var tool: Tool = .select {
-        didSet { window?.invalidateCursorRects(for: self) }
-    }
-    var isEnabled = true
-    let itemBar = ItemBar()
-    /// A blur drawn, in master pixels with a top-left origin.
-    var onDraw: (CGRect) -> Void = { _ in }
-    var onSelect: (Int?) -> Void = { _ in }
-    /// A key the view doesn't handle itself; true when it was used.
-    var onKey: (NSEvent) -> Bool = { _ in false }
-
-    private var drawing: (anchor: CGPoint, current: CGPoint)?
-
-    init(pixelSize: CGSize) {
-        self.pixelSize = pixelSize
-        super.init(frame: .zero)
-        itemBar.isHidden = true
-        addSubview(itemBar)
-    }
-
-    required init?(coder: NSCoder) { fatalError("not used") }
-
-    override var isFlipped: Bool { true }
-    override var acceptsFirstResponder: Bool { true }
-    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-
-    /// Where the frame is drawn: fitted inside the gutter, never past its size in points.
-    var imageRect: CGRect {
-        let area = bounds.insetBy(dx: Self.gutter, dy: Self.gutter)
-        guard pixelSize.width > 0, pixelSize.height > 0, area.width > 0, area.height > 0 else {
-            return .zero
-        }
-        let zoom = min(area.width / pixelSize.width, area.height / pixelSize.height)
-        let size = CGSize(width: pixelSize.width * zoom, height: pixelSize.height * zoom)
-        return CGRect(
-            x: area.midX - size.width / 2, y: area.midY - size.height / 2, width: size.width,
-            height: size.height)
-    }
-
-    private var zoom: CGFloat { imageRect.width / max(pixelSize.width, 1) }
-
-    private func viewRect(_ pixels: CGRect) -> CGRect {
-        let image = imageRect
-        return CGRect(
-            x: image.minX + pixels.minX * zoom, y: image.minY + pixels.minY * zoom,
-            width: pixels.width * zoom, height: pixels.height * zoom)
-    }
-
-    private func pixelRect(_ view: CGRect) -> CGRect {
-        let image = imageRect
-        let zoom = max(zoom, .ulpOfOne)
-        return CGRect(
-            x: (view.minX - image.minX) / zoom, y: (view.minY - image.minY) / zoom,
-            width: view.width / zoom, height: view.height / zoom)
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        NSColor.underPageBackgroundColor.setFill()
-        bounds.fill()
-        guard let image, let context = NSGraphicsContext.current?.cgContext else { return }
-        let rect = imageRect
-        context.saveGState()
-        // The view is flipped; the image is drawn upright.
-        context.translateBy(x: 0, y: rect.maxY + rect.minY)
-        context.scaleBy(x: 1, y: -1)
-        context.interpolationQuality = .high
-        context.draw(image, in: rect)
-        context.restoreGState()
-
-        for (i, blur) in blurs.enumerated() {
-            let shown = blur.span?.contains(playhead) ?? true
-            let path = NSBezierPath(rect: viewRect(blur.rect).insetBy(dx: 0.5, dy: 0.5))
-            path.lineWidth = i == selection ? 2 : 1
-            if !shown { path.setLineDash([4, 3], count: 2, phase: 0) }
-            (i == selection ? NSColor.controlAccentColor : NSColor.white.withAlphaComponent(0.8))
-                .setStroke()
-            path.stroke()
-        }
-        if let drawing {
-            let path = NSBezierPath(rect: Self.rect(drawing.anchor, drawing.current))
-            path.lineWidth = 1
-            NSColor.controlAccentColor.setStroke()
-            path.stroke()
-        }
-    }
-
-    override func layout() {
-        super.layout()
-        placeItemBar()
-    }
-
-    /// Above the selected blur, left-aligned with it; below it when there is no room above;
-    /// kept inside the view. Hidden while a blur is being drawn.
-    func placeItemBar(options: [ItemOption]? = nil) {
-        if let options { itemBar.show(options) }
-        guard let selection, blurs.indices.contains(selection), drawing == nil, options != [] else {
-            itemBar.isHidden = true
-            return
-        }
-        let size = itemBar.frame.size
-        let rect = viewRect(blurs[selection].rect)
-        let gap: CGFloat = 6
-        let above = rect.minY - size.height - gap
-        let y = above >= 4 ? above : min(rect.maxY + gap, bounds.maxY - size.height - 4)
-        let x = min(max(rect.minX, 4), max(4, bounds.maxX - size.width - 4))
-        itemBar.frame = CGRect(origin: CGPoint(x: x, y: max(4, y)), size: size)
-        itemBar.isHidden = false
-    }
-
-    override func resetCursorRects() {
-        addCursorRect(imageRect, cursor: ToolGlyph.cursor(tool))
-    }
-
-    override func mouseDown(with event: NSEvent) {
-        window?.makeFirstResponder(self)
-        guard isEnabled else { return }
-        let point = convert(event.locationInWindow, from: nil)
-        if let hit = blurs.indices.last(where: { viewRect(blurs[$0].rect).contains(point) }) {
-            onSelect(hit)
-        } else if tool == .blur && imageRect.contains(point) {
-            drawing = (point, point)
-            itemBar.isHidden = true
-        } else {
-            onSelect(nil)
-        }
-    }
-
-    override func mouseDragged(with event: NSEvent) {
-        guard drawing != nil else { return }
-        let point = convert(event.locationInWindow, from: nil)
-        let image = imageRect
-        drawing?.current = CGPoint(
-            x: min(max(point.x, image.minX), image.maxX),
-            y: min(max(point.y, image.minY), image.maxY))
-        needsDisplay = true
-    }
-
-    override func mouseUp(with event: NSEvent) {
-        guard let drawing else { return }
-        self.drawing = nil
-        needsDisplay = true
-        let rect = Self.rect(drawing.anchor, drawing.current)
-        if rect.width >= 4 && rect.height >= 4 {
-            onDraw(pixelRect(rect))
-        } else {
-            onSelect(nil)
-        }
-    }
-
-    override func keyDown(with event: NSEvent) {
-        if !onKey(event) { super.keyDown(with: event) }
-    }
-
-    private static func rect(_ a: CGPoint, _ b: CGPoint) -> CGRect {
-        CGRect(x: min(a.x, b.x), y: min(a.y, b.y), width: abs(a.x - b.x), height: abs(a.y - b.y))
-    }
-}
 
 /// The recording editor: the frame at the playhead as the primary renders it, a timeline to
 /// trim and scrub, blurs drawn over the frame, the Shortcuts and Clicks toggles and the output
@@ -266,6 +35,8 @@ public final class RecordingEditorWindowController: NSWindowController, NSWindow
     private var player: Timer?
     private var playedFrom: (time: Double, at: Date)?
     private var saving = false
+    /// The frame at the playhead couldn't be decoded, so none is shown.
+    private var frameUnreadable = false
 
     /// `master` is the recording and `primary` its rendered file, named on the window;
     /// `defaultFormat` is the format of a master that carries no edits yet. `save` writes the
@@ -301,9 +72,20 @@ public final class RecordingEditorWindowController: NSWindowController, NSWindow
                 width: master.pixelSize.width / CGFloat(master.log.scale),
                 height: master.pixelSize.height / CGFloat(master.log.scale)))
         window.center()
-        preview.onFrame = { [weak self] in self?.frameView.image = $0 }
+        preview.onFrame = { [weak self] image in
+            guard let self else { return }
+            frameView.image = image
+            frameUnreadable = image == nil
+            update()
+        }
         update()
         render()
+        let url = master.url
+        Task { [weak self] in
+            let times = try? await Task.detached { try await RecordingMaster.frameTimes(url) }
+                .value
+            self?.model.setFrameTimes(times)
+        }
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
@@ -551,7 +333,10 @@ public final class RecordingEditorWindowController: NSWindowController, NSWindow
         window?.subtitle =
             saving
             ? "Saving…"
-            : "\(Self.seconds(kept)) of \(Self.seconds(model.duration)) kept"
+            : [
+                frameUnreadable ? "This frame couldn't be read" : nil,
+                "\(Self.seconds(kept)) of \(Self.seconds(model.duration)) kept",
+            ].compactMap { $0 }.joined(separator: " · ")
         window?.isDocumentEdited = model.hasUnsavedChanges
     }
 

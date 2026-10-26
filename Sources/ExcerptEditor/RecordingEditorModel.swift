@@ -25,6 +25,14 @@ public struct RecordingEditorModel {
     private var history = UndoStack<RecordingEdits>()
     /// Whether a continuing change joins the last undo step.
     private var stepOpen = false
+    private var frames = Frames.reading
+
+    /// Where the master's frame stamps stand: a span is set from them.
+    private enum Frames {
+        case reading
+        case read([Double])
+        case unreadable
+    }
 
     /// The master's edits, or a fresh document in `defaultFormat` for a master without any.
     public init(master: RecordingMaster, defaultFormat: RecordingFormat = .gif) {
@@ -95,24 +103,52 @@ public struct RecordingEditorModel {
         change { $0.blurs[index].span = kept }
     }
 
-    /// Starts blur `index` at the playhead, keeping its end when that is still after it, else
-    /// ending it with the trim.
-    public mutating func startSpan(ofBlur index: Int) {
-        guard edits.blurs.indices.contains(index) else { return }
-        let end = edits.blurs[index].span?.upperBound
-        setSpan(
-            playhead...(end.flatMap { $0 > playhead ? $0 : nil } ?? edits.trim.upperBound),
-            ofBlur: index)
+    /// The master's frame stamps, once read; nil, after `setFrameTimes(nil)`, when they
+    /// couldn't be.
+    public mutating func setFrameTimes(_ times: [Double]?) {
+        frames = times.map { .read($0.sorted()) } ?? .unreadable
     }
 
-    /// Ends blur `index` at the playhead, keeping its start when that is still before it, else
-    /// starting it with the trim.
+    /// Why a span can't be set at the playhead yet; nil when it can.
+    var spanUnavailableReason: String? {
+        switch frames {
+        case .reading: "Reading the recording's frames…"
+        case .unreadable: "The recording's frames couldn't be read"
+        case .read(let times): times.isEmpty ? "The recording has no frames" : nil
+        }
+    }
+
+    /// Every time at which the exporter renders the frame shown at the playhead: from that
+    /// frame's stamp to the next one's, both less `RecordingExporter.frameTolerance` (the
+    /// start a hair earlier still, so rounding never lets an export sample of the frame fall
+    /// before it), never empty. Nil until the frame stamps are read. A span set at the
+    /// playhead covers all of it, so no sample of the frame it was set on renders unblurred.
+    var shownFrame: ClosedRange<Double>? {
+        guard case .read(let times) = frames, !times.isEmpty else { return nil }
+        let tolerance = RecordingExporter.frameTolerance
+        let k = times.lastIndex { $0 <= playhead + tolerance } ?? 0
+        let start = k == 0 ? 0 : max(0, times[k] - tolerance - 1e-6)
+        let next = k + 1 < times.count ? times[k + 1] - tolerance : duration
+        let end = max(next, min(duration, start + 1 / Double(MasterWriter.frameRate)))
+        return start...max(end, start)
+    }
+
+    /// Starts blur `index` with the frame at the playhead, keeping its end when that is still
+    /// after the playhead, else ending it with the trim; it always covers that frame.
+    public mutating func startSpan(ofBlur index: Int) {
+        guard edits.blurs.indices.contains(index), let frame = shownFrame else { return }
+        let kept = edits.blurs[index].span?.upperBound
+        let end = kept.flatMap { $0 > playhead ? $0 : nil } ?? edits.trim.upperBound
+        setSpan(frame.lowerBound...max(end, frame.upperBound), ofBlur: index)
+    }
+
+    /// Ends blur `index` with the frame at the playhead, keeping its start when that is still
+    /// before the playhead, else starting it with the trim; it always covers that frame.
     public mutating func endSpan(ofBlur index: Int) {
-        guard edits.blurs.indices.contains(index) else { return }
-        let start = edits.blurs[index].span?.lowerBound
-        setSpan(
-            (start.flatMap { $0 < playhead ? $0 : nil } ?? edits.trim.lowerBound)...playhead,
-            ofBlur: index)
+        guard edits.blurs.indices.contains(index), let frame = shownFrame else { return }
+        let kept = edits.blurs[index].span?.lowerBound
+        let start = kept.flatMap { $0 < playhead ? $0 : nil } ?? edits.trim.lowerBound
+        setSpan(min(start, frame.lowerBound)...frame.upperBound, ofBlur: index)
     }
 
     public mutating func removeBlur(_ index: Int) {
@@ -147,9 +183,10 @@ public struct RecordingEditorModel {
     /// and delete.
     var itemOptions: [ItemOption]? {
         guard let selection else { return nil }
+        let reason = spanUnavailableReason
         return [
-            .spanStart, .spanEnd, .wholeClip(enabled: edits.blurs[selection].span != nil),
-            .delete,
+            .spanStart(unavailable: reason), .spanEnd(unavailable: reason),
+            .wholeClip(enabled: edits.blurs[selection].span != nil), .delete,
         ]
     }
 

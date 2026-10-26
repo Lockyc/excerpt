@@ -47,7 +47,7 @@ let package = Package(
         ),
         .testTarget(
             name: "ExcerptEditorTests",
-            dependencies: ["ExcerptEditor", "ExcerptTestSupport"],
+            dependencies: ["ExcerptEditor", "ExcerptRecording", "ExcerptTestSupport"],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .testTarget(

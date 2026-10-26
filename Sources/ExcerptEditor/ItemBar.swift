@@ -137,13 +137,15 @@ final class ItemBar: NSVisualEffectView {
             button.isEnabled = enabled
             button.toolTip = enabled ? "Move later: one number higher" : "Already the last step"
             return wire(button) { [weak self] _ in self?.onMove(false) }
-        case .spanStart:
+        case .spanStart(let reason):
             let button = symbolButton("arrow.right.to.line", label: "Start here")
-            button.toolTip = "Start the blur at the playhead"
+            button.isEnabled = reason == nil
+            button.toolTip = reason ?? "Start the blur at the playhead"
             return wire(button) { [weak self] _ in self?.onSpanStart() }
-        case .spanEnd:
+        case .spanEnd(let reason):
             let button = symbolButton("arrow.left.to.line", label: "End here")
-            button.toolTip = "End the blur at the playhead"
+            button.isEnabled = reason == nil
+            button.toolTip = reason ?? "End the blur at the playhead"
             return wire(button) { [weak self] _ in self?.onSpanEnd() }
         case .wholeClip(let enabled):
             let button = symbolButton("arrow.left.and.right", label: "Whole clip")

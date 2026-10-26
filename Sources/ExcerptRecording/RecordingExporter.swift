@@ -14,6 +14,10 @@ public enum RecordingExporter {
     /// GIF frame rates tried in turn; past the last, the primary is an MP4.
     static let gifRates = [15, 10]
     static let mp4Rate = 30
+    /// A frame stamped this close after a sample time counts as on screen at it, so rounding in
+    /// the two clocks never shows the frame before: frame `k` is rendered at every time from
+    /// its stamp less this up to the next frame's stamp less this.
+    public static let frameTolerance = 0.0005
 
     /// Writes the primary `edits.format` asks for, every frame through `RecordingRenderer`: a
     /// GIF at 1×, at the first of `gifRates` that fits `byteBudget`, else an MP4; or an MP4 at
@@ -258,10 +262,6 @@ final class FrameReader {
     private var upcoming: CMSampleBuffer?
     private var image: CGImage?
 
-    /// A frame stamped this close after a sample time counts as on screen at it, so rounding in
-    /// the two clocks never shows the frame before.
-    private static let tolerance = 0.0005
-
     init(_ master: RecordingMaster, range: ClosedRange<Double>) async throws {
         let asset = AVURLAsset(url: master.url)
         guard let track = try? await asset.loadTracks(withMediaType: .video).first else {
@@ -286,7 +286,8 @@ final class FrameReader {
     /// The latest frame stamped at or before `t`, or the first frame read when none is.
     func frame(at t: Double) throws -> CGImage {
         while let next = upcoming,
-            current == nil || next.presentationTimeStamp.seconds <= t + Self.tolerance
+            current == nil
+                || next.presentationTimeStamp.seconds <= t + RecordingExporter.frameTolerance
         {
             current = next
             image = nil
