@@ -269,12 +269,13 @@ during the recording, so the screen stays clean and either can be turned off aft
   always has a primary.
 - **MP4** (a setting, or chosen in the editor): H.264 at the master's full resolution, for the
   widest playback in GitHub, Slack and Chat.
-- **`GIFEncoder`** (Core, pure): each frame is diffed against the previous output frame and only
+- **`GIFEncoder`** (Core, pure): each frame is diffed against the previous frame — the source,
+  not the quantised output, so an unchanged lossy pixel isn't re-stored every frame — and only
   the changed rectangle is stored, its unchanged pixels transparent; a frame with no change
   extends the previous frame's delay. Each stored rectangle gets its own palette (up to 255
   colours plus transparency, no dithering — screen content is flat colour, and dithering
   defeats both the diff and LZW). Loops forever. Tested by decoding through ImageIO against the
-  rendered frames within the quantiser's error, and by golden files.
+  rendered frames within the quantiser's error.
 
 ### After stopping
 
