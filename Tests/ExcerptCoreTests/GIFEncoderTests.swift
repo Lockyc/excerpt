@@ -109,6 +109,32 @@ import Testing
         #expect(worst <= 16)
     }
 
+    @Test func lossyFramesCompositeWithinQuantiserErrorAndRepeatsMerge() throws {
+        let gradient = ScrollFixtures.paint(width: 128, height: 128) { x, y in
+            RGBA(r: UInt8(x * 2), g: UInt8(y * 2), b: UInt8(255 - x), a: 255)
+        }
+        var changed = gradient
+        for y in 40..<90 {
+            for x in 30..<100 {
+                let i = (y * 128 + x) * 4
+                changed.bytes.replaceSubrange(
+                    i..<i + 4, with: [UInt8(255 - y * 2), UInt8(x * 2), UInt8(y), 255])
+            }
+        }
+        let inputs = [gradient, changed, changed]
+        let source = try Self.source(Self.encode(inputs.map { ($0, 10) }))
+        #expect(CGImageSourceGetCount(source) == 2)
+        #expect(try Self.delay(source, 1) == 20)
+        for index in 0..<2 {
+            let decoded = try Self.frame(source, index)
+            var worst = 0
+            for (a, b) in zip(decoded.bytes, inputs[index].bytes) {
+                worst = max(worst, abs(Int(a) - Int(b)))
+            }
+            #expect(worst <= 16)
+        }
+    }
+
     @Test func loopsForever() throws {
         let source = try Self.source(
             Self.encode([(Self.blocks(width: 8, height: 8, phase: 0), 10)]))
