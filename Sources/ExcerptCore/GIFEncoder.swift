@@ -8,6 +8,8 @@ import Foundation
 public struct GIFEncoder {
     /// GitHub's upload limit for an image: the size a GIF must fit.
     public static let byteBudget = 10_000_000
+    /// `byteBudget` as the user reads it: "10 MB".
+    public static let byteBudgetText = "\(byteBudget / 1_000_000) MB"
 
     public let width: Int
     public let height: Int

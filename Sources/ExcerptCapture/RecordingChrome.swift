@@ -11,6 +11,9 @@ public final class RecordingChrome {
     public var onStop: () -> Void = {}
     public var onDiscard: () -> Void = {}
 
+    /// Seconds before `ScreenRecorder.maximumDuration` from which the bar shows the time left.
+    public static let remainingShown: Double = 30
+
     /// How the chrome reaches the screen: putting its windows up and moving app focus.
     struct Stage {
         /// Makes Excerpt the active app, so the countdown can be key and hear Esc.
@@ -109,7 +112,7 @@ public final class RecordingChrome {
         stage.show(bar, false)
     }
 
-    /// `remaining` is passed only over the last 30 s of the recording.
+    /// `remaining` is passed only over the recording's last `remainingShown` seconds.
     public func update(recorded: Double, remaining: Double?) {
         timeLabel.stringValue = Self.timeText(recorded: recorded, remaining: remaining)
     }
@@ -171,7 +174,8 @@ public final class RecordingChrome {
         timeLabel.font = .monospacedDigitSystemFont(ofSize: 13, weight: .medium)
         timeLabel.translatesAutoresizingMaskIntoConstraints = false
         // Wide enough for the longest reading, so the bar never resizes or truncates.
-        let widest = Self.timeText(recorded: 299, remaining: 29.5)
+        let widest = Self.timeText(
+            recorded: ScreenRecorder.maximumDuration - 1, remaining: Self.remainingShown)
         let width = NSAttributedString(
             string: widest, attributes: [.font: timeLabel.font as Any]
         ).size().width

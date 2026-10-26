@@ -279,7 +279,7 @@ struct SettingsView: View {
                 }
                 Text(
                     model.recordingFormat == .gif
-                        ? "A recording too long for a \(RecordingNote.gifLimit) GIF is saved as MP4."
+                        ? "A recording too long for a \(GIFEncoder.byteBudgetText) GIF is saved as MP4."
                         : "MP4 keeps the recording's full resolution."
                 )
                 .font(.caption).foregroundStyle(.secondary)

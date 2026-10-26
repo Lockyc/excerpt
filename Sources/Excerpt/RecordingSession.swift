@@ -156,22 +156,19 @@ final class RecordingSession {
     private func tick() {
         let recorded = recorder.recordedTime
         let remaining = ScreenRecorder.maximumDuration - recorded
-        chrome.update(recorded: recorded, remaining: remaining <= 30 ? remaining : nil)
+        chrome.update(recorded: recorded, remaining: remaining <= RecordingChrome.remainingShown ? remaining : nil)
         onTick(recorded)
     }
 }
 
 /// What a recording's thumbnail says under it.
 enum RecordingNote {
-    /// GitHub's upload limit a GIF is fitted to, as the user reads it.
-    static let gifLimit = "\(GIFEncoder.byteBudget / 1_000_000) MB"
-
     static func text(fellBackToMP4: Bool, stoppedEarly: Error?, eventsSaved: Bool) -> String? {
         var notes: [String] = []
         if let stoppedEarly {
             notes.append("Stopped early: \(stoppedEarly.localizedDescription)")
         }
-        if fellBackToMP4 { notes.append("Too long for a \(gifLimit) GIF — saved as MP4") }
+        if fellBackToMP4 { notes.append("Too long for a \(GIFEncoder.byteBudgetText) GIF — saved as MP4") }
         if !eventsSaved { notes.append("Shortcuts and clicks couldn't be saved") }
         return notes.isEmpty ? nil : notes.joined(separator: " · ")
     }
