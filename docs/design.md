@@ -287,8 +287,8 @@ recording with its reason**, and Edit All gathers screenshots only.
 
 ### The recording editor
 
-A window of its own (not the image editor), opened from the thumbnail's Edit, Recent Captures,
-Open Capture… or by opening the primary or its master. It shows the frame at the playhead
+A window of its own (not the image editor), opened from the thumbnail's Edit, Recent Captures
+or Open Capture… (a GIF or MP4). It shows the frame at the playhead
 **rendered through Core's recording renderer**, the same one that writes the primary, so the
 preview is what saves.
 
@@ -297,8 +297,9 @@ preview is what saves.
   `RecordingEditorModel.minimumTrim`.
 - **Blur:** draw rectangles over the frame under `B`, applied by `BlurRenderer` (same grouping,
   blocks and salt as a screenshot's), each over the whole clip by default or over a time span:
-  the selected blur's bar starts or ends it at the playhead, or puts it back over the whole
-  clip. Blurs don't track moving content: what a demo needs hidden usually stays put, and
+  the selected blur's bar starts or ends it with the frame at the playhead, widened to every
+  time that frame is exported at (`RecordingEditorModel.shownFrame`), or puts it back over the
+  whole clip. Blurs don't track moving content: what a demo needs hidden usually stays put, and
   a moving secret is covered by a span-limited blur per position until tracking proves needed.
 - **Shortcuts** and **Clicks** toggles, and the output format (GIF / MP4).
 - `⌘S` renders the primary, rewrites the master's edit document, copies and closes; Discard as

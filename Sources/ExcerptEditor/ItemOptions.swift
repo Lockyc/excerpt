@@ -12,9 +12,10 @@ enum ItemOption: Equatable {
     case fill(Bool, enabled: Bool)
     case moveEarlier(enabled: Bool)
     case moveLater(enabled: Bool)
-    /// A recording blur's span starting, or ending, at the playhead.
-    case spanStart
-    case spanEnd
+    /// A recording blur's span starting, or ending, with the frame at the playhead; disabled
+    /// with the reason while that can't be set.
+    case spanStart(unavailable: String?)
+    case spanEnd(unavailable: String?)
     /// A recording blur back over the whole clip; disabled when it already is.
     case wholeClip(enabled: Bool)
     case delete

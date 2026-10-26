@@ -178,24 +178,28 @@ enum RecordingNote {
 /// editor's Save.
 @MainActor
 enum RecordingSave {
-    /// Writes `edits` into the master and renders the primary from them off the main thread,
-    /// then copies the primary. Nil, after an alert, when the edits or the primary couldn't be
+    /// Renders the primary from `edits` off the main thread, then writes them into the master,
+    /// then copies the primary. The primary is replaced whole and before the master's edits, so
+    /// it never lags them: a primary the master's edits would render differently is never left
+    /// to be copied as theirs. Nil, after an alert, when the primary or the edits couldn't be
     /// written; a failed copy is alerted and reported as `copied` false.
     static func run(
         _ master: RecordingMaster, edits: RecordingEdits, paths: RecordingPaths
     ) async -> (result: ExportResult, copied: Bool)? {
         let exported = await Task.detached(priority: .userInitiated) {
             () async -> Result<ExportResult, Failure> in
+            let result: ExportResult
+            do {
+                result = try await RecordingExporter.export(master, edits: edits, to: paths)
+            } catch {
+                return .failure(Failure(step: "render it", error: error))
+            }
             do {
                 try await RecordingMaster.writeEdits(edits, to: master.url)
             } catch {
                 return .failure(Failure(step: "save its edits", error: error))
             }
-            do {
-                return .success(try await RecordingExporter.export(master, edits: edits, to: paths))
-            } catch {
-                return .failure(Failure(step: "render it", error: error))
-            }
+            return .success(result)
         }.value
         switch exported {
         case .success(let result): return (result, copy(result.url))

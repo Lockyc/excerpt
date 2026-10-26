@@ -70,6 +70,28 @@ public struct RecordingMaster: Sendable {
             url: url, pixelSize: size, duration: duration.seconds, log: log, edits: edits)
     }
 
+    /// The stamp of every frame in the master, in seconds and in order, read without decoding.
+    /// A still screen sends no frames, so the gaps between them vary.
+    public static func frameTimes(_ url: URL) async throws -> [Double] {
+        let asset = AVURLAsset(url: url)
+        guard let track = try await asset.loadTracks(withMediaType: .video).first else {
+            throw RecordingError.unreadableMaster(url)
+        }
+        let reader = try AVAssetReader(asset: asset)
+        let output = AVAssetReaderTrackOutput(track: track, outputSettings: nil)
+        output.alwaysCopiesSampleData = false
+        reader.add(output)
+        guard reader.startReading() else { throw RecordingError.unreadableMaster(url) }
+        var times: [Double] = []
+        while let sample = output.copyNextSampleBuffer() {
+            if CMSampleBufferGetNumSamples(sample) > 0 {
+                times.append(sample.presentationTimeStamp.seconds)
+            }
+        }
+        guard reader.status == .completed else { throw RecordingError.unreadableMaster(url) }
+        return times.sorted()
+    }
+
     /// Replaces the master's edit document, keeping its frames and log.
     public static func writeEdits(_ edits: RecordingEdits, to url: URL) async throws {
         let master = try await read(url)

@@ -32,6 +32,14 @@ import Testing
         #expect(leftovers == [master.url.lastPathComponent])
     }
 
+    @Test func frameTimesAreEveryFrameStampInOrder() async throws {
+        let frames = (0..<6).map { SyntheticMaster.moving(width: 64, height: 48, phase: $0) }
+        let (master, _) = try await SyntheticMaster.master(frames, fps: 5)
+        let times = try await RecordingMaster.frameTimes(master.url)
+        #expect(times.count == 6)
+        for (i, time) in times.enumerated() { #expect(abs(time - Double(i) / 5) < 0.002) }
+    }
+
     @Test func pausedSamplesAreDroppedAndRetimed() async throws {
         let url = try SyntheticMaster.folder().appendingPathComponent("paused.mov")
         let clock = TestClock()
