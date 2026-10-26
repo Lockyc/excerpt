@@ -24,6 +24,8 @@ final class CaptureCoordinator {
     private var lastScrollRegion: ScrollRegion?
     /// The area last picked from the mode bar, for the next to open on; held for this launch.
     private var lastModeBarRegion: ScrollRegion?
+    /// Counts captures started; a text read copies only while no capture has started since it.
+    private var started = 0
     static let shutter = NSSound(
         contentsOfFile:
             "/System/Library/Components/CoreAudio.component/Contents/SharedSupport/SystemSounds/system/Screen Capture.aif",
@@ -41,6 +43,7 @@ final class CaptureCoordinator {
         }
         running = true
         defer { running = false }
+        started += 1
         guard ensurePermission() else { return }
         if requested == .scrolling && !scrollingMayStart() { return }
         // Up before the stills are taken, so a click made meanwhile lands on the overlay.
@@ -168,7 +171,9 @@ final class CaptureCoordinator {
     ) async throws {
         switch mode {
         case .area: await deliver(try Self.crop(still, to: rect), scale: still.scale)
-        case .text: await copyText(of: try Self.crop(still, to: rect), scale: still.scale)
+        case .text:
+            let image = try Self.crop(still, to: rect)
+            Task { await copyText(of: image, scale: still.scale) }
         case .scrolling:
             try await captureScrolling(
                 still: still, pixelRect: rect, start: .auto, overlay: overlay)
@@ -194,8 +199,12 @@ final class CaptureCoordinator {
     }
 
     /// Capture Text: reads the selection off the main thread and copies its text, with no file
-    /// and no sound. A selection with no text leaves the clipboard as it was, and says so.
+    /// and no sound. A selection with no text leaves the clipboard as it was, and says so. The
+    /// read runs after its capture has ended, since it can take a minute while macOS recompiles
+    /// Vision's models, so the next capture never waits on it; once one starts, this read
+    /// copies nothing and says nothing.
     private func copyText(of image: CGImage, scale: CGFloat) async {
+        let capture = started
         let reading = Toast.show("Reading text…", seconds: nil)
         let result = await Task.detached(priority: .userInitiated) {
             Result {
@@ -203,6 +212,10 @@ final class CaptureCoordinator {
                     image, scale: Double(scale), recognizer: VisionTextRecognizer())
             }
         }.value
+        guard started == capture else {
+            Toast.dismiss(reading)
+            return
+        }
         switch result {
         case .success(let text) where text.isEmpty:
             Toast.show("No text found · the clipboard is unchanged")
