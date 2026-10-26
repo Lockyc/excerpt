@@ -238,10 +238,10 @@ Both are **logged while recording and drawn when the file is rendered**, never p
 during the recording, so the screen stays clean and either can be turned off afterwards.
 
 - **Shortcuts:** a listen-only event tap (Input Monitoring) logs a key press only when
-  `ShortcutFilter` (Core) passes it: any key held with ⌘, ⌃ or ⌥, and on their own (or with ⇧)
-  Return, Esc, Tab, ⌫, ⌦, the arrows, Home/End/Page Up/Page Down and the F-keys. A plain or
-  ⇧-shifted character is never logged, so typed text — a password, a token — never reaches the
-  master or the render. Excerpt's own hotkeys are never logged. In a window recording a
+  `ShortcutFilter` (Core) passes it: any key held with ⌘ or ⌃, and on their own (or with ⇧ or
+  ⌥) Return, Esc, Tab, ⌫, ⌦, the arrows, Home/End/Page Up/Page Down and the F-keys. A plain,
+  ⇧, ⌥ or ⌥⇧ character is never logged (⌥ types `@`, `{`, `£` on common layouts), so typed
+  text — a password, a token — never reaches the master or the render. Excerpt's own hotkeys are never logged. In a window recording a
   shortcut is logged only while that window's app is frontmost, so a ⌘-key pressed in another
   app doesn't appear over a clip that never showed it; an area or display recording logs them
   from any app. Rendered as a pill at the bottom centre of the frame, held 1.2 s after

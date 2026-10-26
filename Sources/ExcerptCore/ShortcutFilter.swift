@@ -9,8 +9,9 @@ public struct KeyModifiers: OptionSet, Codable, Sendable {
     public static let shift = KeyModifiers(rawValue: 1 << 3)
 }
 
-/// Decides which key presses a recording logs and what the shortcut pill says. A plain or
-/// shifted character is never logged, so typed text never reaches the event log.
+/// Decides which key presses a recording logs and what the shortcut pill says. A character is
+/// logged only with ⌘ or ⌃: plain, ⇧, ⌥ and ⌥⇧ characters are typing (⌥ types `@ { } | ~ £ –`
+/// on common layouts), so typed text never reaches the event log.
 public enum ShortcutFilter {
     /// Virtual key codes (Carbon's `kVK_*`, which Core cannot import) mapped to their glyphs.
     private enum Key {
@@ -30,7 +31,7 @@ public enum ShortcutFilter {
         -> String?
     {
         let named = Key.named[keyCode]
-        let chorded = !modifiers.isDisjoint(with: [.command, .control, .option])
+        let chorded = !modifiers.isDisjoint(with: [.command, .control])
         guard named != nil || chorded else { return nil }
 
         let key: String
