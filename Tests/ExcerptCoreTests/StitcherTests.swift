@@ -44,6 +44,53 @@ import Testing
         #expect(stitcher.image == expected)
     }
 
+    /// Scrolls `page` under a 200-row frame by 120 rows, each frame passed through `dress`;
+    /// returns the stitch and the last frame.
+    func scrollDressed(_ page: PixelBuffer, _ dress: (PixelBuffer) -> PixelBuffer) -> (
+        Stitcher, PixelBuffer
+    ) {
+        var stitcher = Stitcher(
+            first: dress(ScrollFixtures.frame(page, offset: 0, viewport: 200)), scale: 1)
+        var last = stitcher.image
+        for offset in stride(from: 120, through: page.height - 200, by: 120) {
+            last = dress(ScrollFixtures.frame(page, offset: offset, viewport: 200))
+            #expect(stitcher.add(last) == .appended(rows: 120))
+        }
+        return (stitcher, last)
+    }
+
+    @Test func aFloatingElementAboveTheBottomShowsOnceFromTheLastFrame() {
+        // A 30x40 block clear of the frame's right and bottom edges, over the page.
+        let block = ScrollFixtures.bar(width: 30, height: 40, tone: 140)
+        let (stitcher, last) = scrollDressed(ScrollFixtures.page(width: 90, height: 920)) {
+            frame in
+            ScrollFixtures.paint(width: 90, height: 200) { x, y in
+                (50..<80).contains(x) && (150..<190).contains(y)
+                    ? block[x: x - 50, y: y - 150] : frame[x: x, y: y]
+            }
+        }
+        let page = ScrollFixtures.page(width: 90, height: 920)
+        #expect(stitcher.image == ScrollFixtures.stack([ScrollFixtures.rows(page, 0..<720), last]))
+    }
+
+    @Test func aFooterWithAFadeAboveItShowsOnceFromTheLastFrame() {
+        // A 30-row footer under 24 rows that blend the page toward grey.
+        let footer = ScrollFixtures.bar(width: 90, height: 30, tone: 140)
+        let (stitcher, last) = scrollDressed(ScrollFixtures.page(width: 90, height: 920)) {
+            frame in
+            let barred = ScrollFixtures.overlay(frame, footer, atRow: 170)
+            return ScrollFixtures.paint(width: 90, height: 200) { x, y in
+                let c = barred[x: x, y: y]
+                guard (146..<170).contains(y) else { return c }
+                let t = Double(y - 145) / 25
+                func blend(_ v: UInt8) -> UInt8 { UInt8(Double(v) * (1 - t) + 128 * t) }
+                return RGBA(r: blend(c.r), g: blend(c.g), b: blend(c.b), a: 255)
+            }
+        }
+        let page = ScrollFixtures.page(width: 90, height: 920)
+        #expect(stitcher.image == ScrollFixtures.stack([ScrollFixtures.rows(page, 0..<720), last]))
+    }
+
     @Test func aLongFormWithRepeatingFieldsStitches() {
         let form = ScrollFixtures.form(width: 90, height: 1000)
         let (stitcher, _) = scroll(form, viewport: 200, step: 120)
