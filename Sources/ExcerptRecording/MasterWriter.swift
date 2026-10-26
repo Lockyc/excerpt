@@ -155,9 +155,10 @@ public final class MasterWriter: @unchecked Sendable {
 
     /// Ends the master at the recorded time — a still screen at the end sends no frames but is
     /// still recording — and stores `log` in it. Throws `empty` (deleting the file) when no frame
-    /// was written, `recordingFailed` (deleting it) when the writer failed or the recording was
-    /// already stopped, and `eventsNotSaved` when the master is saved but the rewrite storing
-    /// `log` failed: it then opens with no events, and the caller keeps it.
+    /// was written, `recordingFailed` (deleting it) when the writer failed, `alreadyStopped`
+    /// (leaving the file as it is) once finished or cancelled, and `eventsNotSaved` when the
+    /// master is saved but the rewrite storing `log` failed: it then opens with no events, and
+    /// the caller keeps it.
     public func finish(log: RecordingEventLog) async throws {
         enum Outcome {
             case end(CMTime)
@@ -177,7 +178,7 @@ public final class MasterWriter: @unchecked Sendable {
         let end: CMTime
         switch outcome {
         case .end(let time): end = time
-        case .stopped: throw RecordingError.recordingFailed("The recording was already stopped.")
+        case .stopped: throw RecordingError.alreadyStopped
         case .empty:
             discard()
             throw RecordingError.empty

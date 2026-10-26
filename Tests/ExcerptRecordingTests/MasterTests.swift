@@ -111,9 +111,12 @@ import Testing
         try await SyntheticMaster.append(
             SyntheticMaster.solid(Self.grey, width: 64, height: 48), at: 0, to: writer)
         try await writer.finish(log: SyntheticMaster.log)
-        await #expect(throws: RecordingError.self) {
+        await #expect(throws: RecordingError.alreadyStopped) {
             try await writer.finish(log: SyntheticMaster.log)
         }
+        #expect(
+            RecordingError.alreadyStopped.localizedDescription
+                == "The recording was already stopped.")
         #expect(try await RecordingMaster.read(url).log == SyntheticMaster.log)
     }
 
