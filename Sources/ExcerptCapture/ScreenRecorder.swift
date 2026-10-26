@@ -62,7 +62,8 @@ public final class ScreenRecorder {
         configuration.colorSpaceName = StreamFrameSource.colorSpaceName
         configuration.captureResolution = .best
         configuration.showsCursor = true
-        configuration.minimumFrameInterval = CMTime(value: 1, timescale: 30)
+        configuration.minimumFrameInterval = CMTime(
+            value: 1, timescale: CMTimeScale(MasterWriter.frameRate))
         configuration.queueDepth = 5
         let output = RecorderOutput(
             onSample: { [weak self] in self?.receive($0) },

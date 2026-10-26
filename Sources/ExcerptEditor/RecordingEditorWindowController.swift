@@ -123,7 +123,7 @@ public final class RecordingEditorWindowController: NSWindowController, NSWindow
         formatControl.segmentCount = 2
         formatControl.trackingMode = .selectOne
         formatControl.setLabel("GIF", forSegment: 0)
-        formatControl.setToolTip("Save a GIF, fitted to 10 MB", forSegment: 0)
+        formatControl.setToolTip("Save a GIF, fitted to \(GIFEncoder.byteBudgetText)", forSegment: 0)
         formatControl.setLabel("MP4", forSegment: 1)
         formatControl.setToolTip("Save an MP4 at full resolution", forSegment: 1)
         formatControl.target = self
