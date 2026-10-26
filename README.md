@@ -16,7 +16,9 @@ captures of web pages and forms.
 It also does everything you'd expect of a screenshot tool: area, window, fullscreen and
 scrolling capture, copying the text out of a capture (OCR), a floating preview after each
 capture, and an editor for arrows, text and highlights. Tall captures can be exported as tiles
-sized for Claude to read.
+sized for Claude to read. It records an area, window or display as a GIF (or MP4) small enough
+for GitHub, Slack and Google Chat, with the shortcuts you press and the clicks you make drawn in,
+and an editor to trim and blur it.
 
 ## Install
 
@@ -37,8 +39,8 @@ checks now. Running the installer again also updates.
 
 **Uninstall** by quitting Excerpt, deleting `/Applications/Excerpt.app`,
 `/usr/local/bin/excerpt` and the cache `~/Library/Caches/excerpt`, running
-`defaults delete com.lockyc.excerpt`, and removing Excerpt from Screen Recording and
-Accessibility in System Settings → Privacy & Security. Your captures stay where they were saved.
+`defaults delete com.lockyc.excerpt`, and removing Excerpt from Screen Recording,
+Accessibility and Input Monitoring in System Settings → Privacy & Security. Your captures stay where they were saved.
 
 ## Use
 
@@ -48,6 +50,7 @@ Accessibility in System Settings → Privacy & Security. Your captures stay wher
 | ⌘⇧4 | Area (the screen freezes while you select) |
 | ⌘⇧5 | Text — OCR straight to the clipboard, no file |
 | ⌘⇧6 | Select an area, adjust it, then pick area, scrolling, text, window or fullscreen from a bar over it |
+| ⌘⇧7 | Record — select an area (or click a window), then Return; ⌘⇧7 again stops |
 
 macOS's own screenshot shortcuts hold ⌘⇧3 to ⌘⇧5 until they are turned off in System Settings →
 Keyboard → Keyboard Shortcuts → Screenshots, or Excerpt's are rebound in its Settings. Excerpt's
@@ -56,7 +59,8 @@ menu flags any shortcut macOS still holds.
 The first capture asks for **Screen Recording** (System Settings → Privacy & Security → Screen &
 System Audio Recording); reopen Excerpt after granting it. Scrolling capture's auto-scroll also
 asks for **Accessibility**; scrolling the selected region yourself doesn't need it. Excerpt
-stitches as you go, and your own scrolling takes over from auto-scroll at any point.
+stitches as you go, and your own scrolling takes over from auto-scroll at any point. The first
+recording asks for **Input Monitoring** to show the shortcuts you press; without it, clicks only.
 
 Each capture is saved to `~/Documents/Screenshots/` (a setting), copied to the clipboard and
 shown as a thumbnail with **Edit**, **For Claude** and **Close**. Files in that folder older

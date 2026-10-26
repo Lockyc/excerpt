@@ -17,8 +17,9 @@ into GitHub, Slack and Google Chat, with shortcuts and clicks shown in the clip.
 
 ## Modules
 
-SwiftPM only — no `.xcodeproj`. macOS 15+. `ExcerptCore` builds in Swift 6 language mode; the
-AppKit / ScreenCaptureKit targets build in Swift 5 mode (see `Package.swift`).
+SwiftPM only — no `.xcodeproj`. macOS 15+. `ExcerptCore`, `ExcerptRecording` and `ExcerptExport`
+build in Swift 6 language mode; the AppKit / ScreenCaptureKit targets build in Swift 5 mode (see
+`Package.swift`).
 
 | Module | Owns | Depends on |
 |---|---|---|
@@ -194,7 +195,8 @@ content can reach the edge), so an overlay scroll bar's thumb can appear along t
 without the scroll bar to avoid it).
 
 Permissions are requested on first use, per feature: Screen Recording for any capture,
-Accessibility for auto-scroll only, Input Monitoring for a recording's shortcuts only.
+Accessibility for auto-scroll only, Input Monitoring for a recording's shortcuts only (asked once
+per launch, before a recording starts).
 
 ## Recording
 
@@ -208,8 +210,9 @@ the tightest of the three, so a GIF is fitted to it.
   (adjustable as on the mode bar, opening on the last recorded area of this launch); a click
   with no drag selects the window under the pointer, hover-highlighted as in Window mode, as an
   area: the screen it covers at that moment, fixed, so its menus, popovers and tooltips are in
-  the clip (and anything passing over it), and it doesn't follow the window if it moves; `F`
-  records the display under the pointer. `Return` or the selection's Record button starts. An
+  the clip (and anything passing over it), and it doesn't follow the window if it moves. That
+  click is a window recording for the shortcut gating below; `F` (the display under the
+  pointer) and the previous region are area recordings. `Return` or the selection's Record button starts. An
   area lies on one display.
 - A **3-2-1 countdown** shows in the area before the first frame, so the clip doesn't open on
   the reach for the mouse. While recording, the area has a thin outline.
@@ -246,8 +249,10 @@ during the recording, so the screen stays clean and either can be turned off aft
 - **Clicks:** left and right mouse-downs inside the recorded area are logged with
   their position; rendered as a ring that expands and fades over 0.4 s (right clicks in a
   second colour).
-- Without Input Monitoring the recording still runs with clicks only, and the editor's
-  Shortcuts toggle is disabled with the reason.
+- Input Monitoring is asked for once per launch, on the way into Record: while it is neither
+  granted nor denied, the prompt replaces that run (the overlay closes) and the next Record
+  records. Denied, the recording runs with clicks only, and the editor's Shortcuts toggle is
+  disabled with the reason.
 
 ### Files
 
@@ -259,7 +264,8 @@ during the recording, so the screen stays clean and either can be turned off aft
   recording's edit document in the movie's metadata, so the edits travel inside the master as
   they do in a screenshot's.
 - The library treats a recording pair as it does a PNG pair: Recent Captures lists recordings
-  (opening the recording editor), filing moves the master with its primary.
+  (opening the recording editor, each shown by the primary's first frame), filing moves the
+  master with its primary.
 
 ### Output
 
@@ -302,8 +308,8 @@ preview is what saves.
   whole clip. Blurs don't track moving content: what a demo needs hidden usually stays put, and
   a moving secret is covered by a span-limited blur per position until tracking proves needed.
 - **Shortcuts** and **Clicks** toggles, and the output format (GIF / MP4).
-- `⌘S` renders the primary, rewrites the master's edit document, copies and closes; Discard as
-  in the image editor.
+- `⌘S` always re-renders the primary, then rewrites the master's edit document, copies and
+  closes, so the primary never lags the edits; Discard as in the image editor.
 
 The recording's edit document (`RecordingEdits`, Core, versioned) holds the trim, the blurs (in
 master pixels, each with an optional time span), the two toggles, the format and the blur salt.
