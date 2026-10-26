@@ -60,18 +60,20 @@ final class RecordingSession {
         defer { chrome.close() }
         // Stopped in the countdown: nothing was recorded, so nothing is kept.
         guard await chrome.countdown(restoring: demonstrated), end == nil else { return .discarded }
-        let shortcutsLogged = InputMonitoring.hasPermission()
         let recorder = recorder
         let logger = EventLogger(
             region: region, frontmostPID: frontmostPID, ownHotKeys: ownHotKeys,
             clock: { [weak self] in
                 guard let self, !self.paused else { return nil }
                 return recorder.recordedTime
-            }, hasInputMonitoring: shortcutsLogged)
+            })
+        // Before the master is created, which records whether its key tap started.
+        logger.start()
         do {
             try await recorder.start(
-                region: region, master: paths.master, shortcutsLogged: shortcutsLogged)
+                region: region, master: paths.master, shortcutsLogged: logger.shortcutsLogged)
         } catch {
+            _ = logger.stop()
             return .failed(error)
         }
         // Stopped or discarded while the stream started: the chrome stays closed.
@@ -101,8 +103,8 @@ final class RecordingSession {
         }
     }
 
-    /// Shows the outline and control bar and logs events until the first end request, then
-    /// takes the chrome down; returns what was logged.
+    /// Shows the outline and control bar until the first end request while `logger`, already
+    /// started, logs, then takes the chrome down; returns what was logged.
     private func recordUntilEnded(_ logger: EventLogger) async -> RecordingEventLog {
         let recorder = recorder
         recorder.onFailure = { [weak self] in self?.finish(.stopped($0)) }
@@ -117,7 +119,6 @@ final class RecordingSession {
         }
         chrome.onStop = { [weak self] in self?.finish(.stop) }
         chrome.onDiscard = { [weak self] in self?.finish(.discard) }
-        logger.start()
         chrome.showRecording()
         tick()
         // Common modes, so the time runs on while the control bar is dragged.

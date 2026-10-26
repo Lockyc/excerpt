@@ -9,25 +9,53 @@ import ExcerptCore
     private let frontmostPID: pid_t?
     private let ownHotKeys: [HotKeyBinding]
     private let clock: () -> Double?
-    private let shortcutsLogged: Bool
+    private let hasInputMonitoring: Bool
+    private let createKeyTap: KeyTapFactory
+    /// Whether shortcuts are being logged: Input Monitoring was granted and the key tap started.
+    /// False until `start`.
+    public private(set) var shortcutsLogged = false
     private var events: [RecordingEvent] = []
     private var tap: CFMachPort?
     private var tapSource: CFRunLoopSource?
     private var monitor: Any?
 
+    /// Makes the listen-only key tap for a callback and its userInfo; nil when it can't.
+    typealias KeyTapFactory = (CGEventTapCallBack, UnsafeMutableRawPointer) -> CFMachPort?
+
     /// `frontmostPID` is the recorded app for a window recording, nil otherwise. `clock`
     /// returns recorded seconds, or nil while paused. `hasInputMonitoring` is the permission
     /// at the moment the recording starts.
-    public init(
+    public convenience init(
         region: ScrollRegion, frontmostPID: pid_t?, ownHotKeys: [HotKeyBinding],
         clock: @escaping () -> Double?,
         hasInputMonitoring: Bool = InputMonitoring.hasPermission()
+    ) {
+        self.init(
+            region: region, frontmostPID: frontmostPID, ownHotKeys: ownHotKeys, clock: clock,
+            hasInputMonitoring: hasInputMonitoring, createKeyTap: Self.sessionKeyTap)
+    }
+
+    init(
+        region: ScrollRegion, frontmostPID: pid_t?, ownHotKeys: [HotKeyBinding],
+        clock: @escaping () -> Double?, hasInputMonitoring: Bool,
+        createKeyTap: @escaping KeyTapFactory
     ) {
         self.region = region
         self.frontmostPID = frontmostPID
         self.ownHotKeys = ownHotKeys
         self.clock = clock
-        shortcutsLogged = hasInputMonitoring
+        self.hasInputMonitoring = hasInputMonitoring
+        self.createKeyTap = createKeyTap
+    }
+
+    /// A key-down tap on the login session, listening only.
+    private static func sessionKeyTap(
+        callback: CGEventTapCallBack, userInfo: UnsafeMutableRawPointer
+    ) -> CFMachPort? {
+        CGEvent.tapCreate(
+            tap: .cgSessionEventTap, place: .headInsertEventTap, options: .listenOnly,
+            eventsOfInterest: CGEventMask(1 << CGEventType.keyDown.rawValue),
+            callback: callback, userInfo: userInfo)
     }
 
     /// Where an AppKit global point lands in master pixels, top-left origin; nil outside the
@@ -69,7 +97,8 @@ import ExcerptCore
     /// Begins listening; a second call while listening does nothing.
     public func start() {
         guard monitor == nil, tap == nil else { return }
-        if shortcutsLogged { startKeyTap() }
+        if hasInputMonitoring { startKeyTap() }
+        shortcutsLogged = tap != nil
         monitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) {
             [weak self] event in
             // For a global monitor `locationInWindow` is the screen point.
@@ -108,12 +137,7 @@ import ExcerptCore
         // Retained for the tap's lifetime, so a logger released without `stop()` leaks rather
         // than leaving the callback a dangling pointer.
         let userInfo = Unmanaged.passRetained(self)
-        guard
-            let tap = CGEvent.tapCreate(
-                tap: .cgSessionEventTap, place: .headInsertEventTap, options: .listenOnly,
-                eventsOfInterest: CGEventMask(1 << CGEventType.keyDown.rawValue),
-                callback: callback, userInfo: userInfo.toOpaque())
-        else {
+        guard let tap = createKeyTap(callback, userInfo.toOpaque()) else {
             userInfo.release()
             return
         }
