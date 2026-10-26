@@ -119,4 +119,18 @@ extension SelectionMath {
         return flip(
             ScrollChromeLayout.startButton(size: size, region: flip(selection), visible: bounds))
     }
+
+    /// The part of `still`'s display a window covers, as a pixel rect of the still: its AppKit
+    /// `windowFrame` clipped to the display. Nil when it covers none of it.
+    public static func windowArea(_ windowFrame: CGRect, in still: DisplayStill) -> CGRect? {
+        let local = DisplayGeometry.localPoints(
+            forAppKitRect: windowFrame, displayFrame: still.frame
+        )
+        .intersection(CGRect(origin: .zero, size: still.frame.size))
+        guard !local.isNull, !local.isEmpty else { return nil }
+        let pixels = DisplayGeometry.pixelRect(
+            forLocalPoints: local, scale: still.scale,
+            imageSize: CGSize(width: still.image.width, height: still.image.height))
+        return pixels.isNull || pixels.isEmpty ? nil : pixels
+    }
 }
