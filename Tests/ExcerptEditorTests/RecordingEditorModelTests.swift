@@ -23,10 +23,9 @@ import Testing
         return model
     }
 
-    /// The frame the exporter renders at `t`: the last stamped at or before it, within the
-    /// tolerance, else the first.
+    /// The frame the exporter renders at `t`, for non-empty `times`.
     func exportedFrame(at t: Double, in times: [Double]) -> Int {
-        times.lastIndex { $0 <= t + tolerance } ?? 0
+        RecordingExporter.frameIndex(at: t, in: times)!
     }
 
     @Test func aSpanSetAtThePlayheadCoversEverySampleOfItsFrame() throws {

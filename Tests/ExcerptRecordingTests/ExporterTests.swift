@@ -133,6 +133,34 @@ import Testing
         }
     }
 
+    @Test func theFrameAtATimeIsTheLastStampedByThenWithinTheTolerance() {
+        let tolerance = RecordingExporter.frameTolerance
+        let stamps = [0.2, 0.4, 0.4, 1.0]
+        #expect(RecordingExporter.frameIndex(at: 0.5, in: []) == nil)
+        #expect(RecordingExporter.frameIndex(at: 0, in: stamps) == 0)
+        #expect(RecordingExporter.frameIndex(at: 0.3, in: stamps) == 0)
+        #expect(RecordingExporter.frameIndex(at: 0.4 - tolerance / 2, in: stamps) == 2)
+        #expect(RecordingExporter.frameIndex(at: 0.4 - tolerance * 2, in: stamps) == 0)
+        #expect(RecordingExporter.frameIndex(at: 5, in: stamps) == 3)
+    }
+
+    /// The reader the export draws from shows the frame `frameIndex` names, every sample.
+    @Test func theReaderShowsTheFrameFrameIndexPicks() async throws {
+        let frames = (0..<10).map {
+            SyntheticMaster.solid(
+                RGBA(r: UInt8($0 * 25), g: 0, b: 0, a: 255), width: 32, height: 32)
+        }
+        let (master, _) = try await SyntheticMaster.master(frames)
+        let stamps = try await RecordingMaster.frameTimes(master.url)
+        let reader = try await FrameReader(master, range: 0...master.duration)
+        defer { reader.cancel() }
+        for sample in RecordingExporter.samples(over: 0...master.duration, fps: 30) {
+            let k = try #require(RecordingExporter.frameIndex(at: sample.time, in: stamps))
+            let red = Int(PixelBuffer(try reader.frame(at: sample.time))[x: 16, y: 16].r)
+            #expect(abs(red - k * 25) <= 6, "\(sample.time) s")
+        }
+    }
+
     @Test func trimIsClampedToTheMaster() async throws {
         let (master, paths) = try await SyntheticMaster.master(Self.moving(10))
         let long = RecordingEdits(trim: 0...10, format: .gif)
