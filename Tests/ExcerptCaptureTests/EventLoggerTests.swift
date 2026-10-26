@@ -51,9 +51,20 @@ import Testing
                 ownHotKeys: [own]))
     }
 
+    @Test func capsLockAndFnNeverReachTheModifiers() {
+        let flags: CGEventFlags = [.maskCommand, .maskShift, .maskAlphaShift, .maskSecondaryFn]
+        let modifiers = EventLogger.modifiers(of: flags)
+        #expect(modifiers == [.command, .shift])
+        let own = HotKeyBinding(keyCode: 26, modifiers: HotKeyBinding.commandShift)
+        #expect(
+            !EventLogger.accepts(
+                keyCode: 26, modifiers: modifiers, frontmost: nil, recorded: nil,
+                ownHotKeys: [own]))
+    }
+
     @MainActor @Test func deniedLogsClicksOnly() {
         let logger = EventLogger(
-            region: region, scale: 2, frontmostPID: nil, ownHotKeys: [], clock: { 0 },
+            region: region, frontmostPID: nil, ownHotKeys: [], clock: { 0 },
             hasInputMonitoring: false)
         let log = logger.stop()
         #expect(!log.shortcutsLogged)
