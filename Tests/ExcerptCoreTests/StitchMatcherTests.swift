@@ -38,6 +38,60 @@ import Testing
         #expect(bottom >= 16 && bottom < 22)
     }
 
+    /// `frame` with the footer's shadow cast up over the 3 rows above it, blending them toward
+    /// grey.
+    func shadowed(_ frame: PixelBuffer) -> PixelBuffer {
+        ScrollFixtures.paint(width: 90, height: 200) { x, y in
+            let c = frame[x: x, y: y]
+            guard (181..<184).contains(y) else { return c }
+            let t = Double(y - 180) / 4
+            func blend(_ v: UInt8) -> UInt8 { UInt8(Double(v) * (1 - t) + 128 * t) }
+            return RGBA(r: blend(c.r), g: blend(c.g), b: blend(c.b), a: 255)
+        }
+    }
+
+    @Test func aFootersShadowOverThePageJoinsTheFooter() {
+        // Text under the shadow differs across the width once it moves: three contradictions.
+        let match = StitchMatcher.match(
+            shadowed(frame(0, footer: footer)), shadowed(frame(120, footer: footer)),
+            ignoringRightColumns: 0)
+        guard case .moved(let offset, _, let bottom, _) = match else {
+            Issue.record("expected a move, got \(match)")
+            return
+        }
+        #expect(offset == 120)
+        #expect(bottom >= 19 && bottom < 25)
+    }
+
+    /// `frame` beside a scroll bar inside the region: a gap, a 6-column track with its thumb
+    /// from row `thumb`, then a 16-column panel that doesn't scroll.
+    func besideScrollBar(_ frame: PixelBuffer, thumb: Int) -> PixelBuffer {
+        let panel = ScrollFixtures.bar(width: 16, height: 200, tone: 30)
+        return ScrollFixtures.paint(width: 116, height: 200) { x, y in
+            switch x {
+            case ..<90: frame[x: x, y: y]
+            case 90..<94: ScrollFixtures.paper
+            case 94..<100:
+                (thumb..<(thumb + 60)).contains(y)
+                    ? RGBA(r: 90, g: 90, b: 90, a: 255) : RGBA(r: 45, g: 45, b: 45, a: 255)
+            default: panel[x: x - 100, y: y]
+            }
+        }
+    }
+
+    @Test func aScrollThumbInsideTheRegionIsLeftOut() {
+        // The thumb moves down as the page moves up, across most of the overlap's rows.
+        let match = StitchMatcher.match(
+            besideScrollBar(frame(0), thumb: 0), besideScrollBar(frame(120), thumb: 20),
+            ignoringRightColumns: 16)
+        guard case .moved(let offset, _, _, let columns) = match else {
+            Issue.record("expected a move, got \(match)")
+            return
+        }
+        #expect(offset == 120)
+        #expect(columns.upperBound <= 90)
+    }
+
     /// The page with a 16-row nav bar in its flow at row 40, scrolled to `offset` under the
     /// header: the bar pins under the header once the page scrolls it there.
     func navFrame(_ offset: Int) -> PixelBuffer {
