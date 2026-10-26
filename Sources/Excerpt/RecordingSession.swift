@@ -156,7 +156,9 @@ final class RecordingSession {
     private func tick() {
         let recorded = recorder.recordedTime
         let remaining = ScreenRecorder.maximumDuration - recorded
-        chrome.update(recorded: recorded, remaining: remaining <= RecordingChrome.remainingShown ? remaining : nil)
+        chrome.update(
+            recorded: recorded,
+            remaining: remaining <= RecordingChrome.remainingShown ? remaining : nil)
         onTick(recorded)
     }
 }
@@ -168,7 +170,9 @@ enum RecordingNote {
         if let stoppedEarly {
             notes.append("Stopped early: \(stoppedEarly.localizedDescription)")
         }
-        if fellBackToMP4 { notes.append("Too long for a \(GIFEncoder.byteBudgetText) GIF — saved as MP4") }
+        if fellBackToMP4 {
+            notes.append("Too long for a \(GIFEncoder.byteBudgetText) GIF — saved as MP4")
+        }
         if !eventsSaved { notes.append("Shortcuts and clicks couldn't be saved") }
         return notes.isEmpty ? nil : notes.joined(separator: " · ")
     }
