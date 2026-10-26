@@ -1,9 +1,9 @@
 // swift-tools-version: 6.0
 import PackageDescription
 
-// ExcerptCore and ExcerptExport are pure of AppKit and build in Swift 6 mode. The AppKit /
-// ScreenCaptureKit targets use Swift 5 mode: their APIs hand non-Sendable CF and AppKit types
-// across callbacks, and strict isolation there buys annotations, not safety.
+// ExcerptCore, ExcerptExport and ExcerptRecording are pure of AppKit and build in Swift 6 mode.
+// The AppKit / ScreenCaptureKit targets use Swift 5 mode: their APIs hand non-Sendable CF and
+// AppKit types across callbacks, and strict isolation there buys annotations, not safety.
 let package = Package(
     name: "excerpt",
     platforms: [.macOS(.v15)],
@@ -12,14 +12,15 @@ let package = Package(
     ],
     targets: [
         .target(name: "ExcerptCore"),
+        .target(name: "ExcerptRecording", dependencies: ["ExcerptCore"]),
         .target(
             name: "ExcerptCapture",
-            dependencies: ["ExcerptCore"],
+            dependencies: ["ExcerptCore", "ExcerptRecording"],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .target(
             name: "ExcerptEditor",
-            dependencies: ["ExcerptCore"],
+            dependencies: ["ExcerptCore", "ExcerptRecording"],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .target(name: "ExcerptExport", dependencies: ["ExcerptCore"]),
@@ -27,7 +28,7 @@ let package = Package(
             name: "Excerpt",
             dependencies: [
                 "ExcerptCore", "ExcerptCapture", "ExcerptEditor", "ExcerptExport",
-                .product(name: "Sparkle", package: "Sparkle"),
+                "ExcerptRecording", .product(name: "Sparkle", package: "Sparkle"),
             ],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
@@ -49,5 +50,8 @@ let package = Package(
         ),
         .testTarget(
             name: "ExcerptExportTests", dependencies: ["ExcerptExport", "ExcerptTestSupport"]),
+        .testTarget(
+            name: "ExcerptRecordingTests",
+            dependencies: ["ExcerptRecording", "ExcerptCore", "ExcerptTestSupport"]),
     ]
 )
