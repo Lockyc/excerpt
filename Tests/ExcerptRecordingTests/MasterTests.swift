@@ -34,10 +34,11 @@ import Testing
     @Test func pausedSamplesAreDroppedAndRetimed() async throws {
         let url = try SyntheticMaster.folder().appendingPathComponent("paused.mov")
         let clock = TestClock()
-        let writer = try MasterWriter(url: url, width: 64, height: 48, now: clock.now)
+        let writer = try SyntheticMaster.writer(url: url, width: 64, height: 48, clock: clock)
         let frame = SyntheticMaster.solid(Self.grey, width: 64, height: 48)
         let paused = SyntheticMaster.solid(Self.red, width: 64, height: 48)
-        for index in 0..<10 {
+        // Frames to 0.4 s, then a still screen sending none until the pause at 1 s.
+        for index in 0..<5 {
             clock.set(seconds: Double(index) / 10)
             try await SyntheticMaster.append(frame, at: Double(index) / 10, to: writer)
         }
@@ -50,13 +51,15 @@ import Testing
         #expect(abs(writer.recordedTime - 1) < 0.001)
         clock.set(seconds: 5)
         writer.resume()
+        // Taken while paused, delivered after Resume: shifted, it would land after 0.4 s.
+        try await SyntheticMaster.append(paused, at: 4.8, to: writer)
         for index in 50..<60 {
             clock.set(seconds: Double(index) / 10)
             try await SyntheticMaster.append(frame, at: Double(index) / 10, to: writer)
         }
         clock.set(seconds: 6)
         #expect(abs(writer.recordedTime - 2) < 0.001)
-        #expect(writer.frameCount == 20)
+        #expect(writer.frameCount == 15)
         try await writer.finish(log: SyntheticMaster.log)
 
         let master = try await RecordingMaster.read(url)
@@ -65,7 +68,7 @@ import Testing
         let generator = AVAssetImageGenerator(asset: asset)
         generator.requestedTimeToleranceBefore = .zero
         generator.requestedTimeToleranceAfter = .zero
-        for seconds in [0.5, 1.05, 1.5] {
+        for seconds in [0.5, 0.85, 0.95, 1.05, 1.5] {
             let image = try await generator.image(
                 at: CMTime(seconds: seconds, preferredTimescale: 600)
             )
@@ -77,7 +80,7 @@ import Testing
 
     @Test func emptyMasterThrowsAndLeavesNoFile() async throws {
         let url = try SyntheticMaster.folder().appendingPathComponent("empty.mov")
-        let writer = try MasterWriter(url: url, width: 64, height: 48)
+        let writer = try SyntheticMaster.writer(url: url, width: 64, height: 48)
         await #expect(throws: RecordingError.empty) {
             try await writer.finish(log: SyntheticMaster.log)
         }
@@ -86,14 +89,62 @@ import Testing
 
     @Test func cancelLeavesNoFile() async throws {
         let url = try SyntheticMaster.folder().appendingPathComponent("cancelled.mov")
-        let writer = try MasterWriter(url: url, width: 64, height: 48)
+        let writer = try SyntheticMaster.writer(url: url, width: 64, height: 48)
         try await SyntheticMaster.append(
             SyntheticMaster.solid(Self.grey, width: 64, height: 48), at: 0, to: writer)
         writer.cancel()
         #expect(!FileManager.default.fileExists(atPath: url.path))
     }
 
-    @Test func aMasterWithoutALogIsUnreadable() async throws {
+    @Test func finishingTwiceThrowsAndKeepsTheMaster() async throws {
+        let url = try SyntheticMaster.folder().appendingPathComponent("twice.mov")
+        let writer = try SyntheticMaster.writer(url: url, width: 64, height: 48)
+        try await SyntheticMaster.append(
+            SyntheticMaster.solid(Self.grey, width: 64, height: 48), at: 0, to: writer)
+        try await writer.finish(log: SyntheticMaster.log)
+        await #expect(throws: RecordingError.self) {
+            try await writer.finish(log: SyntheticMaster.log)
+        }
+        #expect(try await RecordingMaster.read(url).log == SyntheticMaster.log)
+    }
+
+    @Test func aWriterThatCannotStartReportsItsFailure() async throws {
+        let folder = try SyntheticMaster.folder()
+        let url = folder.appendingPathComponent("gone.mov")
+        let writer = try SyntheticMaster.writer(url: url, width: 64, height: 48)
+        try FileManager.default.removeItem(at: folder)
+        let frame = SyntheticMaster.solid(Self.grey, width: 64, height: 48)
+        writer.append(SyntheticMaster.sampleBuffer(frame, at: 0))
+        writer.append(SyntheticMaster.sampleBuffer(frame, at: 0.1))
+        #expect(writer.frameCount == 0)
+        await #expect {
+            try await writer.finish(log: SyntheticMaster.log)
+        } throws: { error in
+            guard case .recordingFailed = error as? RecordingError else { return false }
+            return true
+        }
+    }
+
+    @Test func aMasterWhoseEventsFailToSaveStillOpens() async throws {
+        let url = try SyntheticMaster.folder().appendingPathComponent("no events.mov")
+        struct RewriteFailed: Error {}
+        let writer = try SyntheticMaster.writer(
+            url: url, width: 64, height: 48, writeEvents: { _, _ in throw RewriteFailed() })
+        try await SyntheticMaster.append(
+            SyntheticMaster.solid(Self.grey, width: 64, height: 48), at: 0, to: writer)
+        await #expect {
+            try await writer.finish(log: SyntheticMaster.log)
+        } throws: { error in
+            guard case .eventsNotSaved = error as? RecordingError else { return false }
+            return true
+        }
+        let master = try await RecordingMaster.read(url)
+        #expect(master.log.events.isEmpty)
+        #expect(master.log.scale == SyntheticMaster.log.scale)
+        #expect(master.log.shortcutsLogged == SyntheticMaster.log.shortcutsLogged)
+    }
+
+    @Test func aFileThatIsNotAMovieIsUnreadable() async throws {
         let url = try SyntheticMaster.folder().appendingPathComponent("plain.mov")
         try Data("not a movie".utf8).write(to: url)
         await #expect(throws: RecordingError.unreadableMaster(url)) {

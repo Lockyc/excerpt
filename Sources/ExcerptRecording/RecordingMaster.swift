@@ -7,12 +7,19 @@ public enum RecordingError: Error, Equatable, LocalizedError {
     case empty
     /// Not a movie, or a movie without a recording's event log.
     case unreadableMaster(URL)
+    /// The master couldn't be written; the reason is the writer's.
+    case recordingFailed(String)
+    /// The master is saved and opens, but without its shortcuts and clicks.
+    case eventsNotSaved(String)
     case exportFailed(String)
 
     public var errorDescription: String? {
         switch self {
         case .empty: "Nothing was recorded."
         case .unreadableMaster(let url): "\(url.lastPathComponent) isn't a readable recording."
+        case .recordingFailed(let reason): "The recording couldn't be saved: \(reason)"
+        case .eventsNotSaved(let reason):
+            "The recording was saved without its shortcuts and clicks: \(reason)"
         case .exportFailed(let reason): reason
         }
     }
@@ -74,11 +81,7 @@ public struct RecordingMaster: Sendable {
     static func writeMetadata(log: RecordingEventLog, edits: RecordingEdits?, to url: URL)
         async throws
     {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        var items = [try item(eventsKey, encoder.encode(log))]
-        if let edits { items.append(try item(editsKey, encoder.encode(edits))) }
-
+        let items = try metadata(log: log, edits: edits)
         guard
             let session = AVAssetExportSession(
                 asset: AVURLAsset(url: url), presetName: AVAssetExportPresetPassthrough)
@@ -94,7 +97,17 @@ public struct RecordingMaster: Sendable {
         }
     }
 
-    private static func item(_ key: String, _ json: Data) throws -> AVMetadataItem {
+    /// The movie metadata holding `log` and, when given, `edits`.
+    static func metadata(log: RecordingEventLog, edits: RecordingEdits?) throws -> [AVMetadataItem]
+    {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        var items = [item(eventsKey, try encoder.encode(log))]
+        if let edits { items.append(item(editsKey, try encoder.encode(edits))) }
+        return items
+    }
+
+    private static func item(_ key: String, _ json: Data) -> AVMetadataItem {
         let item = AVMutableMetadataItem()
         item.keySpace = .quickTimeMetadata
         item.key = key as NSString
