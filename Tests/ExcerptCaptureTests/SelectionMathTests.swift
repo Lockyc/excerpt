@@ -141,6 +141,22 @@ import Testing
                 == CGRect(x: 600, y: 706, width: 400, height: 60))
     }
 
+    @Test func aPressOffTheSettledSelectionAndItsButtonStartsANewOne() {
+        let selection = CGRect(x: 100, y: 100, width: 200, height: 100)
+        let button = CGRect(x: 150, y: 212, width: 110, height: 28)
+        func starts(_ x: CGFloat, _ y: CGFloat, _ settled: CGRect? = selection) -> Bool {
+            SelectionMath.pressStartsNewSelection(
+                at: CGPoint(x: x, y: y), settled: settled,
+                startButton: settled == nil ? nil : button)
+        }
+        #expect(starts(500, 500))
+        #expect(starts(200, 150, nil))
+        #expect(!starts(200, 150))  // inside: moves it
+        #expect(!starts(304, 150))  // within reach of the right edge: resizes it
+        #expect(starts(307, 150))
+        #expect(!starts(200, 225))  // the start button
+    }
+
     /// A Retina display to the right of a 400-point primary: 400 × 300 points, 800 × 600 pixels.
     private static let rightDisplay: DisplayStill = {
         let context = CGContext(
