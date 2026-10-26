@@ -499,15 +499,19 @@ final class OverlayView: NSView {
             choose(choices[index])  // a press on an unavailable one does nothing
             return
         }
-        if settled, let button = startButton, button.contains(point) {
-            confirm()
-            return
-        }
-        if settled, let selection, let grip = SelectionMath.grip(at: point, on: selection) {
-            clickedWindow = nil  // moved or resized, it is an area
-            reshaping = (grip, selection, point)
-            if grip.isEmpty { NSCursor.closedHand.set() }
-            needsDisplay = true
+        if settled,
+            !SelectionMath.pressStartsNewSelection(
+                at: point, settled: selection, startButton: startButton)
+        {
+            // On the start button, or else on one of the selection's grips.
+            if let button = startButton, button.contains(point) {
+                confirm()
+            } else if let selection, let grip = SelectionMath.grip(at: point, on: selection) {
+                clickedWindow = nil  // moved or resized, it is an area
+                reshaping = (grip, selection, point)
+                if grip.isEmpty { NSCursor.closedHand.set() }
+                needsDisplay = true
+            }
             return
         }
         let clearedOther = beginDrag(self)
