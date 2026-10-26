@@ -214,8 +214,10 @@ the tightest of the three, so a GIF is fitted to it.
   area, above it when the area meets the screen's bottom, beside it when neither has room, and
   for a display recording at that display's bottom (or on another display when there is one).
   It is draggable. The menu-bar icon becomes a stop button with the timer, as a backup.
-- **Stop:** the Record hotkey again, the bar's Stop, or the menu-bar icon. **Discard:** `Esc`
-  or the bar's Discard, dropping everything recorded.
+- **Stop:** the Record hotkey again, the bar's Stop, or the menu-bar icon. **Discard:** the
+  bar's Discard, dropping everything recorded. No key is taken system-wide while recording —
+  `Esc` belongs to the app being demonstrated — so `Esc` discards only during the countdown
+  or with the control bar focused.
 - **Pause** stops frames being written; Resume carries on with no gap in the clip's timeline,
   so what is on screen while paused is never recorded, not even in the master.
 - A recording stops itself at `Recording.maximumDuration` (5 minutes of recorded time) and
@@ -233,7 +235,10 @@ during the recording, so the screen stays clean and either can be turned off aft
   `ShortcutFilter` (Core) passes it: any key held with ⌘, ⌃ or ⌥, and on their own (or with ⇧)
   Return, Esc, Tab, ⌫, ⌦, the arrows, Home/End/Page Up/Page Down and the F-keys. A plain or
   ⇧-shifted character is never logged, so typed text — a password, a token — never reaches the
-  master or the render. Rendered as a pill at the bottom centre of the frame, held 1.2 s after
+  master or the render. Excerpt's own hotkeys are never logged. In a window recording a
+  shortcut is logged only while that window's app is frontmost, so a ⌘-key pressed in another
+  app doesn't appear over a clip that never showed it; an area or display recording logs them
+  from any app. Rendered as a pill at the bottom centre of the frame, held 1.2 s after
   the press, a repeat of the same combination within that time shown as `→ ×3`.
 - **Clicks:** left and right mouse-downs inside the recorded area or window are logged with
   their position; rendered as a ring that expands and fades over 0.4 s (right clicks in a
@@ -256,9 +261,10 @@ during the recording, so the screen stays clean and either can be turned off aft
 ### Output
 
 - **GIF** (the default): rendered at 1× (points), 15 fps, through `GIFEncoder`. When the result
-  exceeds `GIFEncoder.byteBudget` (10 MB) it is re-encoded at 10 fps; still over, the GIF is
-  not written and the thumbnail says it won't fit a 10 MB GIF and offers **Save as MP4**. A GIF
-  that won't upload is never handed over silently.
+  exceeds `GIFEncoder.byteBudget` (10,000,000 bytes) it is re-encoded at 10 fps; still over,
+  the primary is written as an MP4 instead, and the thumbnail (or the editor's save) says it
+  was too long for a 10 MB GIF. A GIF that won't upload is never handed over, and a recording
+  always has a primary.
 - **MP4** (a setting, or chosen in the editor): H.264 at the master's full resolution, for the
   widest playback in GitHub, Slack and Chat.
 - **`GIFEncoder`** (Core, pure): each frame is diffed against the previous output frame and only
