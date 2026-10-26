@@ -23,8 +23,9 @@ AppKit / ScreenCaptureKit targets build in Swift 5 mode (see `Package.swift`).
 | Module | Owns | Depends on |
 |---|---|---|
 | `ExcerptCore` | The capture document (original image, cuts, annotations) as values; the pure algorithms — render, cut geometry, the original→rendered coordinate map, stitching, gap detection, tiling; the recording's edit document, its frame renderer, the shortcut filter and the GIF encoder | CoreGraphics, ImageIO |
-| `ExcerptCapture` | ScreenCaptureKit capture, the multi-display selection overlay, the auto-scroll driver that feeds frames to Core's stitcher, the recorder and its key and click log, the hotkey bindings and the rules that judge a rebinding | Core |
-| `ExcerptEditor` | Canvas, tools, undo; edits Core's document; the recording editor | Core |
+| `ExcerptCapture` | ScreenCaptureKit capture, the multi-display selection overlay, the auto-scroll driver that feeds frames to Core's stitcher, the recorder that feeds the stream to Recording's master writer and its key and click log, the hotkey bindings and the rules that judge a rebinding | Core, Recording |
+| `ExcerptRecording` | The recording's master file (writing, pause retiming, its log and edits), frame reading, the GIF / MP4 export and its budget fallback | Core, AVFoundation |
+| `ExcerptEditor` | Canvas, tools, undo; edits Core's document; the recording editor | Core, Recording |
 | `ExcerptExport` | Vision OCR, the For Claude bundle (tiles + `text.md`) and the `excerpt read` command, with no UI | Core, Vision |
 | `Excerpt` (app) | Menu bar, hotkey registration, preview thumbnail, settings, export UI, file I/O; runs `excerpt read` before AppKit starts | all |
 
