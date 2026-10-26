@@ -23,17 +23,23 @@ public final class StreamFrameSource: FrameSource {
 
     nonisolated static var colorSpaceName: CFString { PixelBuffer.colorSpace.name! }
 
-    public func start(region: ScrollRegion) async throws {
-        precondition(stream == nil, "one stream per source: stop it before starting another")
+    /// The display `displayID` without any of Excerpt's windows, now or opened later. Throws
+    /// `displayGone` when the display is disconnected, `cannotExcludeExcerpt` when Excerpt has no
+    /// window to be found by.
+    static func ownExcludingFilter(displayID: CGDirectDisplayID) async throws -> SCContentFilter {
         let content = try await SCShareableContent.excludingDesktopWindows(
             false, onScreenWindowsOnly: false)
-        guard let display = content.displays.first(where: { $0.displayID == region.displayID })
+        guard let display = content.displays.first(where: { $0.displayID == displayID })
         else { throw ScrollCaptureError.displayGone }
         let ownPID = ProcessInfo.processInfo.processIdentifier
         let own = content.applications.filter { $0.processID == ownPID }
         guard !own.isEmpty else { throw ScrollCaptureError.cannotExcludeExcerpt }
-        let filter = SCContentFilter(
-            display: display, excludingApplications: own, exceptingWindows: [])
+        return SCContentFilter(display: display, excludingApplications: own, exceptingWindows: [])
+    }
+
+    public func start(region: ScrollRegion) async throws {
+        precondition(stream == nil, "one stream per source: stop it before starting another")
+        let filter = try await Self.ownExcludingFilter(displayID: region.displayID)
         let configuration = SCStreamConfiguration()
         configuration.sourceRect = region.localPoints
         configuration.width = Int(region.pixelRect.width)
