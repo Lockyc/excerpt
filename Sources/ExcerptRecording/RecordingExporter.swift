@@ -19,6 +19,14 @@ public enum RecordingExporter {
     /// its stamp less this up to the next frame's stamp less this.
     public static let frameTolerance = 0.0005
 
+    /// The index of the frame the export renders at `t`, given the frames' stamps in order:
+    /// the last stamped at or before `t` within `frameTolerance`, else the first. Nil for no
+    /// stamps.
+    public static func frameIndex(at t: Double, in stamps: [Double]) -> Int? {
+        guard !stamps.isEmpty else { return nil }
+        return stamps.lastIndex { $0 <= t + frameTolerance } ?? 0
+    }
+
     /// Writes the primary `edits.format` asks for, every frame through `RecordingRenderer`: a
     /// GIF at 1×, at the first of `gifRates` that fits `byteBudget`, else an MP4; or an MP4 at
     /// the master's size rounded down to even. Replaces any primary already there and deletes
@@ -283,12 +291,13 @@ final class FrameReader {
         upcoming = nextFrame()
     }
 
-    /// The latest frame stamped at or before `t`, or the first frame read when none is.
+    /// The frame `RecordingExporter.frameIndex(at:in:)` picks at `t`.
     func frame(at t: Double) throws -> CGImage {
-        while let next = upcoming,
-            current == nil
-                || next.presentationTimeStamp.seconds <= t + RecordingExporter.frameTolerance
-        {
+        while let next = upcoming {
+            if let current {
+                let stamps = [current, next].map(\.presentationTimeStamp.seconds)
+                if RecordingExporter.frameIndex(at: t, in: stamps) == 0 { break }
+            }
             current = next
             image = nil
             upcoming = nextFrame()

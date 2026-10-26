@@ -121,12 +121,11 @@ public struct RecordingEditorModel {
         }
     }
 
-    /// The index of the frame the exporter renders at the playhead: the last stamped at or
-    /// before it within `RecordingExporter.frameTolerance`, else the first. Nil until the frame
-    /// stamps are read.
+    /// The index of the frame the exporter renders at the playhead. Nil until the frame stamps
+    /// are read.
     var shownFrameIndex: Int? {
-        guard case .read(let times) = frames, !times.isEmpty else { return nil }
-        return times.lastIndex { $0 <= playhead + RecordingExporter.frameTolerance } ?? 0
+        guard case .read(let times) = frames else { return nil }
+        return RecordingExporter.frameIndex(at: playhead, in: times)
     }
 
     /// The time the preview decodes its frame at, so it shows exactly `shownFrameIndex`'s
