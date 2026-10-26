@@ -1,6 +1,6 @@
 ---
 type: architecture
-description: excerpt's architecture of record — modules, the capture document and file model, the cut tool, capture and scrolling capture, the editor and exports.
+description: excerpt's architecture of record — modules, the capture document and file model, the cut tool, capture and scrolling capture, recording, the editor and exports.
 links:
   - rel: part-of
     to: CLAUDE.md
@@ -12,7 +12,8 @@ A macOS menu-bar screenshot tool: area / window / fullscreen / scrolling / text 
 floating preview, an annotation editor, and the **cut tool** — removing a band from the middle
 of a screenshot and marking the join with a torn seam, so a long sheet or page shows its header
 and footer without its body. Captures are routinely read by Claude, so tall output is exported
-in a shape Claude can read.
+in a shape Claude can read. It also **records** an area or window as a GIF or MP4 for pasting
+into GitHub, Slack and Google Chat, with shortcuts and clicks shown in the clip.
 
 ## Modules
 
@@ -21,9 +22,9 @@ AppKit / ScreenCaptureKit targets build in Swift 5 mode (see `Package.swift`).
 
 | Module | Owns | Depends on |
 |---|---|---|
-| `ExcerptCore` | The capture document (original image, cuts, annotations) as values; the pure algorithms — render, cut geometry, the original→rendered coordinate map, stitching, gap detection, tiling | CoreGraphics, ImageIO |
-| `ExcerptCapture` | ScreenCaptureKit capture, the multi-display selection overlay, the auto-scroll driver that feeds frames to Core's stitcher, the hotkey bindings and the rules that judge a rebinding | Core |
-| `ExcerptEditor` | Canvas, tools, undo; edits Core's document | Core |
+| `ExcerptCore` | The capture document (original image, cuts, annotations) as values; the pure algorithms — render, cut geometry, the original→rendered coordinate map, stitching, gap detection, tiling; the recording's edit document, its frame renderer, the shortcut filter and the GIF encoder | CoreGraphics, ImageIO |
+| `ExcerptCapture` | ScreenCaptureKit capture, the multi-display selection overlay, the auto-scroll driver that feeds frames to Core's stitcher, the recorder and its key and click log, the hotkey bindings and the rules that judge a rebinding | Core |
+| `ExcerptEditor` | Canvas, tools, undo; edits Core's document; the recording editor | Core |
 | `ExcerptExport` | Vision OCR, the For Claude bundle (tiles + `text.md`) and the `excerpt read` command, with no UI | Core, Vision |
 | `Excerpt` (app) | Menu bar, hotkey registration, preview thumbnail, settings, export UI, file I/O; runs `excerpt read` before AppKit starts | all |
 
@@ -87,7 +88,8 @@ The tear's shape is seeded from the cut's position, so identical edits render id
 | ⌘⇧3 | Window |
 | ⌘⇧4 | Area |
 | ⌘⇧5 | Capture text (OCR → clipboard, no file) |
-| ⌘⇧6 | Mode bar (area / scrolling / text / window / fullscreen) |
+| ⌘⇧6 | Mode bar (area / scrolling / text / window / fullscreen / record) |
+| ⌘⇧7 | Record (see [Recording](#recording)) |
 
 Hotkeys use Carbon `RegisterEventHotKey` (no permission, no dependency) and are all rebindable
 in Settings, which refuses a combination another action holds, one of the editor's shortcuts or
@@ -106,9 +108,9 @@ holding one.
   is saved. A note gives the line count, or says no text was found and leaves the clipboard
   alone.
 - **Mode bar:** the frozen screen opens with the area last picked from the bar (this launch)
-  already selected, and a bar of the five modes, each showing its hotkey, centred in it (below
-  or above a small one; below the pointer while nothing is selected). Area, Scrolling and Text
-  run on the selection and are dimmed without one; Window and Fullscreen ignore it and run on
+  already selected, and a bar of the six modes, each showing its hotkey, centred in it (below
+  or above a small one; below the pointer while nothing is selected). Area, Scrolling, Text and
+  Record run on the selection and are dimmed without one; Window and Fullscreen ignore it and run on
   the same stills. `Return` runs Area; scrolling over the selection starts Scrolling with you
   scrolling, as in scrolling mode.
 - **Adjusting a selection:** a selection that stays on screen (mode bar, scrolling) moves when
@@ -191,7 +193,106 @@ content can reach the edge), so an overlay scroll bar's thumb can appear along t
 without the scroll bar to avoid it).
 
 Permissions are requested on first use, per feature: Screen Recording for any capture,
-Accessibility for auto-scroll only.
+Accessibility for auto-scroll only, Input Monitoring for a recording's shortcuts only.
+
+## Recording
+
+Short clips for communication — a bug, a flow, "click here, then here" — pasted into a GitHub
+issue or PR, Slack or Google Chat. No audio, no webcam. GitHub's 10 MB image upload limit is
+the tightest of the three, so a GIF is fitted to it.
+
+### Starting, the control bar, stopping
+
+- **Record** (⌘⇧7, or Record on the mode bar) opens the frozen screen. A drag selects an area
+  (adjustable as on the mode bar, opening on the last recorded area of this launch); a click
+  with no drag records the window under the pointer, hover-highlighted as in Window mode; `F`
+  records the display under the pointer. `Return` or the selection's Record button starts. An
+  area lies on one display.
+- A **3-2-1 countdown** shows in the area before the first frame, so the clip doesn't open on
+  the reach for the mouse. While recording, the area has a thin outline.
+- **The control bar** — elapsed time, Pause/Resume, Stop, Discard — sits centred just below the
+  area, above it when the area meets the screen's bottom, beside it when neither has room, and
+  for a display recording at that display's bottom (or on another display when there is one).
+  It is draggable. The menu-bar icon becomes a stop button with the timer, as a backup.
+- **Stop:** the Record hotkey again, the bar's Stop, or the menu-bar icon. **Discard:** `Esc`
+  or the bar's Discard, dropping everything recorded.
+- **Pause** stops frames being written; Resume carries on with no gap in the clip's timeline,
+  so what is on screen while paused is never recorded, not even in the master.
+- A recording stops itself at `Recording.maximumDuration` (5 minutes of recorded time) and
+  saves; the bar shows the remaining time over its last 30 s.
+- Excerpt's own windows (outline, control bar, countdown, thumbnails) stay out of every frame
+  through the stream's filter, as for scrolling capture, wherever they sit. The cursor is
+  recorded. A window recording follows its window when it moves.
+
+### Shortcuts and clicks
+
+Both are **logged while recording and drawn when the file is rendered**, never put on screen
+during the recording, so the screen stays clean and either can be turned off afterwards.
+
+- **Shortcuts:** a listen-only event tap (Input Monitoring) logs a key press only when
+  `ShortcutFilter` (Core) passes it: any key held with ⌘, ⌃ or ⌥, and on their own (or with ⇧)
+  Return, Esc, Tab, ⌫, ⌦, the arrows, Home/End/Page Up/Page Down and the F-keys. A plain or
+  ⇧-shifted character is never logged, so typed text — a password, a token — never reaches the
+  master or the render. Rendered as a pill at the bottom centre of the frame, held 1.2 s after
+  the press, a repeat of the same combination within that time shown as `→ ×3`.
+- **Clicks:** left and right mouse-downs inside the recorded area or window are logged with
+  their position; rendered as a ring that expands and fades over 0.4 s (right clicks in a
+  second colour).
+- Without Input Monitoring the recording still runs with clicks only, and the editor's
+  Shortcuts toggle is disabled with the reason.
+
+### Files
+
+- **The primary** is `Excerpt 2026-10-26 at 09.43.29.gif` (or `.mp4`), the rendered clip:
+  trimmed, blurred, with its shortcuts and clicks drawn in. As for screenshots it never holds
+  what was trimmed off or blurred.
+- **The master is `… original.mov`**, always written, since the primary is a lossy render: the
+  recording at the stream's full pixel resolution (HEVC, 30 fps) with the event log and the
+  recording's edit document in the movie's metadata, so the edits travel inside the master as
+  they do in a screenshot's.
+- The library treats a recording pair as it does a PNG pair: Recent Captures lists recordings
+  (opening the recording editor), filing moves the master with its primary.
+
+### Output
+
+- **GIF** (the default): rendered at 1× (points), 15 fps, through `GIFEncoder`. When the result
+  exceeds `GIFEncoder.byteBudget` (10 MB) it is re-encoded at 10 fps; still over, the GIF is
+  not written and the thumbnail says it won't fit a 10 MB GIF and offers **Save as MP4**. A GIF
+  that won't upload is never handed over silently.
+- **MP4** (a setting, or chosen in the editor): H.264 at the master's full resolution, for the
+  widest playback in GitHub, Slack and Chat.
+- **`GIFEncoder`** (Core, pure): each frame is diffed against the previous output frame and only
+  the changed rectangle is stored, its unchanged pixels transparent; a frame with no change
+  extends the previous frame's delay. Each stored rectangle gets its own palette (up to 255
+  colours plus transparency, no dithering — screen content is flat colour, and dithering
+  defeats both the diff and LZW). Loops forever. Tested by decoding through ImageIO against the
+  rendered frames within the quantiser's error, and by golden files.
+
+### After stopping
+
+Saved, copied and shown as a thumbnail, as a screenshot is. The clipboard gets the primary as a
+file and as GIF data; drag from the thumbnail is the path that works everywhere. The thumbnail
+plays a GIF (an MP4 shows its first frame with a play glyph). **For Claude is disabled on a
+recording with its reason**, and Edit All gathers screenshots only.
+
+### The recording editor
+
+A window of its own (not the image editor), opened from the thumbnail's Edit or Recent
+Captures. It shows the frame at the playhead **rendered through Core's recording renderer**, the
+same one that writes the primary, so the preview is what saves.
+
+- **Trim:** a timeline under the frame, both ends draggable, with play/pause and scrubbing.
+- **Blur:** draw rectangles over the frame, applied by `BlurRenderer` (same grouping, blocks and
+  salt as a screenshot's), each over the whole clip by default or over a time span set from the
+  timeline. Blurs don't track moving content: what a demo needs hidden usually stays put, and
+  a moving secret is covered by a span-limited blur per position until tracking proves needed.
+- **Shortcuts** and **Clicks** toggles, and the output format (GIF / MP4).
+- `⌘S` renders the primary, rewrites the master's edit document, copies and closes; Discard as
+  in the image editor.
+
+The recording's edit document (`RecordingEdits`, Core, versioned) holds the trim, the blurs (in
+master pixels, each with an optional time span), the two toggles, the format and the blur salt.
+Render order per frame: blur → clicks → shortcuts → scale to the output size.
 
 ## Editor
 
