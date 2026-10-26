@@ -24,8 +24,8 @@ enum SyntheticMaster {
         async throws
     {
         let clock = TestClock()
-        let writer = try MasterWriter(
-            url: url, width: frames[0].width, height: frames[0].height, now: clock.now)
+        let writer = try writer(
+            url: url, width: frames[0].width, height: frames[0].height, log: log, clock: clock)
         for (index, frame) in frames.enumerated() {
             let time = Double(index) / Double(fps)
             clock.set(seconds: time)
@@ -33,6 +33,19 @@ enum SyntheticMaster {
         }
         clock.set(seconds: Double(frames.count) / Double(fps))
         try await writer.finish(log: log)
+    }
+
+    /// A writer for `log`'s scale on `clock`, storing the log at `finish` through `writeEvents`.
+    static func writer(
+        url: URL, width: Int, height: Int, log: RecordingEventLog = SyntheticMaster.log,
+        clock: TestClock = TestClock(),
+        writeEvents: @escaping @Sendable (RecordingEventLog, URL) async throws -> Void = {
+            try await RecordingMaster.writeMetadata(log: $0, edits: nil, to: $1)
+        }
+    ) throws -> MasterWriter {
+        try MasterWriter(
+            url: url, width: width, height: height, scale: log.scale,
+            shortcutsLogged: log.shortcutsLogged, now: clock.now, writeEvents: writeEvents)
     }
 
     /// Appends `frame` stamped `seconds`, once the writer can take it: a real-time input drops
