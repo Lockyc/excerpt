@@ -29,7 +29,7 @@ public enum RecordingExporter {
 
     /// Writes the primary `edits.format` asks for, every frame through `RecordingRenderer`: a
     /// GIF at 1×, at the first of `gifRates` that fits `byteBudget`, else an MP4; or an MP4 at
-    /// the master's size rounded down to even. Replaces any primary already there and deletes
+    /// `mp4Frame`'s size. Replaces any primary already there and deletes
     /// the other format's. Throws `exportFailed` when the trim keeps none of the master.
     public static func export(
         _ master: RecordingMaster, edits: RecordingEdits, to paths: RecordingPaths,
@@ -126,12 +126,42 @@ public enum RecordingExporter {
         return samples
     }
 
-    /// The H.264 MP4 at `mp4Rate`, at the master's pixel size rounded down to even.
+    /// The most 16 × 16 macroblocks an H.264 frame may hold: level 5.1/5.2's MaxFS, 4096 × 2304.
+    /// It is the largest frame decoders are required to play, and a 5K or 6K display's full
+    /// resolution is larger; the MP4 is also the GIF's fallback, so it must play wherever it lands.
+    static let h264MaximumMacroblocks = 36_864
+
+    /// The MP4's frame for a master of `pixelSize`: its size rounded down to even, or scaled
+    /// down, aspect kept, until it fits `h264MaximumMacroblocks`. `outputScale` is the renderer's
+    /// output pixels per master pixel, 1 when unscaled; the rendered frame covers the video,
+    /// overshooting by a pixel or two the encode drops.
+    static func mp4Frame(for pixelSize: CGSize) -> (width: Int, height: Int, outputScale: Double) {
+        func macroblocks(_ width: Int, _ height: Int) -> Int {
+            ((width + 15) / 16) * ((height + 15) / 16)
+        }
+        let masterWidth = max(2, Int(pixelSize.width))
+        let masterHeight = max(2, Int(pixelSize.height))
+        var width = masterWidth / 2 * 2
+        var height = masterHeight / 2 * 2
+        guard macroblocks(width, height) > h264MaximumMacroblocks else {
+            return (width, height, 1)
+        }
+        var scale = (Double(h264MaximumMacroblocks * 256) / Double(width * height)).squareRoot()
+        repeat {
+            width = max(2, Int(Double(masterWidth) * scale) / 2 * 2)
+            height = max(2, Int(Double(masterHeight) * scale) / 2 * 2)
+            scale *= 0.999
+        } while macroblocks(width, height) > h264MaximumMacroblocks
+        let outputScale = max(
+            Double(width) / Double(masterWidth), Double(height) / Double(masterHeight))
+        return (width, height, outputScale)
+    }
+
+    /// The H.264 MP4 at `mp4Rate`, at `mp4Frame`'s size.
     private static func mp4(
         _ master: RecordingMaster, edits: RecordingEdits, trim: ClosedRange<Double>, to url: URL
     ) async throws {
-        let width = max(2, Int(master.pixelSize.width) / 2 * 2)
-        let height = max(2, Int(master.pixelSize.height) / 2 * 2)
+        let (width, height, outputScale) = mp4Frame(for: master.pixelSize)
         let writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
         let input = AVAssetWriterInput(
             mediaType: .video,
@@ -156,7 +186,7 @@ public enum RecordingExporter {
             times: samples(over: trim, fps: mp4Rate).map(\.time), start: trim.lowerBound
         ) { frame, time in
             RecordingRenderer.render(
-                frame, at: time, log: master.log, edits: edits, outputScale: 1)
+                frame, at: time, log: master.log, edits: edits, outputScale: outputScale)
         }
         do {
             try await encode.run()

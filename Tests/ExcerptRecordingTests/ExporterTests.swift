@@ -95,6 +95,43 @@ import Testing
         #expect(try await Self.videoSize(mp4.url) == CGSize(width: 666, height: 402))
     }
 
+    @Test func anMP4FitsH264sLargestFrame() {
+        func macroblocks(_ frame: (width: Int, height: Int, outputScale: Double)) -> Int {
+            ((frame.width + 15) / 16) * ((frame.height + 15) / 16)
+        }
+        let limit = RecordingExporter.h264MaximumMacroblocks
+        let fourK = RecordingExporter.mp4Frame(for: CGSize(width: 3840, height: 2160))
+        #expect(fourK == (3840, 2160, 1))
+        let odd = RecordingExporter.mp4Frame(for: CGSize(width: 667, height: 403))
+        #expect(odd == (666, 402, 1))
+        let fiveK = RecordingExporter.mp4Frame(for: CGSize(width: 5120, height: 2880))
+        #expect(fiveK.width == 4096 && fiveK.height == 2304)
+        #expect(fiveK.outputScale == 0.8)
+
+        for size in [
+            CGSize(width: 6016, height: 3384), CGSize(width: 5120, height: 2880),
+            CGSize(width: 8001, height: 1501), CGSize(width: 2000, height: 5000),
+        ] {
+            let frame = RecordingExporter.mp4Frame(for: size)
+            #expect(macroblocks(frame) <= limit, "\(size)")
+            #expect(macroblocks(frame) > limit * 99 / 100, "\(size) scaled further than needed")
+            #expect(frame.width % 2 == 0 && frame.height % 2 == 0)
+            let aspect = Double(frame.width) / Double(frame.height)
+            #expect(abs(aspect / (size.width / size.height) - 1) < 0.005, "\(size)")
+            // The renderer's frame at this scale covers the video.
+            #expect(Int((size.width * frame.outputScale).rounded()) >= frame.width)
+            #expect(Int((size.height * frame.outputScale).rounded()) >= frame.height)
+        }
+    }
+
+    @Test func aFiveKRecordingExportsAnMP4() async throws {
+        let (master, paths) = try await SyntheticMaster.master(
+            Self.moving(2, width: 5120, height: 2880))
+        let mp4 = try await RecordingExporter.export(
+            master, edits: .fresh(duration: master.duration, format: .mp4), to: paths)
+        #expect(try await Self.videoSize(mp4.url) == CGSize(width: 4096, height: 2304))
+    }
+
     @Test func switchingFormatRemovesTheOtherPrimary() async throws {
         let (master, paths) = try await SyntheticMaster.master(Self.moving(5))
         _ = try await RecordingExporter.export(

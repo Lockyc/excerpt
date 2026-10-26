@@ -274,7 +274,8 @@ during the recording, so the screen stays clean and either can be turned off aft
   the primary is written as an MP4 instead, and the thumbnail (or the editor's save) says it
   was too long for a 10 MB GIF. A GIF that won't upload is never handed over, and a recording
   always has a primary.
-- **MP4** (a setting, or chosen in the editor): H.264 at the master's full resolution, for the
+- **MP4** (a setting, or chosen in the editor): H.264 at the master's full resolution (scaled down to H.264's
+  largest frame, `RecordingExporter.h264MaximumMacroblocks`, on a 5K or 6K display), for the
   widest playback in GitHub, Slack and Chat.
 - **`GIFEncoder`** (Core, pure): each frame is diffed against the previous frame — the source,
   not the quantised output, so an unchanged lossy pixel isn't re-stored every frame — and only
