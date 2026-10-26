@@ -21,6 +21,8 @@ final class CaptureCoordinator {
     private var frontmostAtStart: NSRunningApplication?
     /// The recording in progress.
     private var recording: RecordingSession?
+    /// Stopped recordings still being rendered, saved and delivered.
+    private var saves: [UUID: Task<Void, Never>] = [:]
     /// The area last recorded, for the next recording to open on; held for this launch.
     private var lastRecordRegion: ScrollRegion?
     /// Whether this launch has asked for Input Monitoring.
@@ -234,7 +236,7 @@ final class CaptureCoordinator {
     }
 
     /// Records the selected area until it is stopped or discarded, then saves, copies and shows
-    /// it. With `window`, the window clicked to select it, only that app's shortcuts are
+    /// it, the save outliving this capture. With `window`, the window clicked to select it, only that app's shortcuts are
     /// logged; an area or display recording logs them from any app.
     private func record(
         still: DisplayStill, pixelRect rect: CGRect, window: CapturableWindow?,
@@ -279,8 +281,13 @@ final class CaptureCoordinator {
             Alerts.show(
                 "Recording failed", Alerts.sentence(error.localizedDescription) + kept)
         case .saved(let master, let stoppedEarly, let eventsSaved):
-            await deliverRecording(
-                master, paths: paths, stoppedEarly: stoppedEarly, eventsSaved: eventsSaved)
+            // Its own task, so the hotkeys work again while it renders: this capture ends now.
+            let id = UUID()
+            saves[id] = Task {
+                await deliverRecording(
+                    master, paths: paths, stoppedEarly: stoppedEarly, eventsSaved: eventsSaved)
+                saves[id] = nil
+            }
         }
     }
 
