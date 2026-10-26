@@ -94,8 +94,11 @@ public struct RecordingEditorModel {
         selection = edits.blurs.count - 1
     }
 
+    /// Puts blur `index` back over the whole clip.
+    public mutating func setWholeClip(ofBlur index: Int) { setSpan(nil, ofBlur: index) }
+
     /// Limits blur `index` to `span`, kept inside the clip; nil covers the whole clip.
-    public mutating func setSpan(_ span: ClosedRange<Double>?, ofBlur index: Int) {
+    private mutating func setSpan(_ span: ClosedRange<Double>?, ofBlur index: Int) {
         guard edits.blurs.indices.contains(index) else { return }
         let kept = span.map { span in
             min(max(span.lowerBound, 0), duration)...min(max(span.upperBound, 0), duration)
