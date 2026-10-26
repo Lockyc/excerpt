@@ -154,20 +154,22 @@ public struct RecordingEditorModel {
     }
 
     /// Starts blur `index` with the frame at the playhead, keeping its end when that is still
-    /// after the playhead, else ending it with the trim; it always covers that frame.
+    /// after the playhead, else running it to the clip's end, so a wider trim later still hides
+    /// what it hides; it always covers that frame.
     public mutating func startSpan(ofBlur index: Int) {
         guard edits.blurs.indices.contains(index), let frame = shownFrame else { return }
         let kept = edits.blurs[index].span?.upperBound
-        let end = kept.flatMap { $0 > playhead ? $0 : nil } ?? edits.trim.upperBound
+        let end = kept.flatMap { $0 > playhead ? $0 : nil } ?? duration
         setSpan(frame.lowerBound...max(end, frame.upperBound), ofBlur: index)
     }
 
     /// Ends blur `index` with the frame at the playhead, keeping its start when that is still
-    /// before the playhead, else starting it with the trim; it always covers that frame.
+    /// before the playhead, else starting it with the clip, so a wider trim later still hides
+    /// what it hides; it always covers that frame.
     public mutating func endSpan(ofBlur index: Int) {
         guard edits.blurs.indices.contains(index), let frame = shownFrame else { return }
         let kept = edits.blurs[index].span?.lowerBound
-        let start = kept.flatMap { $0 < playhead ? $0 : nil } ?? edits.trim.lowerBound
+        let start = kept.flatMap { $0 < playhead ? $0 : nil } ?? 0
         setSpan(min(start, frame.lowerBound)...frame.upperBound, ofBlur: index)
     }
 

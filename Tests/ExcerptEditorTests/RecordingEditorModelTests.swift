@@ -96,6 +96,30 @@ import Testing
         #expect(lastSpan.upperBound == 10)
     }
 
+    /// A span's open end runs to the clip's edge, not the trim's, so widening the trim later
+    /// never exposes what the blur was hiding.
+    @Test func aSpanSetInsideATrimKeepsCoveringWhenTheTrimWidens() throws {
+        var ended = model()
+        ended.setTrim(2...8)
+        ended.addBlur(CGRect(x: 0, y: 0, width: 50, height: 50))
+        ended.playhead = 5
+        ended.endSpan(ofBlur: 0)
+        ended.setTrim(0...10)
+        for sample in RecordingExporter.samples(over: 0...10, fps: 30) where sample.time < 2 {
+            #expect(!ended.edits.blurRects(at: sample.time).isEmpty, "\(sample.time) s")
+        }
+
+        var started = model()
+        started.setTrim(2...8)
+        started.addBlur(CGRect(x: 0, y: 0, width: 50, height: 50))
+        started.playhead = 5
+        started.startSpan(ofBlur: 0)
+        started.setTrim(0...10)
+        for sample in RecordingExporter.samples(over: 0...10, fps: 30) where sample.time > 8 {
+            #expect(!started.edits.blurRects(at: sample.time).isEmpty, "\(sample.time) s")
+        }
+    }
+
     @Test func spansWaitForTheFrameTimes() {
         var model = RecordingEditorModel(
             duration: 10, pixelSize: CGSize(width: 400, height: 300),
