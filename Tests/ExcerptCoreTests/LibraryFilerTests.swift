@@ -155,3 +155,41 @@ import Testing
         #expect(filed.moved.isEmpty && filed.failed.isEmpty)
     }
 }
+
+extension LibraryFilerTests {
+    @Test func filerMovesARecordingWithItsMaster() throws {
+        let folder = try tempFolder()
+        for (ext, second) in [("gif", "00"), ("mp4", "01")] {
+            let base = "Excerpt 2026-09-05 at 10.00.\(second)"
+            try make("\(base).\(ext)", in: folder, created: now - 40 * day)
+            try make("\(base) original.mov", in: folder, created: now - 1 * day)
+        }
+        let filed = try LibraryFiler(folder: folder, timeZone: utc).file(now: now)
+
+        #expect(filed.failed.isEmpty)
+        for name in [
+            "Excerpt 2026-09-05 at 10.00.00.gif", "Excerpt 2026-09-05 at 10.00.00 original.mov",
+            "Excerpt 2026-09-05 at 10.00.01.mp4", "Excerpt 2026-09-05 at 10.00.01 original.mov",
+        ] {
+            #expect(exists(folder, "2026/09-September/\(name)"))
+            #expect(!exists(folder, name))
+        }
+    }
+
+    @Test func aRecordingMasterStaysWhileItsPrimaryIsRecent() throws {
+        let folder = try tempFolder()
+        try make("Shot.gif", in: folder, created: now - 5 * day)
+        try make("Shot original.mov", in: folder, created: now - 40 * day)
+        let filed = try LibraryFiler(folder: folder, timeZone: utc).file(now: now)
+
+        #expect(filed.moved.isEmpty)
+    }
+
+    @Test func aRecordingMasterWithoutItsPrimaryIsFiledByItsOwnDate() throws {
+        let folder = try tempFolder()
+        try make("Shot original.mov", in: folder, created: now - 70 * day)
+        try LibraryFiler(folder: folder, timeZone: utc).file(now: now)
+
+        #expect(exists(folder, "2026/08-August/Shot original.mov"))
+    }
+}

@@ -29,6 +29,22 @@ public struct LoadedCapture {
     public let supersedesMaster: Bool
 }
 
+/// Where a recording's files live: `<base>.gif` or `<base>.mp4` is the primary, `<base> original.mov`
+/// its master.
+public struct RecordingPaths: Sendable, Equatable {
+    /// The path without extension.
+    public let base: URL
+
+    public var master: URL {
+        base.deletingLastPathComponent().appendingPathComponent(
+            LibraryNaming.recordingMasterName(forBase: base.lastPathComponent))
+    }
+
+    public func primary(_ format: RecordingFormat) -> URL {
+        URL(fileURLWithPath: base.path + "." + format.rawValue)
+    }
+}
+
 /// Reads and writes captures in the library folder. The primary is always the clean render; the
 /// master holds the original pixels and the edits.
 public struct LibraryStore: Sendable {
@@ -46,25 +62,56 @@ public struct LibraryStore: Sendable {
     public func saveCapture(_ image: CGImage, scale: Double, at date: Date) throws -> URL {
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let data = try PNGCodec.encode(image, scale: scale)
+        let base = firstFreeBase(at: date)
+        let url = URL(fileURLWithPath: base.path + ".png")
+        try data.write(to: url, options: .withoutOverwriting)
+        return url
+    }
+
+    /// Picks the name a recording will be written under, creating the folder. Nothing but the
+    /// folder is created: the caller writes the files, and the reservation holds only until it
+    /// does.
+    public func reserveRecording(at date: Date) throws -> RecordingPaths {
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        return RecordingPaths(base: firstFreeBase(at: date))
+    }
+
+    /// The paths of the recording whose primary is `url`; nil unless it is a `.gif` or `.mp4`.
+    public func recordingPaths(forPrimary url: URL) -> RecordingPaths? {
+        guard LibraryNaming.recordingExtensions.contains(url.pathExtension.lowercased()) else {
+            return nil
+        }
+        return RecordingPaths(base: url.deletingPathExtension())
+    }
+
+    /// The first base, `<base>` then `<base> (2)`…, none of whose primaries (`.png`, `.gif`,
+    /// `.mp4`) or masters (`original.png`, `original.mov`) exist: a screenshot and a recording
+    /// never share a base.
+    private func firstFreeBase(at date: Date) -> URL {
         let base = naming.baseName(for: date)
         var counter = 1
         while true {
-            let name = counter == 1 ? "\(base).png" : "\(base) (\(counter)).png"
-            let url = folder.appendingPathComponent(name)
-            let master = folder.appendingPathComponent(LibraryNaming.originalName(forPrimary: name))
-            if !FileManager.default.fileExists(atPath: url.path)
-                && !FileManager.default.fileExists(atPath: master.path)
-            {
-                try data.write(to: url, options: .withoutOverwriting)
-                return url
+            let name = counter == 1 ? base : "\(base) (\(counter))"
+            let candidate = folder.appendingPathComponent(name)
+            let taken =
+                (["png"] + LibraryNaming.recordingExtensions).map { "\(name).\($0)" }
+                + [
+                    LibraryNaming.originalName(forPrimary: "\(name).png"),
+                    LibraryNaming.recordingMasterName(forBase: name),
+                ]
+            if !taken.contains(where: {
+                FileManager.default.fileExists(atPath: folder.appendingPathComponent($0).path)
+            }) {
+                return candidate
             }
             counter += 1
         }
     }
 
-    /// The newest `limit` PNGs in the folder by creation date, masters left out (opening a
-    /// primary loads its master's edits). Ordered by creation, not modification, because every
-    /// save re-renders the primary. A missing folder has none.
+    /// The newest `limit` screenshots and recordings (`.png`, `.gif`, `.mp4`) in the folder by
+    /// creation date, masters left out (opening a primary loads its master's edits). Ordered by
+    /// creation, not modification, because every save re-renders the primary. A missing folder
+    /// has none.
     public func recentCaptures(limit: Int) throws -> [URL] {
         let keys: [URLResourceKey] = [.creationDateKey, .isRegularFileKey]
         let contents: [URL]
@@ -76,7 +123,9 @@ public struct LibraryStore: Sendable {
         }
         let dated = try contents.compactMap { url -> (URL, Date)? in
             let name = url.lastPathComponent
-            guard name.lowercased().hasSuffix(".png"),
+            guard
+                (["png"] + LibraryNaming.recordingExtensions).contains(
+                    url.pathExtension.lowercased()),
                 LibraryNaming.primaryName(forOriginal: name) == nil
             else { return nil }
             let values = try url.resourceValues(forKeys: Set(keys))

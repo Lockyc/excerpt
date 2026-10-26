@@ -38,3 +38,21 @@ public struct LibraryNaming: Sendable {
         return String(original.dropLast(originalSuffix.count)) + ".png"
     }
 }
+
+extension LibraryNaming {
+    public static let recordingMasterSuffix = " original.mov"
+
+    /// The primary formats of a recording, as file extensions.
+    public static let recordingExtensions = ["gif", "mp4"]
+
+    /// The master's name for a recording whose primary is `<base>.gif` or `<base>.mp4`.
+    public static func recordingMasterName(forBase base: String) -> String {
+        base + recordingMasterSuffix
+    }
+
+    /// nil when `master` is not a recording master's name.
+    public static func recordingBase(forMaster master: String) -> String? {
+        guard master.hasSuffix(recordingMasterSuffix) else { return nil }
+        return String(master.dropLast(recordingMasterSuffix.count))
+    }
+}
