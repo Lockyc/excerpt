@@ -118,17 +118,37 @@ public struct RecordingEditorModel {
         }
     }
 
-    /// Every time at which the exporter renders the frame shown at the playhead: from that
-    /// frame's stamp to the next one's, both less `RecordingExporter.frameTolerance` (the
-    /// start a hair earlier still, so rounding never lets an export sample of the frame fall
-    /// before it), never empty. Nil until the frame stamps are read. A span set at the
-    /// playhead covers all of it, so no sample of the frame it was set on renders unblurred.
-    var shownFrame: ClosedRange<Double>? {
+    /// The index of the frame the exporter renders at the playhead: the last stamped at or
+    /// before it within `RecordingExporter.frameTolerance`, else the first. Nil until the frame
+    /// stamps are read.
+    var shownFrameIndex: Int? {
         guard case .read(let times) = frames, !times.isEmpty else { return nil }
+        return times.lastIndex { $0 <= playhead + RecordingExporter.frameTolerance } ?? 0
+    }
+
+    /// The time the preview decodes its frame at, so it shows exactly `shownFrameIndex`'s
+    /// frame: midway to the next stamp (to the clip's end after the last), well clear of both
+    /// edges, so neither the decoder's time rounding nor the tolerance can land it on a
+    /// neighbour. Until the stamps are read, the playhead, kept short of the clip's end, where
+    /// no frame decodes.
+    var previewFrameTime: Double {
+        guard case .read(let times) = frames, let k = shownFrameIndex else {
+            return min(playhead, max(duration - 1.0 / 600, 0))
+        }
+        let next = k + 1 < times.count ? times[k + 1] : max(duration, times[k])
+        return (times[k] + next) / 2
+    }
+
+    /// Every time at which the exporter renders the frame shown at the playhead: from that
+    /// frame's stamp to the next one's, both less `RecordingExporter.frameTolerance` and
+    /// widened a hair either way so rounding never lets an export sample of the frame fall
+    /// outside, never empty. Nil until the frame stamps are read. A span set at the playhead
+    /// covers all of it, so no sample of the frame it was set on renders unblurred.
+    var shownFrame: ClosedRange<Double>? {
+        guard case .read(let times) = frames, let k = shownFrameIndex else { return nil }
         let tolerance = RecordingExporter.frameTolerance
-        let k = times.lastIndex { $0 <= playhead + tolerance } ?? 0
         let start = k == 0 ? 0 : max(0, times[k] - tolerance - 1e-6)
-        let next = k + 1 < times.count ? times[k + 1] - tolerance : duration
+        let next = k + 1 < times.count ? min(duration, times[k + 1] - tolerance + 1e-6) : duration
         let end = max(next, min(duration, start + 1 / Double(MasterWriter.frameRate)))
         return start...max(end, start)
     }

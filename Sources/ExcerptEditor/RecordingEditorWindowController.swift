@@ -17,7 +17,7 @@ public final class RecordingEditorWindowController: NSWindowController, NSWindow
     private var model: RecordingEditorModel {
         didSet { modelChanged(from: oldValue) }
     }
-    private let save: (RecordingEdits, _ changed: Bool) async -> Bool
+    private let save: (RecordingEdits) async -> Bool
     private let onClose: () -> Void
     private let preview: FramePreview
     private let frameView: RecordingFrameView
@@ -39,13 +39,13 @@ public final class RecordingEditorWindowController: NSWindowController, NSWindow
     private var frameUnreadable = false
 
     /// `master` is the recording and `primary` its rendered file, named on the window;
-    /// `defaultFormat` is the format of a master that carries no edits yet. `save` writes the
-    /// edits to the master, renders the primary and copies it, or with `changed` false only
-    /// copies, telling the user of any failure, and returns whether it worked. `onClose` runs once
-    /// the window has closed.
+    /// `defaultFormat` is the format of a master that carries no edits yet. `save` renders the
+    /// primary from the edits, writes them to the master and copies the primary, telling the
+    /// user of any failure, and returns whether it worked. `onClose` runs once the window has
+    /// closed.
     public init(
         master: RecordingMaster, primary: URL, defaultFormat: RecordingFormat = .gif,
-        save: @escaping (RecordingEdits, _ changed: Bool) async -> Bool,
+        save: @escaping (RecordingEdits) async -> Bool,
         onClose: @escaping () -> Void
     ) {
         model = RecordingEditorModel(master: master, defaultFormat: defaultFormat)
@@ -277,11 +277,18 @@ public final class RecordingEditorWindowController: NSWindowController, NSWindow
     // MARK: State
 
     private func modelChanged(from old: RecordingEditorModel) {
-        if model.edits != old.edits || model.playhead != old.playhead { render() }
+        if model.edits != old.edits || model.playhead != old.playhead
+            || model.previewFrameTime != old.previewFrameTime
+        {
+            render()
+        }
         update()
     }
 
-    private func render() { preview.request(at: model.playhead, edits: model.edits) }
+    private func render() {
+        preview.request(
+            .init(frame: model.previewFrameTime, render: model.playhead), edits: model.edits)
+    }
 
     /// Brings the controls, timeline and frame overlay in line with the model.
     private func update() {
@@ -305,9 +312,7 @@ public final class RecordingEditorWindowController: NSWindowController, NSWindow
         redoButton.toolTip = model.canRedo ? "Redo (⇧⌘Z)" : "Nothing to redo"
         discardButton.isEnabled = enabled
         saveButton.isEnabled = enabled
-        saveButton.toolTip =
-            model.hasUnsavedChanges
-            ? "Save, copy the recording and close (⌘S)" : "Copy the recording and close (⌘S)"
+        saveButton.toolTip = "Save, copy the recording and close (⌘S)"
         playButton.isEnabled = enabled
         let playing = player != nil
         playButton.image = NSImage(
@@ -443,8 +448,9 @@ public final class RecordingEditorWindowController: NSWindowController, NSWindow
         window?.close()
     }
 
-    /// ⌘S: writes the edits and the primary, copies it and closes; with nothing unsaved it only
-    /// copies. A failed save leaves the window open.
+    /// ⌘S: renders the primary from the edits, writes them to the master, copies it and
+    /// closes, edited or not, so what is copied is always the render of the edits shown. A
+    /// failed save leaves the window open.
     @objc func saveDocument() {
         write { [weak self] saved in
             if saved { self?.window?.close() }
@@ -457,12 +463,11 @@ public final class RecordingEditorWindowController: NSWindowController, NSWindow
         guard !saving else { return }
         pause()
         let edits = model.edits
-        let changed = model.hasUnsavedChanges
         saving = true
         update()
         Task { [weak self] in
             guard let self else { return }
-            let saved = await save(edits, changed)
+            let saved = await save(edits)
             saving = false
             if saved && model.edits == edits { model.markSaved() }
             update()
