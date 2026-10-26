@@ -223,7 +223,7 @@ the tightest of the three, so a GIF is fitted to it.
   or with the control bar focused.
 - **Pause** stops frames being written; Resume carries on with no gap in the clip's timeline,
   so what is on screen while paused is never recorded, not even in the master.
-- A recording stops itself at `Recording.maximumDuration` (5 minutes of recorded time) and
+- A recording stops itself at `ScreenRecorder.maximumDuration` (5 minutes of recorded time) and
   saves; the bar shows the remaining time over its last 30 s.
 - Excerpt's own windows (outline, control bar, countdown, thumbnails) stay out of every frame
   through the stream's filter, as for scrolling capture, wherever they sit. The cursor is

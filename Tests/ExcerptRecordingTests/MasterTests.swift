@@ -1,5 +1,6 @@
 import AVFoundation
 import ExcerptCore
+import ExcerptTestSupport
 import Foundation
 import Testing
 
@@ -46,7 +47,7 @@ import Testing
         writer.pause()
         for index in 20..<40 {
             clock.set(seconds: Double(index) / 10)
-            writer.append(SyntheticMaster.sampleBuffer(paused, at: Double(index) / 10))
+            writer.append(SampleBuffers.sample(paused, at: Double(index) / 10))
         }
         #expect(abs(writer.recordedTime - 1) < 0.001)
         clock.set(seconds: 5)
@@ -114,8 +115,8 @@ import Testing
         let writer = try SyntheticMaster.writer(url: url, width: 64, height: 48)
         try FileManager.default.removeItem(at: folder)
         let frame = SyntheticMaster.solid(Self.grey, width: 64, height: 48)
-        writer.append(SyntheticMaster.sampleBuffer(frame, at: 0))
-        writer.append(SyntheticMaster.sampleBuffer(frame, at: 0.1))
+        writer.append(SampleBuffers.sample(frame, at: 0))
+        writer.append(SampleBuffers.sample(frame, at: 0.1))
         #expect(writer.frameCount == 0)
         await #expect {
             try await writer.finish(log: SyntheticMaster.log)

@@ -40,7 +40,9 @@ let package = Package(
             exclude: ["Goldens"]),
         .testTarget(
             name: "ExcerptCaptureTests",
-            dependencies: ["ExcerptCapture", "ExcerptEditor", "ExcerptTestSupport"],
+            dependencies: [
+                "ExcerptCapture", "ExcerptEditor", "ExcerptRecording", "ExcerptTestSupport",
+            ],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .testTarget(
