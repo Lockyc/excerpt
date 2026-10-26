@@ -187,6 +187,9 @@ final class SettingsModel: ObservableObject {
     @Published var backdropStyle: BackdropStyle {
         didSet { preferences.backdropStyle = backdropStyle }
     }
+    @Published var recordingFormat: RecordingFormat {
+        didSet { preferences.recordingFormat = recordingFormat }
+    }
     @Published var backdrop: Color {
         didSet {
             guard let c = NSColor(backdrop).usingColorSpace(.sRGB) else { return }
@@ -207,6 +210,7 @@ final class SettingsModel: ObservableObject {
         windowBackdrop = preferences.windowBackdrop
         padding = preferences.windowPaddingPoints
         backdropStyle = preferences.backdropStyle
+        recordingFormat = preferences.recordingFormat
         let c = preferences.backdropColor
         backdrop = Color(
             .sRGB, red: Double(c.r) / 255, green: Double(c.g) / 255, blue: Double(c.b) / 255)
@@ -267,6 +271,18 @@ struct SettingsView: View {
                     Text("The colour fills in when the wallpaper can't be captured.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
+            }
+            Section("Recording") {
+                Picker("Save recordings as", selection: $model.recordingFormat) {
+                    Text("GIF").tag(RecordingFormat.gif)
+                    Text("MP4").tag(RecordingFormat.mp4)
+                }
+                Text(
+                    model.recordingFormat == .gif
+                        ? "A recording too long for a \(RecordingNote.gifLimit) GIF is saved as MP4."
+                        : "MP4 keeps the recording's full resolution."
+                )
+                .font(.caption).foregroundStyle(.secondary)
             }
             Section {
                 ForEach(HotKeyAction.allCases, id: \.self) { action in

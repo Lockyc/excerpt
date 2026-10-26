@@ -1,4 +1,5 @@
 import AppKit
+import UniformTypeIdentifiers
 
 @MainActor
 enum Pasteboard {
@@ -17,6 +18,21 @@ enum Pasteboard {
         board.clearContents()
         guard board.setString(text, forType: .string) else { throw WriteFailed() }
     }
+
+    /// Puts a recording's primary on the clipboard as one item: the file, and for a GIF its
+    /// data too, for apps that paste images but not files.
+    static func copyRecording(at url: URL) throws {
+        let item = NSPasteboardItem()
+        guard item.setString(url.absoluteString, forType: .fileURL) else { throw WriteFailed() }
+        if url.pathExtension.lowercased() == "gif" {
+            guard item.setData(try Data(contentsOf: url), forType: gif) else { throw WriteFailed() }
+        }
+        let board = NSPasteboard.general
+        board.clearContents()
+        guard board.writeObjects([item]) else { throw WriteFailed() }
+    }
+
+    private static let gif = NSPasteboard.PasteboardType(UTType.gif.identifier)
 
     /// The providers of the TIFFs on the clipboard now, held until the pasteboard is done with
     /// each.

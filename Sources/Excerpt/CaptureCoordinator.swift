@@ -2,6 +2,7 @@ import AppKit
 import ExcerptCapture
 import ExcerptCore
 import ExcerptExport
+import ExcerptRecording
 
 /// Runs one capture end to end: permission → frozen stills → selection → image → deliver.
 /// Main-actor: the overlay, alerts and sound are AppKit, and a plain async method would run off
@@ -11,7 +12,17 @@ final class CaptureCoordinator {
     private let preferences: Preferences
     private let capturer = ScreenCapturer()
     private let onDelivered: (URL, CGImage) -> Void
+    /// A recording's primary, its first frame, and the note its thumbnail shows.
+    private let onRecorded: (URL, CGImage, String?) -> Void
+    /// The recorded time as the menu bar shows it while recording; nil once it has ended.
+    private let onRecordingTime: (String?) -> Void
     private var running = false
+    /// The recording in progress.
+    private var recording: RecordingSession?
+    /// The area last recorded, for the next recording to open on; held for this launch.
+    private var lastRecordRegion: ScrollRegion?
+    /// Whether this launch has asked for Input Monitoring.
+    private var askedForInputMonitoring = false
     /// The overlay waiting on a selection, and the mode it is selecting for.
     private var selecting: (overlay: SelectionOverlay, action: HotKeyAction)?
     /// The mode a hotkey pressed mid-selection switched to.
@@ -31,12 +42,26 @@ final class CaptureCoordinator {
             "/System/Library/Components/CoreAudio.component/Contents/SharedSupport/SystemSounds/system/Screen Capture.aif",
         byReference: true)
 
-    init(preferences: Preferences, onDelivered: @escaping (URL, CGImage) -> Void) {
+    init(
+        preferences: Preferences, onDelivered: @escaping (URL, CGImage) -> Void,
+        onRecorded: @escaping (URL, CGImage, String?) -> Void,
+        onRecordingTime: @escaping (String?) -> Void
+    ) {
         self.preferences = preferences
         self.onDelivered = onDelivered
+        self.onRecorded = onRecorded
+        self.onRecordingTime = onRecordingTime
     }
 
+    /// Stops the recording in progress, if any, keeping it.
+    func stopRecording() { recording?.stop() }
+
     func run(_ requested: HotKeyAction) async {
+        // The Record hotkey again is one of the ways to stop.
+        if requested == .record, let recording {
+            recording.stop()
+            return
+        }
         guard !running else {
             switchMode(to: requested)
             return
@@ -46,6 +71,7 @@ final class CaptureCoordinator {
         started += 1
         guard ensurePermission() else { return }
         if requested == .scrolling && !scrollingMayStart() { return }
+        if requested == .record { askForInputMonitoring() }
         // Up before the stills are taken, so a click made meanwhile lands on the overlay.
         let overlay = SelectionOverlay()
         defer { overlay.close() }
@@ -137,6 +163,14 @@ final class CaptureCoordinator {
             default:
                 break
             }
+        case .record:
+            let windows = try await capturer.windowsFrontToBack()
+            if case .area(let still, let rect) = await select(
+                .recordingArea(previous: lastRecordRegion, windows: windows), for: action,
+                overlay: overlay, stills: stills)
+            {
+                await record(still: still, pixelRect: rect, windows: windows, overlay: overlay)
+            }
         case .selector:
             let choices = HotKeyAction.modes.map { mode in
                 ModeChoice(
@@ -170,7 +204,7 @@ final class CaptureCoordinator {
     }
 
     /// Runs an area mode on the area already selected: Area saves it, Text copies its text,
-    /// Scrolling starts following it.
+    /// Scrolling starts following it, Record records it.
     private func use(
         _ mode: HotKeyAction, still: DisplayStill, pixelRect rect: CGRect,
         overlay: SelectionOverlay
@@ -183,8 +217,102 @@ final class CaptureCoordinator {
         case .scrolling:
             try await captureScrolling(
                 still: still, pixelRect: rect, start: .auto, overlay: overlay)
+        case .record:
+            askForInputMonitoring()
+            await record(still: still, pixelRect: rect, windows: [], overlay: overlay)
         case .window, .fullscreen, .selector: break
         }
+    }
+
+    /// Records the selected area until it is stopped or discarded, then saves, copies and shows
+    /// it. A selection that is exactly the area a window in `windows` covers was a click on
+    /// that window, so only that app's shortcuts are logged.
+    private func record(
+        still: DisplayStill, pixelRect rect: CGRect, windows: [CapturableWindow],
+        overlay: SelectionOverlay
+    ) async {
+        overlay.dismiss()
+        let region = ScrollRegion(
+            displayID: still.displayID, displayFrame: still.frame, scale: still.scale,
+            pixelRect: rect, primaryHeight: NSScreen.primaryHeight)
+        lastRecordRegion = region
+        let store = preferences.store
+        let paths: RecordingPaths
+        do {
+            paths = try store.reserveRecording(at: Date())
+        } catch {
+            Alerts.libraryUnwritable(store.folder, error)
+            return
+        }
+        let window = windows.first { SelectionMath.windowArea($0.frame, in: still) == rect }
+        let session = RecordingSession(
+            region: region, paths: paths,
+            frontmostPID: window?.window.owningApplication?.processID,
+            ownHotKeys: HotKeyAction.allCases.compactMap { preferences.binding(for: $0) })
+        session.onTick = { [weak self] in
+            self?.onRecordingTime(RecordingChrome.timeText(recorded: $0, remaining: nil))
+        }
+        recording = session
+        let outcome = await session.run()
+        recording = nil
+        onRecordingTime(nil)
+        switch outcome {
+        case .discarded:
+            break
+        case .failed(RecordingError.empty):
+            Toast.show("Nothing was recorded")
+        case .failed(let error):
+            Alerts.show("Recording failed", Alerts.sentence(error.localizedDescription))
+        case .saved(let master, let stoppedEarly, let eventsSaved):
+            await deliverRecording(
+                master, paths: paths, stoppedEarly: stoppedEarly, eventsSaved: eventsSaved)
+        }
+    }
+
+    /// Writes the master's first edit document, renders the primary from it off the main
+    /// thread, copies it and shows its thumbnail, saying when it ended early, fell back to MP4
+    /// or lost its shortcuts and clicks. No shutter: the recording's own end is the cue.
+    private func deliverRecording(
+        _ master: RecordingMaster, paths: RecordingPaths, stoppedEarly: Error?, eventsSaved: Bool
+    ) async {
+        let edits = RecordingEdits.fresh(
+            duration: master.duration, format: preferences.recordingFormat)
+        let saving = Toast.show("Saving the recording…", seconds: nil)
+        let exported = await Task.detached(priority: .userInitiated) {
+            try await RecordingMaster.writeEdits(edits, to: master.url)
+            return try await RecordingExporter.export(master, edits: edits, to: paths)
+        }.result
+        Toast.dismiss(saving)
+        let result: ExportResult
+        switch exported {
+        case .success(let value): result = value
+        case .failure(let error):
+            Alerts.show(
+                "Couldn't save the recording",
+                Alerts.sentence(
+                    "The recording is kept as \(master.url.lastPathComponent), but Excerpt couldn't render it: \(error.localizedDescription)"
+                ))
+            return
+        }
+        do {
+            try Pasteboard.copyRecording(at: result.url)
+        } catch {
+            Alerts.clipboardFailed(result.url, error)
+        }
+        guard let poster = await RecordingPoster.firstFrame(of: result.url) else { return }
+        onRecorded(
+            result.url, poster,
+            RecordingNote.text(
+                fellBackToMP4: result.fellBackToMP4, stoppedEarly: stoppedEarly,
+                eventsSaved: eventsSaved))
+    }
+
+    /// Asks for Input Monitoring once per launch, so shortcuts can be logged; a recording runs
+    /// without it, logging clicks only.
+    private func askForInputMonitoring() {
+        guard !askedForInputMonitoring, !InputMonitoring.hasPermission() else { return }
+        askedForInputMonitoring = true
+        _ = InputMonitoring.request()
     }
 
     /// A selection that can't be cut from its still.
@@ -410,6 +538,7 @@ final class CaptureCoordinator {
     enum PrivacyPane: String {
         case screenRecording = "Privacy_ScreenCapture"
         case accessibility = "Privacy_Accessibility"
+        case inputMonitoring = "Privacy_ListenEvent"
     }
 
     static func open(_ pane: PrivacyPane) {

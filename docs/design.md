@@ -89,7 +89,7 @@ The tear's shape is seeded from the cut's position, so identical edits render id
 | ⌘⇧3 | Window |
 | ⌘⇧4 | Area |
 | ⌘⇧5 | Capture text (OCR → clipboard, no file) |
-| ⌘⇧6 | Mode bar (area / scrolling / text / window / fullscreen / record) |
+| ⌘⇧6 | Mode bar (area / scrolling / text / record / window / fullscreen) |
 | ⌘⇧7 | Record (see [Recording](#recording)) |
 
 Hotkeys use Carbon `RegisterEventHotKey` (no permission, no dependency) and are all rebindable

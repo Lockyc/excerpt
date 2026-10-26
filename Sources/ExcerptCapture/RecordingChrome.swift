@@ -103,7 +103,7 @@ public final class RecordingChrome {
     }
 
     /// `0:42`, or `0:42 · 0:18 left` once `remaining` is given.
-    static func timeText(recorded: Double, remaining: Double?) -> String {
+    public static func timeText(recorded: Double, remaining: Double?) -> String {
         func clock(_ seconds: Int) -> String {
             String(format: "%d:%02d", seconds / 60, seconds % 60)
         }

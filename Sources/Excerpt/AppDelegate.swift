@@ -42,6 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             openSettings: { [weak self] in self?.openSettings() },
             hotKeyStates: { [weak self] in self?.hotKeyStates() ?? [:] },
             updater: Updater.make())
+        statusMenu?.onStopRecording = { [weak self] in self?.coordinator.stopRecording() }
         claude.onBusyChange = { [weak self] primary in self?.showPreparingForClaude(primary) }
         claude.startPruning()
         filing.start()
@@ -92,10 +93,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Open editors by primary, so opening a capture again (or its master) brings its window
     /// forward.
     private var editors: [URL: EditorWindowController] = [:]
-    private lazy var coordinator = CaptureCoordinator(preferences: preferences) {
-        [weak self] url, image in
-        self?.thumbnails.show(url: url, image: image)
-    }
+    private lazy var coordinator = CaptureCoordinator(
+        preferences: preferences,
+        onDelivered: { [weak self] url, image in self?.thumbnails.show(url: url, image: image) },
+        onRecorded: { [weak self] url, poster, note in
+            self?.thumbnails.show(url: url, image: poster, isRecording: true, note: note)
+        },
+        onRecordingTime: { [weak self] in self?.statusMenu?.showRecording($0) })
 
     func perform(_ action: HotKeyAction) {
         Task { @MainActor in await coordinator.run(action) }

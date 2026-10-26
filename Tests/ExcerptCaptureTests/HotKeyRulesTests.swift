@@ -100,6 +100,24 @@ import Testing
         #expect(verdict.message(for: quit) == "⌘Q is already Quit in every app")
     }
 
+    /// Record Screen's default, ⌘⇧7, is free of the shortcuts every app answers and of the
+    /// other actions' defaults.
+    @Test func commandShiftSevenIsFree() {
+        let seven = HotKeyBinding(
+            keyCode: UInt32(kVK_ANSI_7), modifiers: HotKeyBinding.commandShift)
+        let three = HotKeyBinding(
+            keyCode: UInt32(kVK_ANSI_3), modifiers: HotKeyBinding.commandShift)
+        let six = HotKeyBinding(keyCode: UInt32(kVK_ANSI_6), modifiers: HotKeyBinding.commandShift)
+        let verdict = HotKeyRules.judge(
+            seven, for: "Record Screen",
+            bindings: [
+                "Capture Window": three, "Capture Area": four, "Capture Text": five,
+                "Choose Capture Mode…": six,
+            ],
+            reserved: HotKeyRules.appShortcuts, system: [])
+        #expect(verdict == .accepted)
+    }
+
     /// Review focus: settings are a file anyone can edit. Stored hotkeys are judged in action
     /// order as they are registered: a reserved, duplicated or unguarded one is refused, naming
     /// what holds it, and holds nothing itself.

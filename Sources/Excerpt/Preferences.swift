@@ -20,6 +20,7 @@ final class Preferences {
             "thumbnailSeconds": 15.0,
             "thumbnailAtPointer": false,
             "fileOldCaptures": true,
+            "recordingFormat": RecordingFormat.gif.rawValue,
         ])
     }
 
@@ -48,6 +49,11 @@ final class Preferences {
             BackdropStyle(rawValue: defaults.string(forKey: "backdropStyle") ?? "") ?? .wallpaper
         }
         set { defaults.set(newValue.rawValue, forKey: "backdropStyle") }
+    }
+    /// What a new recording's primary is written as.
+    var recordingFormat: RecordingFormat {
+        get { RecordingFormat(rawValue: defaults.string(forKey: "recordingFormat") ?? "") ?? .gif }
+        set { defaults.set(newValue.rawValue, forKey: "recordingFormat") }
     }
     /// The editor border's last colour and width; the initial border until one is picked, or
     /// when what is stored can't be read.

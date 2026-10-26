@@ -36,13 +36,49 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         self.openSettings = openSettings
         self.hotKeyStates = hotKeyStates
         super.init()
-        item.button?.image = NSImage(
-            systemSymbolName: "scissors", accessibilityDescription: "Excerpt")
-        let menu = NSMenu()
+        item.button?.image = Self.icon
         menu.delegate = self
         item.menu = menu
         rebuild(menu)
     }
+
+    private let menu = NSMenu()
+    private static let icon = NSImage(
+        systemSymbolName: "scissors", accessibilityDescription: "Excerpt")
+    /// Called when the item is clicked while it shows a recording.
+    var onStopRecording: () -> Void = {}
+
+    /// While `text` is set, the item is a stop button showing it, the recording's time, and a
+    /// click stops the recording; nil brings back the icon and the menu.
+    func showRecording(_ text: String?) {
+        guard let button = item.button else { return }
+        if let text {
+            if item.menu != nil {
+                item.menu = nil
+                item.length = NSStatusItem.variableLength
+                button.image = NSImage(
+                    systemSymbolName: "stop.circle", accessibilityDescription: "Stop Recording")
+                button.imagePosition = .imageLeading
+                button.font = .monospacedDigitSystemFont(
+                    ofSize: NSFont.systemFontSize, weight: .regular)
+                button.target = self
+                button.action = #selector(stopRecording)
+                button.toolTip = "Stop recording"
+            }
+            button.title = text
+        } else {
+            button.title = ""
+            button.image = Self.icon
+            button.imagePosition = .imageOnly
+            button.action = nil
+            button.target = nil
+            button.toolTip = nil
+            item.length = NSStatusItem.squareLength
+            item.menu = menu
+        }
+    }
+
+    @objc private func stopRecording() { onStopRecording() }
 
     /// Hotkeys and their notes reflect the state at the moment the menu opens.
     func menuNeedsUpdate(_ menu: NSMenu) { rebuild(menu) }
