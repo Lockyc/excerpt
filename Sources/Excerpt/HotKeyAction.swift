@@ -8,6 +8,7 @@ enum HotKeyAction: UInt32, CaseIterable {
     case fullscreen = 3
     case scrolling = 4
     case text = 5
+    case record = 7
     case selector = 6
 
     var id: UInt32 { rawValue }
@@ -19,6 +20,7 @@ enum HotKeyAction: UInt32, CaseIterable {
         case .fullscreen: "Capture Fullscreen"
         case .scrolling: "Capture Scrolling Area"
         case .text: "Capture Text"
+        case .record: "Record Screen"
         case .selector: "Choose Capture Mode…"
         }
     }
@@ -33,15 +35,20 @@ enum HotKeyAction: UInt32, CaseIterable {
             HotKeyBinding(keyCode: UInt32(kVK_ANSI_5), modifiers: HotKeyBinding.commandShift)
         case .selector:
             HotKeyBinding(keyCode: UInt32(kVK_ANSI_6), modifiers: HotKeyBinding.commandShift)
+        case .record:
+            HotKeyBinding(keyCode: UInt32(kVK_ANSI_7), modifiers: HotKeyBinding.commandShift)
         case .fullscreen, .scrolling: nil
         }
     }
 
     /// The modes the mode bar offers, in its order: those that use the selected area first.
-    static let modes: [HotKeyAction] = [.area, .scrolling, .text, .window, .fullscreen]
+    static let modes: [HotKeyAction] = [.area, .scrolling, .text, .record, .window, .fullscreen]
 
-    /// The mode's name on the mode bar: its title without `Capture `.
-    var modeName: String { title.hasPrefix("Capture ") ? String(title.dropFirst(8)) : title }
+    /// The mode's name on the mode bar: its title without `Capture `, and Record for recording.
+    var modeName: String {
+        if self == .record { return "Record" }
+        return title.hasPrefix("Capture ") ? String(title.dropFirst(8)) : title
+    }
 
     /// The mode's SF Symbol on the mode bar.
     var symbol: String {
@@ -51,6 +58,7 @@ enum HotKeyAction: UInt32, CaseIterable {
         case .text: "text.viewfinder"
         case .window: "macwindow"
         case .fullscreen: "display"
+        case .record: "record.circle"
         case .selector: "rectangle.3.group"
         }
     }
@@ -58,7 +66,7 @@ enum HotKeyAction: UInt32, CaseIterable {
     /// Whether the mode runs on the area selected under the mode bar.
     var usesArea: Bool {
         switch self {
-        case .area, .scrolling, .text: true
+        case .area, .scrolling, .text, .record: true
         case .window, .fullscreen, .selector: false
         }
     }
@@ -79,11 +87,11 @@ extension HotKeyAction {
 }
 
 extension HotKeyAction {
-    /// Whether the action selects on the overlay: an area, a window, a scrolling region, or an
-    /// area under the mode bar.
+    /// Whether the action selects on the overlay: an area, a window, a scrolling region, an area
+    /// to record, or an area under the mode bar.
     var selects: Bool {
         switch self {
-        case .area, .window, .scrolling, .text, .selector: true
+        case .area, .window, .scrolling, .text, .record, .selector: true
         case .fullscreen: false
         }
     }

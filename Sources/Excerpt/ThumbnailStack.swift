@@ -32,12 +32,14 @@ final class ThumbnailStack {
         self.onClaude = onClaude
     }
 
-    func show(url: URL, image: CGImage) {
+    /// Shows a capture's thumbnail. A recording shows `image`, its first frame, as its poster
+    /// and plays a GIF; it stays out of Edit All's run. `note` is a line under the preview.
+    func show(url: URL, image: CGImage, isRecording: Bool = false, note: String? = nil) {
         dock()
         let held = preferences.thumbnailAtPointer
         let panel = ThumbnailPanel(
-            url: url, image: image, seconds: preferences.thumbnailSeconds, held: held,
-            onEdit: onEdit, onClaude: onClaude
+            url: url, image: image, isRecording: isRecording, note: note,
+            seconds: preferences.thumbnailSeconds, held: held, onEdit: onEdit, onClaude: onClaude
         ) { [weak self] closing in
             guard let self else { return }
             if closing === atPointer { stopWatchingPointer() }
@@ -46,7 +48,7 @@ final class ThumbnailStack {
             layout()
         }
         panel.onEditAll = { [weak self] in self?.editAll() }
-        run.append(url)
+        if !isRecording { run.append(url) }
         panels.insert(panel, at: 0)
         if panels.count > 4 { panels.last?.dismiss() }
         if held { holdAtPointer(panel) }
@@ -112,8 +114,10 @@ final class ThumbnailStack {
     }
 
     private func layout(animating moving: ThumbnailPanel? = nil) {
-        for (i, panel) in panels.enumerated() {
-            panel.setEditAll(count: i == 0 && run.count >= 2 ? run.count : nil)
+        // On the newest screenshot's thumbnail: a recording's would open other captures.
+        let newestScreenshot = panels.first { !$0.isRecording }
+        for panel in panels {
+            panel.setEditAll(count: panel === newestScreenshot && run.count >= 2 ? run.count : nil)
         }
         guard let screen = NSScreen.main?.visibleFrame else { return }
         var y = screen.minY + Self.margin
@@ -133,6 +137,7 @@ final class ThumbnailStack {
 @MainActor
 final class ThumbnailPanel: NSPanel {
     let url: URL
+    let isRecording: Bool
     private let onEdit: (URL) -> Void
     private let onClaude: (URL) -> Void
     var onEditAll: () -> Void = {}
@@ -145,11 +150,13 @@ final class ThumbnailPanel: NSPanel {
     private var held: Bool
 
     init(
-        url: URL, image: CGImage, seconds: Double, held: Bool, onEdit: @escaping (URL) -> Void,
-        onClaude: @escaping (URL) -> Void, onClose: @escaping (ThumbnailPanel) -> Void
+        url: URL, image: CGImage, isRecording: Bool, note: String?, seconds: Double, held: Bool,
+        onEdit: @escaping (URL) -> Void, onClaude: @escaping (URL) -> Void,
+        onClose: @escaping (ThumbnailPanel) -> Void
     ) {
         self.held = held
         self.url = url
+        self.isRecording = isRecording
         self.onEdit = onEdit
         self.onClaude = onClaude
         claudeButton = FirstMouseButton(title: "For Claude", target: nil, action: nil)
@@ -159,8 +166,10 @@ final class ThumbnailPanel: NSPanel {
         let width = ThumbnailStack.width
         let imageHeight = min(220, width * CGFloat(image.height) / CGFloat(image.width))
         let barHeight: CGFloat = 44
+        let noteHeight: CGFloat = note == nil ? 0 : 20
+        let below = barHeight + noteHeight
         super.init(
-            contentRect: CGRect(x: 0, y: 0, width: width, height: imageHeight + barHeight),
+            contentRect: CGRect(x: 0, y: 0, width: width, height: imageHeight + below),
             styleMask: [.nonactivatingPanel, .borderless], backing: .buffered, defer: false)
         isReleasedWhenClosed = false
         level = .floating
@@ -170,23 +179,52 @@ final class ThumbnailPanel: NSPanel {
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
 
         let container = NSVisualEffectView(
-            frame: CGRect(x: 0, y: 0, width: width, height: imageHeight + barHeight))
+            frame: CGRect(x: 0, y: 0, width: width, height: imageHeight + below))
         container.material = .hudWindow
         container.state = .active
         container.wantsLayer = true
         container.layer?.cornerRadius = 10
         container.layer?.masksToBounds = true
 
-        let preview = DragImageView(url: url, image: NSImage(cgImage: image, size: .zero)) {
-            [weak self] in
-            self?.dismiss()
-        }
-        preview.frame = CGRect(x: 0, y: barHeight, width: width, height: imageHeight)
+        // A GIF plays from its file; anything else shows `image`.
+        let isGIF = isRecording && url.pathExtension.lowercased() == "gif"
+        let shown = (isGIF ? NSImage(contentsOf: url) : nil) ?? NSImage(cgImage: image, size: .zero)
+        let preview = DragImageView(url: url, image: shown) { [weak self] in self?.dismiss() }
+        preview.animates = isGIF
+        preview.frame = CGRect(x: 0, y: below, width: width, height: imageHeight)
         container.addSubview(preview)
+        if isRecording && !isGIF {
+            let play = NSImageView(
+                image: NSImage(systemSymbolName: "play.fill", accessibilityDescription: "Video")
+                    ?? NSImage())
+            play.symbolConfiguration = .init(pointSize: 36, weight: .regular)
+            play.contentTintColor = .white
+            play.shadow = NSShadow()
+            play.shadow?.shadowBlurRadius = 4
+            play.shadow?.shadowColor = .black.withAlphaComponent(0.6)
+            play.frame = CGRect(
+                x: (width - 56) / 2, y: (imageHeight - 56) / 2, width: 56, height: 56)
+            preview.addSubview(play)
+        }
+
+        if let note {
+            let label = NSTextField(labelWithString: note)
+            label.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+            label.textColor = .secondaryLabelColor
+            label.lineBreakMode = .byTruncatingTail
+            label.toolTip = note
+            label.frame = CGRect(x: 10, y: barHeight, width: width - 20, height: noteHeight - 4)
+            container.addSubview(label)
+        }
 
         let bar = NSStackView(frame: CGRect(x: 8, y: 2, width: width - 16, height: barHeight - 4))
         bar.distribution = .fillProportionally
-        bar.addArrangedSubview(button("Edit", #selector(editTapped)))
+        let edit = button("Edit", #selector(editTapped))
+        if isRecording {
+            edit.isEnabled = false
+            edit.toolTip = "Recordings can't be edited yet"
+        }
+        bar.addArrangedSubview(edit)
         style(editAllButton, #selector(editAllTapped))
         editAllButton.isHidden = true
         bar.addArrangedSubview(editAllButton)
@@ -217,11 +255,15 @@ final class ThumbnailPanel: NSPanel {
         b.controlSize = .large
     }
 
-    /// While the capture's export runs, For Claude is disabled and says why.
+    /// While the capture's export runs, For Claude is disabled and says why; on a recording it
+    /// is always disabled.
     func setPreparingForClaude(_ busy: Bool) {
-        claudeButton.isEnabled = !busy
+        claudeButton.isEnabled = !busy && !isRecording
         claudeButton.toolTip =
-            busy ? "Preparing for Claude…" : "Copy tiles and text Claude can read, as @ references"
+            isRecording
+            ? "For Claude reads screenshots, not recordings"
+            : busy
+                ? "Preparing for Claude…" : "Copy tiles and text Claude can read, as @ references"
     }
 
     /// At the delay's end the pointer's position decides: over the panel, the delay starts
