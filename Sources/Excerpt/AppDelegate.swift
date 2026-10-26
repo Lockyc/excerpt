@@ -193,8 +193,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Opens the recording at `paths` in its editor, or brings its open editor forward. Its
-    /// Save writes the edits and the primary through `RecordingSave`, the path the save after
-    /// stopping takes, and says when the GIF fell back to MP4.
+    /// Save always renders through `RecordingSave`, the path the save after stopping takes, so
+    /// what it copies is the render of the edits the editor shows, and says when the GIF fell
+    /// back to MP4.
     private func openRecordingEditor(_ paths: RecordingPaths, opened url: URL) {
         let key = paths.master.standardizedFileURL
         if let open = recordingEditors[key] {
@@ -220,8 +221,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 master: master,
                 primary: existing ?? paths.primary(master.edits?.format ?? defaultFormat),
                 defaultFormat: defaultFormat,
-                save: { edits, changed in
-                    if !changed, let existing { return RecordingSave.copy(existing) }
+                save: { edits in
                     guard
                         let (result, copied) = await RecordingSave.run(
                             master, edits: edits, paths: paths)

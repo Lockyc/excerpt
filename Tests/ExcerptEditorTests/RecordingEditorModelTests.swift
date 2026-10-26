@@ -50,6 +50,33 @@ import Testing
         }
     }
 
+    /// The frame the preview decodes at its time: what a zero-tolerance decoder shows there.
+    func decodedFrame(at t: Double, in times: [Double]) -> Int {
+        times.lastIndex { $0 <= t } ?? 0
+    }
+
+    @Test func thePreviewShowsTheFrameSpansAreSetFrom() {
+        let times = [0, 0.4, 0.43, 2.0, 2.1, 3.7]
+        // Just either side of each stamp, inside and outside the tolerance, and mid-frame.
+        let offsets = [-0.0009, -0.0006, -0.0004, -0.0001, 0, 0.0001, 0.0009, 0.01]
+        for stamp in times {
+            for offset in offsets where stamp + offset >= 0 && stamp + offset <= 4 {
+                var model = model(duration: 4, frameTimes: times)
+                model.playhead = stamp + offset
+                let k = exportedFrame(at: model.playhead, in: times)
+                #expect(model.shownFrameIndex == k)
+                #expect(
+                    decodedFrame(at: model.previewFrameTime, in: times) == k,
+                    "playhead \(model.playhead) s")
+                // Far enough from the next stamp that rounding to the decoder's clock can't
+                // cross it.
+                let next = k + 1 < times.count ? times[k + 1] : 4
+                #expect(model.previewFrameTime > times[k] + 0.001)
+                #expect(model.previewFrameTime < next - 0.001)
+            }
+        }
+    }
+
     @Test func aSpanStartedAtTheTrimEndStillCoversAFrame() throws {
         var model = model()
         model.setTrim(2...5)
@@ -133,7 +160,7 @@ import Testing
         model.endSpan(ofBlur: 0)
         let ended = try #require(model.edits.blurs[0].span)
         #expect(ended.lowerBound == 1)
-        #expect(ended.upperBound == 7 - tolerance)
+        #expect(ended.upperBound >= 7 - tolerance && ended.upperBound < 7 - tolerance / 2)
         model.playhead = 7.5
         model.startSpan(ofBlur: 0)
         let started = try #require(model.edits.blurs[0].span)

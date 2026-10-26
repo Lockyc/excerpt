@@ -214,7 +214,7 @@ enum RecordingSave {
     }
 
     /// Puts the primary at `url` on the clipboard; false, after an alert, when it couldn't.
-    static func copy(_ url: URL) -> Bool {
+    private static func copy(_ url: URL) -> Bool {
         do {
             try Pasteboard.copyRecording(at: url)
             return true
