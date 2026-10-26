@@ -40,7 +40,8 @@ checks now. Running the installer again also updates.
 **Uninstall** by quitting Excerpt, deleting `/Applications/Excerpt.app`,
 `/usr/local/bin/excerpt` and the cache `~/Library/Caches/excerpt`, running
 `defaults delete com.lockyc.excerpt`, and removing Excerpt from Screen Recording,
-Accessibility and Input Monitoring in System Settings → Privacy & Security. Your captures stay where they were saved.
+Accessibility and Input Monitoring in System Settings → Privacy & Security. Your captures stay
+where they were saved.
 
 ## Use
 
@@ -49,7 +50,7 @@ Accessibility and Input Monitoring in System Settings → Privacy & Security. Yo
 | ⌘⇧3 | Window |
 | ⌘⇧4 | Area (the screen freezes while you select) |
 | ⌘⇧5 | Text — OCR straight to the clipboard, no file |
-| ⌘⇧6 | Select an area, adjust it, then pick area, scrolling, text, window or fullscreen from a bar over it |
+| ⌘⇧6 | Select an area, adjust it, then pick area, scrolling, text, window, fullscreen or record from a bar over it |
 | ⌘⇧7 | Record — select an area (or click a window), then Return; ⌘⇧7 again stops |
 
 macOS's own screenshot shortcuts hold ⌘⇧3 to ⌘⇧5 until they are turned off in System Settings →
@@ -60,7 +61,8 @@ The first capture asks for **Screen Recording** (System Settings → Privacy & S
 System Audio Recording); reopen Excerpt after granting it. Scrolling capture's auto-scroll also
 asks for **Accessibility**; scrolling the selected region yourself doesn't need it. Excerpt
 stitches as you go, and your own scrolling takes over from auto-scroll at any point. The first
-recording asks for **Input Monitoring** to show the shortcuts you press; without it, clicks only.
+recording asks for **Input Monitoring** to show the shortcuts you press; without it the clip
+shows clicks only.
 
 Each capture is saved to `~/Documents/Screenshots/` (a setting), copied to the clipboard and
 shown as a thumbnail with **Edit**, **For Claude** and **Close**. Files in that folder older
