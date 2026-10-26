@@ -574,15 +574,19 @@ final class OverlayView: NSView {
         }
     }
 
-    /// A wheel over a settled scrolling selection starts the capture with the user scrolling.
-    /// This first event lands on the overlay, so the page hasn't moved when the first frame is
-    /// taken. Fingers resting on the trackpad send wheel events that move nothing; those aren't
-    /// scrolling.
+    /// A wheel over a settled scrolling or mode-bar selection starts a scrolling capture with
+    /// the user scrolling. This first event lands on the overlay, so the page hasn't moved when
+    /// the first frame is taken. Fingers resting on the trackpad send wheel events that move
+    /// nothing; those aren't scrolling.
     override func scrollWheel(with event: NSEvent) {
         guard event.scrollingDeltaY != 0 || event.scrollingDeltaX != 0,
-            settled, case .scrollingArea = mode, let selection,
+            settled, let mode, let selection,
             selection.contains(convert(event.locationInWindow, from: nil))
         else { return }
+        switch mode {
+        case .scrollingArea, .modeBar: break
+        case .area, .window: return
+        }
         confirm(scrolled: true)
     }
 

@@ -155,6 +155,12 @@ final class CaptureCoordinator {
                 {
                     try await use(mode, still: still, pixelRect: rect, overlay: overlay)
                 }
+            case .scrolledArea(let still, let rect):
+                lastModeBarRegion = ScrollRegion(
+                    displayID: still.displayID, displayFrame: still.frame, scale: still.scale,
+                    pixelRect: rect, primaryHeight: NSScreen.primaryHeight)
+                try await captureScrolling(
+                    still: still, pixelRect: rect, start: .manual, overlay: overlay)
             case .chosen(let id):
                 switchedTo = HotKeyAction(rawValue: id)
             default:
