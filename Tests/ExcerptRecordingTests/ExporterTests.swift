@@ -66,8 +66,10 @@ import Testing
         #expect(CGImageSourceGetCount(fullSource) == 15)
         let fullBytes = try Data(contentsOf: full.url).count
 
+        // Every frame differs, so 10 fps is about two thirds the size of 15 fps; a budget between
+        // the two stays clear of the decoder's small run-to-run variation in the frames.
         let slower = try await RecordingExporter.export(
-            master, edits: edits, to: paths, byteBudget: fullBytes - 1)
+            master, edits: edits, to: paths, byteBudget: fullBytes * 5 / 6)
         #expect(slower.format == .gif && !slower.fellBackToMP4)
         let slowerSource = try Self.gif(slower.url)
         #expect(CGImageSourceGetCount(slowerSource) == 10)
