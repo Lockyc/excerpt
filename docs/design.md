@@ -264,7 +264,8 @@ during the recording, so the screen stays clean and either can be turned off aft
 - **The master is `… original.mov`**, always written, since the primary is a lossy render: the
   recording at the stream's full pixel resolution (HEVC, 30 fps) with the event log and the
   recording's edit document in the movie's metadata, so the edits travel inside the master as
-  they do in a screenshot's.
+  they do in a screenshot's. It is written in fragments (`MasterWriter.fragmentInterval`), so a
+  crash mid-recording leaves a master that opens.
 - The library treats a recording pair as it does a PNG pair: Recent Captures lists recordings
   (opening the recording editor, each shown by the primary's first frame), filing moves the
   master with its primary.

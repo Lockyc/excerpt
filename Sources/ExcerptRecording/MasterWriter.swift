@@ -26,6 +26,9 @@ public final class MasterWriter: @unchecked Sendable {
     public static let minimumBitRate = 4_000_000
     /// The frame rate the encoder is told to expect: the stream's.
     public static let frameRate = 30
+    /// Seconds of master between the movie fragments the writer flushes, so a crash or a forced
+    /// quit mid-recording leaves a master that opens with all but its last few seconds.
+    public static let fragmentInterval = 10.0
 
     private let url: URL
     private let writer: AVAssetWriter
@@ -79,6 +82,8 @@ public final class MasterWriter: @unchecked Sendable {
             Int(Double(width * height * Self.frameRate) * Self.bitsPerPixelPerFrame))
         writer = try AVAssetWriter(outputURL: url, fileType: .mov)
         writer.metadata = try RecordingMaster.metadata(log: header, edits: nil)
+        writer.movieFragmentInterval = CMTime(
+            seconds: Self.fragmentInterval, preferredTimescale: 600)
         input = AVAssetWriterInput(
             mediaType: .video,
             outputSettings: [

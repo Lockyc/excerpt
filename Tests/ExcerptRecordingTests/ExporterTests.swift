@@ -124,6 +124,18 @@ import Testing
         }
     }
 
+    /// With nothing logged the master is never rewritten, so it stays as the writer left it, in
+    /// fragments.
+    @Test func aMasterWithNoEventsExports() async throws {
+        let quiet = RecordingEventLog(
+            version: RecordingEventLog.version, scale: 2, shortcutsLogged: false, events: [])
+        let (master, paths) = try await SyntheticMaster.master(Self.moving(10), log: quiet)
+        #expect(try await RecordingMaster.frameTimes(master.url).count == 10)
+        let gif = try await RecordingExporter.export(
+            master, edits: .fresh(duration: master.duration, format: .gif), to: paths)
+        #expect(try Self.delays(Self.gif(gif.url)).reduce(0, +) == 100)
+    }
+
     @Test func aFiveKRecordingExportsAnMP4() async throws {
         let (master, paths) = try await SyntheticMaster.master(
             Self.moving(2, width: 5120, height: 2880))
