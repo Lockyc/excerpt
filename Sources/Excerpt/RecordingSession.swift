@@ -28,6 +28,8 @@ final class RecordingSession {
     private let region: ScrollRegion
     private let paths: RecordingPaths
     private let frontmostPID: pid_t?
+    /// The app being demonstrated, given focus back after the countdown.
+    private let demonstrated: NSRunningApplication?
     private let ownHotKeys: [HotKeyBinding]
     private let recorder = ScreenRecorder()
     private let chrome: RecordingChrome
@@ -44,11 +46,12 @@ final class RecordingSession {
 
     init(
         region: ScrollRegion, paths: RecordingPaths, frontmostPID: pid_t?,
-        ownHotKeys: [HotKeyBinding]
+        demonstrated: NSRunningApplication?, ownHotKeys: [HotKeyBinding]
     ) {
         self.region = region
         self.paths = paths
         self.frontmostPID = frontmostPID
+        self.demonstrated = demonstrated
         self.ownHotKeys = ownHotKeys
         chrome = RecordingChrome(area: region.appKitFrame)
     }
@@ -56,7 +59,7 @@ final class RecordingSession {
     func run() async -> Outcome {
         defer { chrome.close() }
         // Stopped in the countdown: nothing was recorded, so nothing is kept.
-        guard await chrome.countdown(), end == nil else { return .discarded }
+        guard await chrome.countdown(restoring: demonstrated), end == nil else { return .discarded }
         let shortcutsLogged = InputMonitoring.hasPermission()
         let recorder = recorder
         let logger = EventLogger(
