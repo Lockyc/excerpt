@@ -5,7 +5,8 @@ public enum FrameMatch: Equatable, Sendable {
     /// The page didn't move. Anything that changed is small and in place: a spinner, a caret.
     case still
     /// The content in `columns` (the scrolling band) moved up by `offset` rows; `header` rows at
-    /// the top and `footer` rows at the bottom of the band are the same in both frames. Columns
+    /// the top and `footer` rows at the bottom of the band are the same in both frames, or covered
+    /// by something that stays in place over the page there (`StitchMatcher.overlayRows`). Columns
     /// outside the band didn't scroll with it: margins, or side panels fixed in place or moving
     /// by another amount.
     case moved(offset: Int, header: Int, footer: Int, columns: Range<Int>)
@@ -40,6 +41,9 @@ public enum StitchMatcher {
     public static let minimumBandShare = 1.0 / 3
     /// The pinned-bar headers tried when the frames' shared header doesn't explain a move.
     public static let pinnedCandidates = 4
+    /// The most of the frame's height, above the footer, that something staying in place over
+    /// the page may cover when the plain move doesn't convince: those rows count as footer.
+    public static let maximumOverlayShare = 0.25
 
     /// The right-edge columns left out of matching for a region `width` pixels wide: the scroll
     /// bar strip at `scale`, never more than an eighth of the width.
@@ -131,26 +135,55 @@ public enum StitchMatcher {
         let contentRows = header..<(header + content)
         let uniqueA = uniqueRows(a, in: contentRows)
         let uniqueB = uniqueRows(b, in: contentRows)
-        var best: (offset: Int, score: Double)?
-        var runnerUp = -1.0
-        if content > 1 {
-            for offset in 1..<content {
-                guard
-                    let s = score(
-                        a, b, previousStart: header + offset, nextStart: header,
-                        count: content - offset, previousUnique: uniqueA, nextUnique: uniqueB)
-                else { continue }
-                if let current = best, s <= current.score {
-                    runnerUp = max(runnerUp, s)
-                } else {
-                    runnerUp = max(runnerUp, best?.score ?? -1)
-                    best = (offset, s)
+        func scan(overlayLimit: Int) -> Candidate {
+            var best: (offset: Int, score: Double)?
+            var bestOverlay = 0
+            var runnerUp = -1.0
+            if content > 1 {
+                for offset in 1..<content {
+                    let overlay = overlayRows(
+                        a, b, start: header, offset: offset, count: content - offset,
+                        limit: overlayLimit, uniqueA: uniqueA, uniqueB: uniqueB)
+                    guard
+                        let s = score(
+                            a, b, previousStart: header + offset, nextStart: header,
+                            count: content - offset - overlay, previousUnique: uniqueA,
+                            nextUnique: uniqueB)
+                    else { continue }
+                    if let current = best, s <= current.score {
+                        runnerUp = max(runnerUp, s)
+                    } else {
+                        runnerUp = max(runnerUp, best?.score ?? -1)
+                        best = (offset, s)
+                        bestOverlay = overlay
+                    }
                 }
             }
+            return Candidate(
+                header: header, footer: footer + bestOverlay, best: best, runnerUp: runnerUp,
+                uniqueA: uniqueA, uniqueB: uniqueB)
         }
-        return Candidate(
-            header: header, footer: footer, best: best, runnerUp: runnerUp, uniqueA: uniqueA,
-            uniqueB: uniqueB)
+        let plain = scan(overlayLimit: 0)
+        guard !plain.convincing else { return plain }
+        let overlaid = scan(overlayLimit: Int(Double(height) * maximumOverlayShare))
+        return overlaid.convincing ? overlaid : plain
+    }
+
+    /// The rows at the end of an offset's overlap, above the footer, that it doesn't explain:
+    /// `a`'s bottom rows where something that stays in place (a floating button, a composer, a
+    /// fade above a footer) covers the page that `b` shows uncovered `offset` rows higher. From
+    /// the topmost evidence pair that differs among the last `limit` rows, since the element may
+    /// float clear of the footer; 0 when none differs.
+    static func overlayRows(
+        _ a: RowSignatures, _ b: RowSignatures, start: Int, offset: Int, count: Int, limit: Int,
+        uniqueA: [Bool], uniqueB: [Bool]
+    ) -> Int {
+        for i in max(0, count - limit)..<max(0, count) {
+            let p = start + offset + i
+            let n = start + i
+            if uniqueA[p] && uniqueB[n] && a.hashes[p] != b.hashes[n] { return count - i }
+        }
+        return 0
     }
 
     /// Where `b`'s header could end if a bar from the page's flow pinned under the sticky

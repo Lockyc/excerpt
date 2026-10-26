@@ -81,9 +81,10 @@ import Testing
     }
 
     @Test func aMoveRedrawnTwoLevelsOffIsUncertain() {
+        // The top half of the overlap: redrawn rows at its bottom read as a static overlay.
         #expect(
             StitchMatcher.match(
-                frame(0), dithered(frame(120), rows: 40..<160, levels: 2),
+                frame(0), dithered(frame(120), rows: 0..<40, levels: 2),
                 ignoringRightColumns: 0)
                 == .uncertain)
     }
