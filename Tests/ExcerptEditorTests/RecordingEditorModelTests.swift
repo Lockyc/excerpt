@@ -175,22 +175,29 @@ import Testing
             model.edits.blurs == [RecordingBlur(rect: CGRect(x: 350, y: 10, width: 50, height: 40))]
         )
         #expect(model.selection == 0)
-        model.setSpan(-2...3, ofBlur: 0)
-        #expect(model.edits.blurs[0].span == 0...3)
-        model.setSpan(1...3, ofBlur: 0)
-        #expect(model.edits.blurRects(at: 5).isEmpty)
         // Frames are stamped on whole seconds: a span set at the playhead covers its frame.
+        model.playhead = 2.5
+        model.endSpan(ofBlur: 0)
+        let first = try #require(model.edits.blurs[0].span)
+        #expect(first.lowerBound == 0)
+        #expect(first.upperBound >= 3 - tolerance && first.upperBound < 3 - tolerance / 2)
+        model.playhead = 1.5
+        model.startSpan(ofBlur: 0)
+        let second = try #require(model.edits.blurs[0].span)
+        #expect(second.lowerBound <= 1 - tolerance && second.lowerBound > 1 - 2 * tolerance)
+        #expect(second.upperBound == first.upperBound)
+        #expect(model.edits.blurRects(at: 5).isEmpty)
         model.playhead = 6.5
         model.endSpan(ofBlur: 0)
         let ended = try #require(model.edits.blurs[0].span)
-        #expect(ended.lowerBound == 1)
+        #expect(ended.lowerBound == second.lowerBound)
         #expect(ended.upperBound >= 7 - tolerance && ended.upperBound < 7 - tolerance / 2)
         model.playhead = 7.5
         model.startSpan(ofBlur: 0)
         let started = try #require(model.edits.blurs[0].span)
         #expect(started.lowerBound <= 7 - tolerance && started.lowerBound > 7 - 2 * tolerance)
         #expect(started.upperBound == 10)
-        model.setSpan(nil, ofBlur: 0)
+        model.setWholeClip(ofBlur: 0)
         #expect(model.edits.blurs[0].span == nil)
         model.undo()
         #expect(model.edits.blurs[0].span == started)
@@ -257,7 +264,8 @@ import Testing
                 .spanStart(unavailable: nil), .spanEnd(unavailable: nil),
                 .wholeClip(enabled: false), .delete,
             ])
-        model.setSpan(1...2, ofBlur: 0)
+        model.playhead = 1.5
+        model.startSpan(ofBlur: 0)
         #expect(model.itemOptions?.contains(.wholeClip(enabled: true)) == true)
     }
 }

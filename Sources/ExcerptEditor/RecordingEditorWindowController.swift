@@ -269,7 +269,7 @@ public final class RecordingEditorWindowController: NSWindowController, NSWindow
         }
         bar.onWholeClip = { [weak self] in
             guard let self, let i = model.selection else { return }
-            model.setSpan(nil, ofBlur: i)
+            model.setWholeClip(ofBlur: i)
         }
         bar.onDelete = { [weak self] in self?.deleteSelection() }
     }
