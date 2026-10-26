@@ -381,3 +381,82 @@ import Testing
         #expect(try store.recentCaptures(limit: 1).count == 1)
     }
 }
+
+extension LibraryTests {
+    @Test func recordingNamesPairAPrimaryWithItsMovMaster() {
+        #expect(
+            LibraryNaming.recordingMasterName(forBase: "Excerpt 2026-10-10 at 09.43.29 (2)")
+                == "Excerpt 2026-10-10 at 09.43.29 (2) original.mov")
+        #expect(
+            LibraryNaming.recordingBase(forMaster: "Excerpt 2026-10-10 at 09.43.29 original.mov")
+                == "Excerpt 2026-10-10 at 09.43.29")
+        #expect(LibraryNaming.recordingBase(forMaster: "Excerpt original.png") == nil)
+        #expect(LibraryNaming.recordingExtensions == ["gif", "mp4"])
+    }
+
+    @Test func reserveRecordingSkipsTakenNames() throws {
+        let folder = tempFolder()
+        let store = LibraryStore(folder: folder, naming: LibraryNaming(timeZone: utc))
+        let first = try store.reserveRecording(at: date)
+        #expect(first.base.lastPathComponent == "Excerpt 2026-10-10 at 09.43.29")
+        #expect(first.master.lastPathComponent == "Excerpt 2026-10-10 at 09.43.29 original.mov")
+        #expect(first.primary(.gif).lastPathComponent == "Excerpt 2026-10-10 at 09.43.29.gif")
+        #expect(first.primary(.mp4).lastPathComponent == "Excerpt 2026-10-10 at 09.43.29.mp4")
+        for name in [
+            "Excerpt 2026-10-10 at 09.43.29.png",
+            "Excerpt 2026-10-10 at 09.43.29.gif", "Excerpt 2026-10-10 at 09.43.29.mp4",
+            "Excerpt 2026-10-10 at 09.43.29 original.mov",
+            "Excerpt 2026-10-10 at 09.43.29 original.png",
+        ] {
+            let url = folder.appendingPathComponent(name)
+            try Data().write(to: url)
+            #expect(
+                try store.reserveRecording(at: date).base.lastPathComponent
+                    == "Excerpt 2026-10-10 at 09.43.29 (2)")
+            try FileManager.default.removeItem(at: url)
+        }
+    }
+
+    @Test func aScreenshotAvoidsABaseARecordingHolds() throws {
+        let folder = tempFolder()
+        let store = LibraryStore(folder: folder, naming: LibraryNaming(timeZone: utc))
+        let recording = try store.reserveRecording(at: date)
+        try Data().write(to: recording.master)
+        let url = try store.saveCapture(Fixtures.sheet(width: 20, height: 20), scale: 1, at: date)
+        #expect(url.lastPathComponent == "Excerpt 2026-10-10 at 09.43.29 (2).png")
+    }
+
+    @Test func recordingPathsComeFromEitherPrimary() throws {
+        let store = LibraryStore(folder: tempFolder(), naming: LibraryNaming(timeZone: utc))
+        let reserved = try store.reserveRecording(at: date)
+        #expect(store.recordingPaths(forPrimary: reserved.primary(.mp4)) == reserved)
+        #expect(store.recordingPaths(forPrimary: reserved.primary(.gif)) == reserved)
+        #expect(store.recordingPaths(forPrimary: reserved.master) == nil)
+        #expect(
+            store.recordingPaths(forPrimary: URL(fileURLWithPath: reserved.base.path + ".png"))
+                == nil)
+    }
+
+    @Test func recentCapturesListsRecordingsNotTheirMasters() throws {
+        let folder = tempFolder()
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let names = [
+            "Excerpt 2026-10-10 at 09.00.00.gif", "Excerpt 2026-10-10 at 09.00.00 original.mov",
+            "Excerpt 2026-10-11 at 09.00.00.MP4", "Excerpt 2026-10-12 at 09.00.00.png",
+            "clip.mov",
+        ]
+        for (index, name) in names.enumerated() {
+            let url = folder.appendingPathComponent(name)
+            try Data().write(to: url)
+            try FileManager.default.setAttributes(
+                [.creationDate: date.addingTimeInterval(Double(index) * 60)], ofItemAtPath: url.path
+            )
+        }
+        #expect(
+            try LibraryStore(folder: folder).recentCaptures(limit: 10).map(\.lastPathComponent)
+                == [
+                    "Excerpt 2026-10-12 at 09.00.00.png", "Excerpt 2026-10-11 at 09.00.00.MP4",
+                    "Excerpt 2026-10-10 at 09.00.00.gif",
+                ])
+    }
+}

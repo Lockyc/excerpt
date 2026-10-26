@@ -61,17 +61,35 @@ public struct LibraryFiler: Sendable {
         var filed = Filed()
         for name in created.keys.sorted() {
             // A master travels with its primary.
-            if let primary = LibraryNaming.primaryName(forOriginal: name), created[primary] != nil {
+            if primaries(ofMaster: name).contains(where: { created[$0] != nil }) {
                 continue
             }
             guard let date = created[name], now.timeIntervalSince(date) > Self.flatAge else {
                 continue
             }
-            let master = LibraryNaming.originalName(forPrimary: name)
-            let names = name.hasSuffix(".png") && created[master] != nil ? [name, master] : [name]
+            let names =
+                [name] + [master(ofPrimary: name)].compactMap { $0 }.filter { created[$0] != nil }
             move(names, into: folder.appendingPathComponent(monthFolder(for: date)), &filed)
         }
         return filed
+    }
+
+    /// The names a master's primary may have: one for a screenshot master, a `.gif` or `.mp4`
+    /// for a recording's. Empty when `name` is not a master's.
+    private func primaries(ofMaster name: String) -> [String] {
+        if let primary = LibraryNaming.primaryName(forOriginal: name) { return [primary] }
+        if let base = LibraryNaming.recordingBase(forMaster: name) {
+            return LibraryNaming.recordingExtensions.map { "\(base).\($0)" }
+        }
+        return []
+    }
+
+    /// The master's name when `name` is a `.png`, `.gif` or `.mp4`.
+    private func master(ofPrimary name: String) -> String? {
+        if name.hasSuffix(".png") { return LibraryNaming.originalName(forPrimary: name) }
+        guard let ext = LibraryNaming.recordingExtensions.first(where: { name.hasSuffix("." + $0) })
+        else { return nil }
+        return LibraryNaming.recordingMasterName(forBase: String(name.dropLast(ext.count + 1)))
     }
 
     /// Moves `names` (a file, or a primary and its master) together, or reports the first.
