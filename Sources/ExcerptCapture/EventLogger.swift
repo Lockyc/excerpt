@@ -6,7 +6,6 @@ import ExcerptCore
 /// clicks are logged and the log says so.
 @MainActor public final class EventLogger {
     private let region: ScrollRegion
-    private let scale: Double
     private let frontmostPID: pid_t?
     private let ownHotKeys: [HotKeyBinding]
     private let clock: () -> Double?
@@ -20,12 +19,11 @@ import ExcerptCore
     /// returns recorded seconds, or nil while paused. `hasInputMonitoring` is the permission
     /// at the moment the recording starts.
     public init(
-        region: ScrollRegion, scale: Double, frontmostPID: pid_t?, ownHotKeys: [HotKeyBinding],
+        region: ScrollRegion, frontmostPID: pid_t?, ownHotKeys: [HotKeyBinding],
         clock: @escaping () -> Double?,
         hasInputMonitoring: Bool = InputMonitoring.hasPermission()
     ) {
         self.region = region
-        self.scale = scale
         self.frontmostPID = frontmostPID
         self.ownHotKeys = ownHotKeys
         self.clock = clock
@@ -58,13 +56,24 @@ import ExcerptCore
         return !ownHotKeys.contains(HotKeyBinding(keyCode: keyCode, flags: flags))
     }
 
+    /// The four modifiers a logged shortcut can carry; Caps Lock, Fn and the rest are ignored.
+    public nonisolated static func modifiers(of flags: CGEventFlags) -> KeyModifiers {
+        var modifiers: KeyModifiers = []
+        if flags.contains(.maskCommand) { modifiers.insert(.command) }
+        if flags.contains(.maskControl) { modifiers.insert(.control) }
+        if flags.contains(.maskAlternate) { modifiers.insert(.option) }
+        if flags.contains(.maskShift) { modifiers.insert(.shift) }
+        return modifiers
+    }
+
     /// Begins listening; a second call while listening does nothing.
     public func start() {
         guard monitor == nil, tap == nil else { return }
         if shortcutsLogged { startKeyTap() }
         monitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) {
             [weak self] event in
-            let point = NSEvent.mouseLocation
+            // For a global monitor `locationInWindow` is the screen point.
+            let point = event.locationInWindow
             let button: ClickButton = event.type == .rightMouseDown ? .right : .left
             MainActor.assumeIsolated { self?.logClick(at: point, button: button) }
         }
@@ -76,11 +85,16 @@ import ExcerptCore
         monitor = nil
         if let tap { CGEvent.tapEnable(tap: tap, enable: false) }
         if let tapSource { CFRunLoopRemoveSource(CFRunLoopGetMain(), tapSource, .commonModes) }
-        if let tap { CFMachPortInvalidate(tap) }
+        if let tap {
+            CFMachPortInvalidate(tap)
+            // Balances the retain `startKeyTap` gave the tap's userInfo.
+            Unmanaged.passUnretained(self).release()
+        }
         tap = nil
         tapSource = nil
         return RecordingEventLog(
-            version: RecordingEventLog.version, scale: scale, shortcutsLogged: shortcutsLogged,
+            version: RecordingEventLog.version, scale: Double(region.scale),
+            shortcutsLogged: shortcutsLogged,
             events: events)
     }
 
@@ -91,12 +105,18 @@ import ExcerptCore
             MainActor.assumeIsolated { logger.handle(type: type, event: event) }
             return Unmanaged.passUnretained(event)
         }
+        // Retained for the tap's lifetime, so a logger released without `stop()` leaks rather
+        // than leaving the callback a dangling pointer.
+        let userInfo = Unmanaged.passRetained(self)
         guard
             let tap = CGEvent.tapCreate(
                 tap: .cgSessionEventTap, place: .headInsertEventTap, options: .listenOnly,
                 eventsOfInterest: CGEventMask(1 << CGEventType.keyDown.rawValue),
-                callback: callback, userInfo: Unmanaged.passUnretained(self).toOpaque())
-        else { return }
+                callback: callback, userInfo: userInfo.toOpaque())
+        else {
+            userInfo.release()
+            return
+        }
         let source = CFMachPortCreateRunLoopSource(nil, tap, 0)
         CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
         CGEvent.tapEnable(tap: tap, enable: true)
@@ -116,13 +136,10 @@ import ExcerptCore
     }
 
     private func logKey(_ event: CGEvent) {
-        guard let time = clock() else { return }
+        guard event.getIntegerValueField(.keyboardEventAutorepeat) == 0, let time = clock()
+        else { return }
         let keyCode = UInt16(truncatingIfNeeded: event.getIntegerValueField(.keyboardEventKeycode))
-        var modifiers: KeyModifiers = []
-        if event.flags.contains(.maskCommand) { modifiers.insert(.command) }
-        if event.flags.contains(.maskControl) { modifiers.insert(.control) }
-        if event.flags.contains(.maskAlternate) { modifiers.insert(.option) }
-        if event.flags.contains(.maskShift) { modifiers.insert(.shift) }
+        let modifiers = Self.modifiers(of: event.flags)
         guard
             Self.accepts(
                 keyCode: keyCode, modifiers: modifiers,
