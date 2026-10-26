@@ -426,15 +426,16 @@ extension LibraryTests {
         #expect(url.lastPathComponent == "Excerpt 2026-10-10 at 09.43.29 (2).png")
     }
 
-    @Test func recordingPathsComeFromEitherPrimary() throws {
+    @Test func recordingPathsComeFromEitherPrimaryOrTheMaster() throws {
         let store = LibraryStore(folder: tempFolder(), naming: LibraryNaming(timeZone: utc))
         let reserved = try store.reserveRecording(at: date)
-        #expect(store.recordingPaths(forPrimary: reserved.primary(.mp4)) == reserved)
-        #expect(store.recordingPaths(forPrimary: reserved.primary(.gif)) == reserved)
-        #expect(store.recordingPaths(forPrimary: reserved.master) == nil)
+        #expect(store.recordingPaths(for: reserved.primary(.mp4)) == reserved)
+        #expect(store.recordingPaths(for: reserved.primary(.gif)) == reserved)
+        #expect(store.recordingPaths(for: reserved.master) == reserved)
         #expect(
-            store.recordingPaths(forPrimary: URL(fileURLWithPath: reserved.base.path + ".png"))
-                == nil)
+            store.recordingPaths(for: URL(fileURLWithPath: reserved.base.path + ".png")) == nil)
+        #expect(
+            store.recordingPaths(for: URL(fileURLWithPath: reserved.base.path + ".mov")) == nil)
     }
 
     @Test func recentCapturesListsRecordingsNotTheirMasters() throws {
