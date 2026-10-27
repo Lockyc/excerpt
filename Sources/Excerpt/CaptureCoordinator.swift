@@ -102,12 +102,18 @@ final class CaptureCoordinator {
         let overlay = SelectionOverlay()
         defer { overlay.close() }
         if requested.selects { overlay.cover() }
+        // Every selecting mode can switch to Window, so each takes the window stills; the
+        // overlay shows without waiting for them.
+        let windowStills = Task { requested.selects ? try await capturer.windowStills() : [] }
+        defer { windowStills.cancel() }
+        overlay.activatesAfter = { _ = await windowStills.result }
         do {
             let stills = try await capturer.stills()
             var action = requested
             while true {
                 switchedTo = nil
-                try await capture(action, stills: stills, overlay: overlay)
+                try await capture(
+                    action, stills: stills, windowStills: windowStills, overlay: overlay)
                 guard let next = switchedTo else { return }
                 if next == .scrolling && !overlay.aside({ scrollingMayStart() }) { return }
                 action = next
@@ -137,7 +143,8 @@ final class CaptureCoordinator {
 
     /// Runs `action` on the stills already taken.
     private func capture(
-        _ action: HotKeyAction, stills: [DisplayStill], overlay: SelectionOverlay
+        _ action: HotKeyAction, stills: [DisplayStill],
+        windowStills: Task<[WindowStill], Error>, overlay: SelectionOverlay
     ) async throws {
         switch action {
         case .area, .text:
@@ -147,16 +154,20 @@ final class CaptureCoordinator {
                 try await use(action, still: still, pixelRect: rect, overlay: overlay)
             }
         case .window:
-            let windows = try await capturer.windowsFrontToBack()
+            let shots = try await windowStills.value
             if case .window(let window) = await select(
-                .window(windows: windows), for: action, overlay: overlay, stills: stills)
+                .window(windows: shots.map(\.window)), for: action, overlay: overlay,
+                stills: stills),
+                let shot = shots.first(where: {
+                    $0.window.window.windowID == window.window.windowID
+                })
             {
-                // The display holding most of the window sets its scale and wallpaper.
+                // The display holding most of the window sets its wallpaper.
                 let still = stills.filter { $0.frame.intersects(window.frame) }.max {
                     Self.overlap($0.frame, window.frame) < Self.overlap($1.frame, window.frame)
                 }
-                let scale = still?.scale ?? 2
-                var image = try await capturer.image(of: window, scale: scale)
+                let scale = shot.scale
+                var image = shot.image
                 if preferences.windowBackdrop {
                     var fill = Backdrop.Fill.color(preferences.backdropColor)
                     if preferences.backdropStyle == .wallpaper, let still,

@@ -94,6 +94,9 @@ public final class SelectionOverlay {
     private var observers: [NSObjectProtocol] = []
     /// The outcome when the overlay finished before `run` waited on it.
     private var result: SelectionResult?
+    /// What `run` waits for before activating Excerpt, which closes the frontmost app's menus:
+    /// the window stills, still being taken while the overlay shows.
+    public var activatesAfter: (() async -> Void)?
 
     public init() {}
 
@@ -138,10 +141,6 @@ public final class SelectionOverlay {
         }
         cover()
         if let result { return result }
-        // Activated only now, so the stills show the frontmost app as it was.
-        NSApp.activate(ignoringOtherApps: true)
-        let mouse = NSEvent.mouseLocation
-        (windows.first { $0.frame.contains(mouse) } ?? windows.first)?.makeKey()
         return await withCheckedContinuation { continuation in
             self.continuation = continuation
             for window in windows {
@@ -153,11 +152,20 @@ public final class SelectionOverlay {
                 if self.continuation == nil { break }  // a press made while covering finished it
             }
             // A selection reopened on another display takes the keys and the mode bar there.
-            if let settled = windows.first(where: \.overlayView.isSettled) {
-                _ = clearSelections(except: settled.overlayView)
-                settled.makeKey()
-            }
+            let settled = windows.first(where: \.overlayView.isSettled)
+            if let settled { _ = clearSelections(except: settled.overlayView) }
+            Task { await activate(keying: settled) }
         }
+    }
+
+    /// Activates Excerpt once `activatesAfter` is done, so the stills show the frontmost app as
+    /// it was, and gives the keys to `settled`, or else to the display under the pointer.
+    private func activate(keying settled: OverlayWindow?) async {
+        await activatesAfter?()
+        guard continuation != nil else { return }
+        NSApp.activate(ignoringOtherApps: true)
+        let mouse = NSEvent.mouseLocation
+        (settled ?? windows.first { $0.frame.contains(mouse) } ?? windows.first)?.makeKey()
     }
 
     /// Ends the waiting `run` cancelled but keeps the overlay up, so the next `run` presents the
