@@ -101,9 +101,16 @@ public final class ScreenCapturer {
         let configuration: SCStreamConfiguration
     }
 
-    /// Normal-layer, on-screen windows of other apps, frontmost first (CGWindowList gives the
-    /// z-order; ScreenCaptureKit's list does not).
+    /// Normal-layer, on-screen windows of other apps, frontmost first.
     public func windowsFrontToBack() async throws -> [CapturableWindow] {
+        try await stack().pickable
+    }
+
+    /// Every on-screen window front to back (CGWindowList gives the z-order; ScreenCaptureKit's
+    /// list does not), and those of them a capture can pick.
+    private func stack() async throws -> (
+        content: SCShareableContent, all: [SCWindow], pickable: [CapturableWindow]
+    ) {
         let content = try await SCShareableContent.excludingDesktopWindows(
             true, onScreenWindowsOnly: true)
         let ownPID = ProcessInfo.processInfo.processIdentifier
@@ -113,10 +120,12 @@ public final class ScreenCapturer {
             (CGWindowListCopyWindowInfo(
                 [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID)
                 as? [[String: Any]]) ?? []
-        return order.compactMap { info in
-            guard let id = info[kCGWindowNumber as String] as? CGWindowID,
-                let window = byID[id], window.windowLayer == 0,
-                window.owningApplication?.processID != ownPID, window.frame.width > 1
+        let all = order.compactMap { info in
+            (info[kCGWindowNumber as String] as? CGWindowID).flatMap { byID[$0] }
+        }
+        let pickable = all.compactMap { window -> CapturableWindow? in
+            guard window.windowLayer == 0, window.owningApplication?.processID != ownPID,
+                window.frame.width > 1
             else { return nil }
             return CapturableWindow(
                 window: window,
@@ -124,6 +133,7 @@ public final class ScreenCapturer {
                     fromQuartz: window.frame, primaryHeight: NSScreen.primaryHeight),
                 title: window.title ?? window.owningApplication?.applicationName ?? "")
         }
+        return (content, all, pickable)
     }
 
     /// The desktop picture of display `displayID` as it shows now, at `scale`, dynamic and
@@ -147,27 +157,94 @@ public final class ScreenCapturer {
             contentFilter: filter, configuration: configuration)
     }
 
-    /// One window, by itself, without its shadow (the backdrop frames it instead).
-    ///
-    /// A window that lies on one display is cut from that display with only itself composited:
-    /// a desktop-independent filter renders a sheet's whole window tree — the parent with the
-    /// sheet on it — shrunk into the sheet's size. A window spanning displays falls back to the
-    /// desktop-independent filter, which no single display can hold.
-    public func image(of window: CapturableWindow, scale: CGFloat) async throws -> CGImage {
-        let frame = window.window.frame
-        let configuration = Self.still(width: frame.width, height: frame.height, scale: scale)
-        let content = try await SCShareableContent.excludingDesktopWindows(
-            true, onScreenWindowsOnly: true)
-        let filter: SCContentFilter
-        if let display = content.displays.first(where: { $0.frame.contains(frame) }) {
-            filter = SCContentFilter(display: display, including: [window.window])
-            configuration.sourceRect = frame.offsetBy(
-                dx: -display.frame.minX, dy: -display.frame.minY)
-        } else {
-            filter = SCContentFilter(desktopIndependentWindow: window.window)
-            configuration.ignoreShadowsSingleWindow = true
+    /// Every window a capture can pick, each by itself as it shows now, frontmost first: the
+    /// window stills, taken with the display stills so they keep hover states and the menus
+    /// that activating Excerpt closes. A window that closes meanwhile is left out.
+    public func windowStills() async throws -> [WindowStill] {
+        let (content, all, pickable) = try await stack()
+        let stacked = all.map {
+            StackedWindow(
+                id: $0.windowID, pid: $0.owningApplication?.processID ?? 0,
+                layer: $0.windowLayer, frame: $0.frame)
         }
-        return try await SCScreenshotManager.captureImage(
-            contentFilter: filter, configuration: configuration)
+        let byID = Dictionary(
+            all.map { ($0.windowID, $0) }, uniquingKeysWith: { first, _ in first })
+        let requests = pickable.map { window in
+            let target = stacked.first { $0.id == window.window.windowID }!
+            let overlays = WindowStack.overlays(of: target, in: stacked)
+            return request(
+                for: window, overlays: overlays.compactMap { byID[$0.id] },
+                reach: WindowStack.frame(of: target, with: overlays), displays: content.displays)
+        }
+        return await withTaskGroup(of: (Int, CGImage?).self) { group in
+            for (index, request) in requests.enumerated() {
+                group.addTask {
+                    let image = try? await SCScreenshotManager.captureImage(
+                        contentFilter: request.filter, configuration: request.configuration)
+                    return (index, image)
+                }
+            }
+            var images: [Int: CGImage] = [:]
+            for await (index, image) in group { images[index] = image }
+            return requests.enumerated().compactMap { index, request in
+                images[index].map {
+                    WindowStill(window: request.window, image: $0, scale: request.scale)
+                }
+            }
+        }
     }
+
+    /// One window's still, as asked for on the main actor before the captures start.
+    private struct WindowRequest {
+        let window: CapturableWindow
+        let scale: CGFloat
+        let filter: SCContentFilter
+        let configuration: SCStreamConfiguration
+    }
+
+    /// The capture of `window` with its `overlays`, without its shadow (the backdrop frames it
+    /// instead), at the scale of the display it lies on.
+    ///
+    /// A window that lies on one display is cut from that display with only itself and its
+    /// overlays composited, over `reach` within that display: a desktop-independent filter
+    /// renders a sheet's whole window tree — the parent with the sheet on it — shrunk into the
+    /// sheet's size. A window spanning displays falls back to the desktop-independent filter,
+    /// which no single display can hold, and so to the window alone.
+    private func request(
+        for window: CapturableWindow, overlays: [SCWindow], reach: CGRect, displays: [SCDisplay]
+    ) -> WindowRequest {
+        // The screen holding most of the window sets the scale.
+        let scale =
+            NSScreen.screens.max {
+                $0.frame.intersection(window.frame).area < $1.frame.intersection(window.frame).area
+            }?.backingScaleFactor ?? 2
+        let frame = window.window.frame
+        guard let display = displays.first(where: { $0.frame.contains(frame) }) else {
+            let configuration = Self.still(width: frame.width, height: frame.height, scale: scale)
+            configuration.ignoreShadowsSingleWindow = true
+            return WindowRequest(
+                window: window, scale: scale,
+                filter: SCContentFilter(desktopIndependentWindow: window.window),
+                configuration: configuration)
+        }
+        let area = reach.intersection(display.frame)
+        let configuration = Self.still(width: area.width, height: area.height, scale: scale)
+        configuration.sourceRect = area.offsetBy(dx: -display.frame.minX, dy: -display.frame.minY)
+        return WindowRequest(
+            window: window, scale: scale,
+            filter: SCContentFilter(display: display, including: [window.window] + overlays),
+            configuration: configuration)
+    }
+}
+
+/// A window as it showed when the capture started, with its app's menus and popovers over it.
+public struct WindowStill {
+    public let window: CapturableWindow
+    public let image: CGImage
+    public let scale: CGFloat
+}
+
+extension CGRect {
+    /// Zero for a rect that is null, as a non-overlapping intersection is.
+    fileprivate var area: CGFloat { isNull ? 0 : width * height }
 }
