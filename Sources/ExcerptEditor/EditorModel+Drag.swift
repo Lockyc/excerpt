@@ -81,7 +81,7 @@ extension EditorModel {
             {
                 return .seamEdge(seam, edge)
             }
-            if tool == .select, let handle = vertexHandle(at: p, map: map, option: option) {
+            if let handle = vertexHandle(at: p, map: map, option: option) {
                 return handle
             }
             if let seam = HitTest.seam(at: p.rendered, map: map, slop: slop) {
@@ -254,10 +254,18 @@ extension EditorModel {
             endFreehand(id: id, from: from, raw: raw)
         case .vertex(_, _, _, let before):
             commit(from: before)
-        case .region:
+        case .region(let start):
             switch (tool, shown) {
             case (.cut, .cut(let cut)?):
                 apply { $0.cuts.append(cut) }
+            case (.cut, nil):
+                // A click, not a drag, under the cut tool selects the annotation it lands on.
+                let reach = Double(hypot(p.original.x - start.x, p.original.y - start.y))
+                guard reach < minimumDrag else { break }
+                selection = HitTest.annotation(
+                    at: p.rendered, in: document.annotations, scale: document.scale, slop: slop,
+                    map: map
+                ).map(Selection.annotation)
             case (.blur, .region(let rect)?):
                 let id = document.nextAnnotationID
                 apply { doc in

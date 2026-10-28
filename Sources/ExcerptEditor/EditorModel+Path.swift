@@ -141,12 +141,12 @@ extension EditorModel {
     /// dragged to move that end; a path's, dragged to reshape, or with ⌥ deleted, never below
     /// two (a closed path under three opens) — or with ⌥ a path's segment, where a vertex is
     /// inserted and dragged. Nil off the selected annotation's handles, and under a drawing tool
-    /// that doesn't draw its kind.
+    /// that doesn't draw its kind; the cut tool, which selects with a click, takes them.
     func vertexHandle(at p: Pointer, map: RenderMap, option: Bool) -> Grab? {
         guard case .annotation(let id) = selection,
             let note = document.annotations.first(where: { $0.id == id }),
             let points = note.shape.vertices,
-            tool == .select || tool.draws(note.shape)
+            tool == .select || tool == .cut || tool.draws(note.shape)
         else { return nil }
         if let index = points.indices.first(where: { isNear(p, points[$0], map: map) }) {
             return .vertex(id: id, index: index)

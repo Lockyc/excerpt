@@ -340,7 +340,8 @@ toolbar glyph (`ToolGlyph`); where a press would take hold of something instead 
 hit-test the press follows), it shows that: an open hand on what would move, closed while it
 moves, a resize arrow on a selected seam's edge, a pointing hand on a seam or on the first vertex
 that closes the path being built, which then previews closed. A drawing tool pressed on an annotation it
-draws selects and moves it rather than drawing over it; other kinds are drawn over. The arrow drag
+draws selects and moves it rather than drawing over it; other kinds are drawn over. Under cut, a
+drag always cuts and a click selects the annotation under it, whose handles then drag. The arrow drag
 **starts at the head**; a selected arrow shows its head and tail as handles, each dragged on its
 own. Crop snaps using the same gap detection as cuts.
 
