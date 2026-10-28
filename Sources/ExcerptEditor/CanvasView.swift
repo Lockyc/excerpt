@@ -373,7 +373,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
             break
         }
 
-        drawPathHandles(in: context)
+        drawVertexHandles(in: context)
     }
 
     private func strokeDashed(_ rect: CGRect, in context: CGContext) {
@@ -408,10 +408,10 @@ final class CanvasView: NSView, NSTextViewDelegate {
         context.strokeEllipse(in: knob)
     }
 
-    /// The vertices of the path being built, or of the selected path, as handles; while
-    /// building, the first vertex is larger once a click on it would close the path, and filled
-    /// while the pointer is on it.
-    private func drawPathHandles(in context: CGContext) {
+    /// The vertices of the path being built, or of the selected arrow or path, as handles;
+    /// while building, the first vertex is larger once a click on it would close the path, and
+    /// filled while the pointer is on it.
+    private func drawVertexHandles(in context: CGContext) {
         let id: Int?
         if let building = model.building {
             id = building.id
@@ -421,7 +421,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
             id = nil
         }
         guard let id, let note = model.document.annotations.first(where: { $0.id == id }),
-            case .path(let points, _, _) = note.shape
+            let points = note.shape.vertices
         else { return }
         let line = 1 / zoom
         context.setStrokeColor(Self.accent)

@@ -104,6 +104,26 @@ public enum Shape: Codable, Equatable, Sendable {
         }
     }
 
+    /// The points a selected shape is reshaped by: an arrow's tail then head, a path's points;
+    /// nil for shapes reshaped otherwise.
+    public var vertices: [CGPoint]? {
+        switch self {
+        case .arrow(let tail, let head): return [tail, head]
+        case .path(let points, _, _): return points
+        default: return nil
+        }
+    }
+
+    /// The same shape through `vertices`, in `vertices`' order; an arrow takes the first two.
+    public func with(vertices: [CGPoint]) -> Shape {
+        switch self {
+        case .arrow where vertices.count >= 2: return .arrow(tail: vertices[0], head: vertices[1])
+        case .path(_, let closed, let fill):
+            return .path(points: vertices, closed: closed, fill: fill)
+        default: return self
+        }
+    }
+
     public var isBlur: Bool {
         if case .blur = self { return true }
         return false

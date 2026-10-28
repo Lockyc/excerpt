@@ -34,7 +34,7 @@ enum Pending: Equatable {
 enum Grab: Equatable {
     /// An edge of the selected seam, dragged to resize its cut.
     case seamEdge(Seam, SeamEdge)
-    /// A vertex of the selected path: dragged to reshape, or with ⌥ deleted.
+    /// A vertex of the selected arrow or path: dragged to reshape, or with ⌥ a path's deleted.
     case vertex(id: Int, index: Int)
     /// With ⌥, segment `index` of the selected path, where a vertex is inserted and dragged.
     case segment(id: Int, index: Int)
@@ -54,7 +54,7 @@ enum Drag {
     case edge(Seam, SeamEdge, start: CGPoint)
     /// A press under the path tool: the path's vertices from index `from` on are `raw`.
     case freehand(id: Int, from: Int, raw: [CGPoint])
-    /// A selected path's vertex being dragged, held `offset` from the pointer where it was
+    /// A selected arrow's or path's vertex being dragged, held `offset` from the pointer where it was
     /// grabbed, so a press beside it doesn't jump it to the pointer.
     case vertex(id: Int, index: Int, offset: CGPoint, before: EditDocument)
 }
@@ -70,7 +70,7 @@ extension EditorModel {
     /// path being built. The pointer shows it too, so a press does what the pointer promised.
     func grab(at p: Pointer, map: RenderMap, option: Bool) -> Grab? {
         if let building {
-            let points = pathPoints(building.id)
+            let points = vertices(building.id)
             return points.count >= 3 && isNear(p, points[0], map: map) ? .closePath : nil
         }
         switch tool {
@@ -81,7 +81,7 @@ extension EditorModel {
             {
                 return .seamEdge(seam, edge)
             }
-            if tool == .select, let handle = pathHandle(at: p, map: map, option: option) {
+            if tool == .select, let handle = vertexHandle(at: p, map: map, option: option) {
                 return handle
             }
             if let seam = HitTest.seam(at: p.rendered, map: map, slop: slop) {
@@ -92,9 +92,9 @@ extension EditorModel {
                 at: p.rendered, in: document.annotations, scale: document.scale, slop: slop,
                 map: map
             ).map(Grab.annotation)
-        case .path:
-            return pathHandle(at: p, map: map, option: option) ?? ownAnnotation(at: p, map: map)
-        case .arrow, .rectangle, .highlight, .step, .blur:
+        case .path, .arrow:
+            return vertexHandle(at: p, map: map, option: option) ?? ownAnnotation(at: p, map: map)
+        case .rectangle, .highlight, .step, .blur:
             return ownAnnotation(at: p, map: map)
         case .crop, .text:
             return nil
@@ -119,8 +119,8 @@ extension EditorModel {
             setPending(
                 .edge(seam, edge, edge == .before ? seam.band.lowerBound : seam.band.upperBound))
         case .vertex(let id, let index):
-            let points = pathPoints(id)
-            if option {
+            let points = vertices(id)
+            if option, case .path? = document.annotations.first(where: { $0.id == id })?.shape {
                 guard points.count > 2 else { return }
                 editSelectedPath { points, closed, _ in
                     points.remove(at: index)
@@ -133,9 +133,9 @@ extension EditorModel {
             }
         case .segment(let id, let index):
             let before = document
-            var inserted = pathPoints(id)
+            var inserted = vertices(id)
             inserted.insert(p.original, at: index + 1)
-            previewPathPoints(id, inserted)
+            previewVertices(id, inserted)
             setDrag(.vertex(id: id, index: index + 1, offset: .zero, before: before))
         case .closePath:
             finishPath(closing: true)
@@ -221,11 +221,11 @@ extension EditorModel {
         case .freehand(let id, let from, let raw):
             dragFreehand(id: id, from: from, raw: raw, to: p)
         case .vertex(let id, let index, let offset, _):
-            var points = pathPoints(id)
+            var points = vertices(id)
             if points.indices.contains(index) {
                 points[index] = CGPoint(
                     x: p.original.x + offset.x, y: p.original.y + offset.y)
-                previewPathPoints(id, points)
+                previewVertices(id, points)
             }
         case nil:
             break
