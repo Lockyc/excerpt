@@ -178,6 +178,30 @@ import Testing
         #expect(grab(105, 10) == .annotation(1))
     }
 
+    @Test func draggingAnArrowsEndsMovesEachAsOneStep() {
+        let m = model()
+        m.tool = .arrow
+        stroke(m, [CGPoint(x: 100, y: 100), CGPoint(x: 300, y: 100)])
+        let drawn = Shape.arrow(tail: CGPoint(x: 300, y: 100), head: CGPoint(x: 100, y: 100))
+        #expect(shape(m) == drawn && m.selection == .annotation(1))
+        stroke(m, [CGPoint(x: 102, y: 101), CGPoint(x: 152, y: 201)])
+        #expect(shape(m) == .arrow(tail: CGPoint(x: 300, y: 100), head: CGPoint(x: 150, y: 200)))
+        let map = map(m)
+        let tail = Pointer(rendered: CGPoint(x: 300, y: 100), map: map)
+        m.mouseDown(tail, map: map, option: true)  // ⌥ deletes only a path's vertex
+        m.mouseUp(Pointer(rendered: CGPoint(x: 320, y: 40), map: map), map: map, snap: false)
+        #expect(shape(m) == .arrow(tail: CGPoint(x: 320, y: 40), head: CGPoint(x: 150, y: 200)))
+        m.undo()
+        m.undo()
+        #expect(shape(m) == drawn)
+        m.tool = .select
+        m.selection = .annotation(1)
+        #expect(m.grab(at: tail, map: map, option: false) == .vertex(id: 1, index: 0))
+        m.tool = .rectangle  // another tool takes no arrow handle
+        m.selection = .annotation(1)
+        #expect(m.grab(at: tail, map: map, option: false) == nil)
+    }
+
     func triangle(_ m: EditorModel) {
         click(m, 10, 10)
         click(m, 200, 10)

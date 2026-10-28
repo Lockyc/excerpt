@@ -22,20 +22,16 @@ extension EditorModel {
         return Double(hypot(p.rendered.x - placed.x, p.rendered.y - placed.y)) <= handleReach
     }
 
-    func pathPoints(_ id: Int) -> [CGPoint] {
-        guard let note = document.annotations.first(where: { $0.id == id }),
-            case .path(let points, _, _) = note.shape
-        else { return [] }
-        return points
+    /// Annotation `id`'s `Shape.vertices`; empty for a shape without them.
+    func vertices(_ id: Int) -> [CGPoint] {
+        document.annotations.first(where: { $0.id == id })?.shape.vertices ?? []
     }
 
-    /// Replaces path `id`'s points in a preview, unrecorded.
-    func previewPathPoints(_ id: Int, _ points: [CGPoint]) {
+    /// Replaces annotation `id`'s vertices in a preview, unrecorded.
+    func previewVertices(_ id: Int, _ points: [CGPoint]) {
         var next = document
-        guard let i = next.annotations.firstIndex(where: { $0.id == id }),
-            case .path(_, let closed, let fill) = next.annotations[i].shape
-        else { return }
-        next.annotations[i].shape = .path(points: points, closed: closed, fill: fill)
+        guard let i = next.annotations.firstIndex(where: { $0.id == id }) else { return }
+        next.annotations[i].shape = next.annotations[i].shape.with(vertices: points)
         preview(next)
     }
 
@@ -49,8 +45,8 @@ extension EditorModel {
     func pathMouseDown(_ p: Pointer) {
         guard canAddPathPoints(1) else { return }
         if let building {
-            let points = pathPoints(building.id)
-            previewPathPoints(building.id, points + [p.original])
+            let points = vertices(building.id)
+            previewVertices(building.id, points + [p.original])
             setDrag(.freehand(id: building.id, from: points.count, raw: [p.original]))
             return
         }
@@ -72,7 +68,7 @@ extension EditorModel {
         var raw = raw
         if canAddPathPoints(1) { raw.append(p.original) }
         setDrag(.freehand(id: id, from: from, raw: raw))
-        previewPathPoints(id, Array(pathPoints(id).prefix(from)) + raw)
+        previewVertices(id, Array(vertices(id).prefix(from)) + raw)
     }
 
     /// Ends a press under the path tool: settles its run, and a drag that began the path
@@ -87,15 +83,15 @@ extension EditorModel {
     @discardableResult
     func settleFreehand(id: Int, from: Int, raw: [CGPoint]) -> Bool {
         let reach = raw.map { Double(hypot($0.x - raw[0].x, $0.y - raw[0].y)) }.max() ?? 0
-        let kept = Array(pathPoints(id).prefix(from))
+        let kept = Array(vertices(id).prefix(from))
         guard reach >= minimumDrag else {
-            previewPathPoints(id, kept + [raw[0]])
+            previewVertices(id, kept + [raw[0]])
             return false
         }
         let width =
             document.annotations.first(where: { $0.id == id })
             .map { AnnotationGeometry.lineWidth($0, scale: document.scale) } ?? 1
-        previewPathPoints(id, kept + Gestures.simplify(raw, tolerance: width / 2))
+        previewVertices(id, kept + Gestures.simplify(raw, tolerance: width / 2))
         return true
     }
 
@@ -109,7 +105,7 @@ extension EditorModel {
         }
         setBuilding(nil)
         var points: [CGPoint] = []
-        for p in pathPoints(building.id) {
+        for p in vertices(building.id) {
             if let last = points.last, hypot(p.x - last.x, p.y - last.y) < 0.5 { continue }
             points.append(p)
         }
@@ -132,27 +128,31 @@ extension EditorModel {
     /// Escape while building: drops the last vertex; dropping the only one abandons the path.
     func dropLastVertex() {
         guard let building else { return }
-        let points = pathPoints(building.id)
+        let points = vertices(building.id)
         guard points.count > 1 else {
             setBuilding(nil)
             preview(building.before)
             return
         }
-        previewPathPoints(building.id, Array(points.dropLast()))
+        previewVertices(building.id, Array(points.dropLast()))
     }
 
-    /// The selected path's own handle under `p`: a vertex (dragged to reshape, or with ⌥
-    /// deleted, never below two; a closed path under three opens), or with ⌥ a segment, where a
-    /// vertex is inserted and dragged. Nil off the selected path's handles.
-    func pathHandle(at p: Pointer, map: RenderMap, option: Bool) -> Grab? {
+    /// The selected arrow's or path's own handle under `p`: a vertex — an arrow's tail or head,
+    /// dragged to move that end; a path's, dragged to reshape, or with ⌥ deleted, never below
+    /// two (a closed path under three opens) — or with ⌥ a path's segment, where a vertex is
+    /// inserted and dragged. Nil off the selected annotation's handles, and under a drawing tool
+    /// that doesn't draw its kind.
+    func vertexHandle(at p: Pointer, map: RenderMap, option: Bool) -> Grab? {
         guard case .annotation(let id) = selection,
             let note = document.annotations.first(where: { $0.id == id }),
-            case .path(let points, let closed, _) = note.shape
+            let points = note.shape.vertices,
+            tool == .select || tool.draws(note.shape)
         else { return nil }
         if let index = points.indices.first(where: { isNear(p, points[$0], map: map) }) {
             return .vertex(id: id, index: index)
         }
-        guard option, canAddPathPoints(1) else { return nil }
+        guard option, case .path(_, let closed, _) = note.shape, canAddPathPoints(1)
+        else { return nil }
         let reach = AnnotationGeometry.lineWidth(note, scale: document.scale) / 2 + slop
         let segments = AnnotationGeometry.segments(points, closed: closed)
         return segments.indices.first(where: {
