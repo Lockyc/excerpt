@@ -51,7 +51,7 @@ where they were saved.
 | ⌘⇧4 | Area (the screen freezes while you select) |
 | ⌘⇧5 | Text — OCR straight to the clipboard, no file |
 | ⌘⇧6 | Select an area, adjust it, then pick area, scrolling, text, window, fullscreen or record from a bar over it |
-| ⌘⇧7 | Record — select an area (or click a window), then Return; ⌘⇧7 again stops |
+| ⌘⇧7 | Record — select an area, click a window or press F for the display, then Return; ⌘⇧7 again stops |
 
 macOS's own screenshot shortcuts hold ⌘⇧3 to ⌘⇧5 until they are turned off in System Settings →
 Keyboard → Keyboard Shortcuts → Screenshots, or Excerpt's are rebound in its Settings. Excerpt's
@@ -63,6 +63,11 @@ asks for **Accessibility**; scrolling the selected region yourself doesn't need 
 stitches as you go, and your own scrolling takes over from auto-scroll at any point. The first
 recording asks for **Input Monitoring** to show the shortcuts you press; without it the clip
 shows clicks only.
+
+A recording starts after a 3-2-1 countdown. A bar below the area shows the time, with **Pause**,
+**Stop** and **Discard**; the menu bar can stop it too. Esc cancels only during the countdown —
+after that it belongs to the app you're recording, so Discard is how to throw a recording away.
+A recording stops at 5 minutes, and quitting Excerpt stops and saves one in progress.
 
 Each capture is saved to `~/Documents/Screenshots/` (a setting), copied to the clipboard and
 shown as a thumbnail with **Edit**, **For Claude** and **Close**. Files in that folder older
@@ -84,6 +89,13 @@ choosing several in Open Capture…: one editor, a filmstrip along the bottom, `
 between them. Step numbers carry on from one capture to the next, and any capture can
 **Restart at 1**. Save writes them all and copies every image, in order.
 
+A recording is saved as a GIF fitted to GitHub's 10 MB limit, or as an MP4 (a setting); one too
+long for that GIF is saved as MP4, and its thumbnail says so. Its full-resolution
+`… original.mov` is kept beside it, and **For Claude** is for screenshots only. A recording's
+**Edit** opens the recording editor: drag the timeline's ends to trim, draw blurs over the whole
+clip or a span of it, turn the drawn **Shortcuts** and **Clicks** on or off, and choose GIF or
+MP4.
+
 ![The cut invoice sheet with the two overdue rows highlighted, numbered 1 and 2, and their client names blurred](docs/screenshots/annotate.png)
 
 **For Claude** (⇧⌘C in the editor) writes the capture as tiles sized for Claude to read plus a
@@ -97,7 +109,9 @@ excerpt read shot.png   # text on stdout, tile paths on stderr
 Known limits: tiles split on height only, so a capture over 2000pt wide reaches Claude downscaled;
 side-by-side columns on one background are read across, line by line, so their text interleaves
 in `text.md`; scrolling capture stops on pages
-with large animations or video.
+with large animations or video; a recording covers one display, a recorded window is the fixed
+area it covered when you clicked it, and a recording's blurs stay where they're drawn rather than
+following moving content.
 
 ## Build from source
 
