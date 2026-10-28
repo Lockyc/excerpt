@@ -202,6 +202,21 @@ import Testing
         #expect(m.grab(at: tail, map: map, option: false) == nil)
     }
 
+    @Test func underTheCutToolAClickSelectsAndAHandleDrags() {
+        let m = model()
+        m.tool = .arrow
+        stroke(m, [CGPoint(x: 100, y: 100), CGPoint(x: 300, y: 100)])
+        m.tool = .cut
+        #expect(m.selection == nil)
+        click(m, 200, 100)
+        #expect(m.selection == .annotation(1) && m.document.cuts.isEmpty)
+        stroke(m, [CGPoint(x: 300, y: 100), CGPoint(x: 300, y: 150), CGPoint(x: 300, y: 200)])
+        #expect(shape(m) == .arrow(tail: CGPoint(x: 300, y: 200), head: CGPoint(x: 100, y: 100)))
+        #expect(m.document.cuts.isEmpty)
+        stroke(m, [CGPoint(x: 200, y: 60), CGPoint(x: 200, y: 110), CGPoint(x: 200, y: 160)])
+        #expect(m.document.cuts.count == 1)  // a drag over the arrow still cuts
+    }
+
     func triangle(_ m: EditorModel) {
         click(m, 10, 10)
         click(m, 200, 10)
