@@ -172,7 +172,8 @@ holding one.
 5. **Manual fallback** when neither steps down nor the step up move the page, Accessibility is
    not granted, the pointer left the region, the wheel event failed, or the
    page scrolled a different distance than asked: the HUD reads "Scroll the page yourself · Return when done" and frames
-   are sampled and stitched as the user scrolls, skipping any that don't match. The pointer
+   are sampled and stitched as the user scrolls, skipping any that don't match; the blank rows a
+   trackpad's bounce past the page's end shows leave the stitch as it springs back. The pointer
    resting on the HUD only holds the steps until it leaves. A wheel event
    over the region that Excerpt didn't post (its own carry `EventScroller.marker`) hands
    scrolling to the user the same way, during an auto run or after an uncertain stop.

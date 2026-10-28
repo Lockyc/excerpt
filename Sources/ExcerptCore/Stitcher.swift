@@ -107,6 +107,32 @@ public struct Stitcher: Sendable {
         }
     }
 
+    /// Takes the stitch back to `frame` when it shows the newest frame's page moved down over
+    /// rows that are only background: a trackpad's elastic overscroll pulls the page past its end
+    /// and springs it back, and the blank rows it showed leave the stitch as the page returns.
+    /// False, leaving the stitch unchanged, when the page didn't move down or would uncover
+    /// content, or the rows would come out of the first frame.
+    public mutating func retract(to frame: PixelBuffer) -> Bool {
+        guard !full,
+            case .moved(let offset, _, let footer, let band) = StitchMatcher.match(
+                frame, reference, ignoringRightColumns: ignoredRightColumns)
+        else { return false }
+        let end = height - footer
+        guard end - offset >= frameHeight else { return false }
+        let rowBytes = width * 4
+        let dropped = ((end - offset) * rowBytes)..<(end * rowBytes)
+        let rows = PixelBuffer(width: width, height: offset, bytes: Array(bytes[dropped]))
+        let signatures = RowSignatures(rows, columns: band)
+        guard signatures.uniform.allSatisfy({ $0 }), Set(signatures.hashes).count == 1 else {
+            return false
+        }
+        bytes.removeSubrange(dropped)
+        height -= offset
+        tailFooter = footer
+        reference = frame
+        return true
+    }
+
     /// The whole stitch. Copies the buffer: a live view calls `bottom(rows:)` instead, never
     /// `image` after every `add`.
     public var image: PixelBuffer { PixelBuffer(width: width, height: height, bytes: bytes) }
