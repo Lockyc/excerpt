@@ -1,7 +1,7 @@
 import AppKit
 
 /// What surrounds a recording on screen: the 3-2-1 countdown, a thin outline just outside the
-/// area, and the control bar (elapsed time, Pause/Resume, Stop, Discard) placed outside the area
+/// area, and the control bar (elapsed time, Pause/Resume, Stop, Discard) placed inside the area
 /// by `ControlBarPlacement`. The stream leaves out Excerpt's windows, so none of it is recorded.
 /// `area` is in AppKit points.
 @MainActor
@@ -114,12 +114,10 @@ public final class RecordingChrome {
         guard !closed else { return }
         countdownPanel?.orderOut(nil)
         stage.show(outline, false)
-        let screens = NSScreen.screens
-        let own = Self.screen(containing: area, in: screens)
+        let own = Self.screen(containing: area, in: NSScreen.screens)
         let frame = ControlBarPlacement.frame(
             bar: bar.frame.size, area: area,
-            screen: (own ?? NSScreen.main)?.visibleFrame ?? area,
-            otherScreens: screens.filter { $0 !== own }.map(\.visibleFrame))
+            screen: (own ?? NSScreen.main)?.visibleFrame ?? area)
         bar.setFrame(frame, display: true)
         stage.show(bar, false)
     }

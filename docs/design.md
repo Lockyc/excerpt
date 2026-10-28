@@ -221,10 +221,9 @@ the tightest of the three, so a GIF is fitted to it.
   the reach for the mouse. It takes focus, so `Esc` reaches it, and hands focus back to the app
   that was frontmost before Record (a window recording's own app). While recording, the area
   has a thin outline.
-- **The control bar** — elapsed time, Pause/Resume, Stop, Discard — sits centred just below the
-  area, above it when the area meets the screen's bottom, beside it when neither has room, and
-  for a display recording at that display's bottom (or on another display when there is one).
-  It is draggable. The menu-bar icon becomes a stop button with the timer, as a backup.
+- **The control bar** — elapsed time, Pause/Resume, Stop, Discard — sits inside the area at its
+  bottom centre, unrecorded like the rest of the chrome; an area too small to hold it has it just
+  below, or above at the screen's bottom. It is draggable. The menu-bar icon becomes a stop button with the timer, as a backup.
 - **Stop:** the Record hotkey again, the bar's Stop, or the menu-bar icon. **Discard:** the
   bar's Discard, dropping everything recorded, after asking once a second has been recorded.
   Quitting stops and keeps a recording, and waits for every recording's save. No key is taken
