@@ -154,12 +154,13 @@ public struct ScrollSession: Sendable {
     }
 
     /// Manual: a frame sampled while the user scrolls. A frame that doesn't match is skipped,
-    /// not a stop: the user can scroll back to where the stitch ends.
+    /// not a stop: the user can scroll back to where the stitch ends. One that springs back from
+    /// an overscroll past the page's end takes the background it showed out of the stitch.
     public mutating func sampled(_ frame: PixelBuffer) {
         guard case .manual = phase else { return }
         switch stitcher.add(frame) {
         case .appended, .noMovement: offTrack = false
-        case .uncertain, .unexpectedTravel: offTrack = true
+        case .uncertain, .unexpectedTravel: offTrack = !stitcher.retract(to: frame)
         case .reachedLimit: phase = .halted(.limit)
         }
     }

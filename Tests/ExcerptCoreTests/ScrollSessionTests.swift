@@ -148,6 +148,31 @@ import Testing
         #expect(s.stitcher.image == ScrollFixtures.rows(page, 0..<350))
     }
 
+    /// The viewport at the page's end, pulled `past` rows further: a trackpad's elastic
+    /// overscroll, with the background showing below the page.
+    func overscrolled(_ past: Int) -> PixelBuffer {
+        ScrollFixtures.stack([
+            ScrollFixtures.rows(page, (800 + past)..<1000),
+            ScrollFixtures.paint(width: 90, height: past) { _, _ in ScrollFixtures.paper },
+        ])
+    }
+
+    @Test func aBounceAtThePageEndSpringsBackOutOfTheStitch() {
+        var s = session(canAutoScroll: false)
+        for offset in [150, 300, 450, 600, 750, 800] { s.sampled(frame(offset)) }
+        for past in [40, 90, 120, 70, 20, 0] { s.sampled(overscrolled(past)) }
+        #expect(!s.offTrack)
+        #expect(s.stitcher.image == page)
+    }
+
+    @Test func movingBackOverPageContentStillGoesOffTrack() {
+        var s = session(canAutoScroll: false)
+        for offset in [150, 300, 450] { s.sampled(frame(offset)) }
+        s.sampled(frame(400))
+        #expect(s.offTrack)
+        #expect(s.stitcher.image == ScrollFixtures.rows(page, 0..<650))
+    }
+
     @Test func manualFramesAreIgnoredInAutoAndAutoStepsInManual() {
         var s = session()
         s.sampled(frame(120))
