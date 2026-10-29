@@ -135,11 +135,11 @@ public enum StitchMatcher {
         {
             return .still
         }
-        if let moved = believed(whole, previous, next, columns: span) { return moved }
+        if let moved = believed(whole, previous, next, columns: span, a: a, b: b) { return moved }
         for pinned in pinnedHeaders(a, b, after: whole.header, height: height) {
             let c = candidate(a, b, height: height, header: pinned.end)
             if let best = c.best, best.offset > pinned.shift,
-                let moved = believed(c, previous, next, columns: span)
+                let moved = believed(c, previous, next, columns: span, a: a, b: b)
             {
                 return moved
             }
@@ -263,28 +263,25 @@ public enum StitchMatcher {
     /// `c` as a move over `columns`, when it convinces, if need be `rescored`, and no row
     /// contradicts it; failing that, scored again with something that stays in place over the
     /// page's bottom (a floating button, a composer, a footer's shadow) left out, since its rows
-    /// lower the score or, spanning the width, contradict the move.
+    /// lower the score or, spanning the width, contradict the move. `a` and `b` are the frames'
+    /// signatures over `columns`, which `c` was scored from.
     static func believed(
-        _ c: Candidate, _ previous: PixelBuffer, _ next: PixelBuffer, columns: Range<Int>
+        _ c: Candidate, _ previous: PixelBuffer, _ next: PixelBuffer, columns: Range<Int>,
+        a: RowSignatures, b: RowSignatures
     ) -> FrameMatch? {
-        if let moved = verified(c, previous, next, columns: columns) { return moved }
+        if let moved = verified(c, previous, next, columns: columns, a: a, b: b) { return moved }
         guard !c.overlaid else { return nil }
         let overlaid = candidate(
-            RowSignatures(previous, columns: columns), RowSignatures(next, columns: columns),
-            height: previous.height, header: c.header,
+            a, b, height: previous.height, header: c.header,
             overlayLimit: Int(Double(previous.height) * maximumOverlayShare))
-        return verified(overlaid, previous, next, columns: columns)
+        return verified(overlaid, previous, next, columns: columns, a: a, b: b)
     }
 
     static func verified(
-        _ c: Candidate, _ previous: PixelBuffer, _ next: PixelBuffer, columns: Range<Int>
+        _ c: Candidate, _ previous: PixelBuffer, _ next: PixelBuffer, columns: Range<Int>,
+        a: RowSignatures, b: RowSignatures
     ) -> FrameMatch? {
-        let c =
-            c.convincing
-            ? c
-            : rescored(
-                c, previous, next, columns: columns, a: RowSignatures(previous, columns: columns),
-                b: RowSignatures(next, columns: columns))
+        let c = c.convincing ? c : rescored(c, previous, next, columns: columns, a: a, b: b)
         guard c.convincing, let best = c.best else { return nil }
         let content = previous.height - c.header - c.footer
         let found = contradictions(
@@ -339,10 +336,10 @@ public enum StitchMatcher {
             ($0.columns.count, -$0.columns.lowerBound) > ($1.columns.count, -$1.columns.lowerBound)
         }
         for run in ordered where run.columns.count >= narrowest {
-            let c = candidate(
-                RowSignatures(previous, columns: run.columns),
-                RowSignatures(next, columns: run.columns), height: previous.height)
-            guard let moved = believed(c, previous, next, columns: run.columns),
+            let a = RowSignatures(previous, columns: run.columns)
+            let b = RowSignatures(next, columns: run.columns)
+            let c = candidate(a, b, height: previous.height)
+            guard let moved = believed(c, previous, next, columns: run.columns, a: a, b: b),
                 case .moved(run.offset, let header, let footer, _) = moved
             else { continue }
             if panelsOnly(
