@@ -4,7 +4,8 @@ import ExcerptExport
 
 /// For Claude: builds the bundle off the main thread, then puts its `@` references on the
 /// clipboard. A note says what is happening, because the first text recognition after login
-/// can take many seconds while macOS prepares its model. One export per cache folder runs at a
+/// can take many seconds while macOS prepares its model, and Capture Text's chime says when the
+/// references are copied. One export per cache folder runs at a
 /// time; the buttons that start one show it as busy until it ends.
 ///
 /// The cache is pruned at launch, daily, and by every export. Expired entries that stay stuck,
@@ -24,6 +25,7 @@ final class ClaudeExporter {
     }
 
     private let cache: ClaudeCache
+    private let preferences: Preferences
     /// Exports running now, by cache folder: the folder is what two exports would fight over.
     private var running: [URL: Job] = [:]
     private var pruneTimer: Timer?
@@ -33,7 +35,8 @@ final class ClaudeExporter {
     /// Told a capture's primary when its export starts and when it ends.
     var onBusyChange: ((URL) -> Void)?
 
-    init(cache: ClaudeCache = .standard) {
+    init(preferences: Preferences, cache: ClaudeCache = .standard) {
+        self.preferences = preferences
         self.cache = cache
     }
 
@@ -93,6 +96,7 @@ final class ClaudeExporter {
             case .success(let bundle):
                 do {
                     try Pasteboard.copyText(bundle.references)
+                    if preferences.playSound { CaptureCoordinator.textRead?.play() }
                     resumePreparing(after: Toast.show(Self.summary(bundle)))
                 } catch {
                     finish(note)

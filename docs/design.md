@@ -456,7 +456,7 @@ any other way with unsaved edits asks.
   - `text.md` holds Vision OCR in reading order, panes on different backgrounds one after the
     other (`ReadingOrder.blocks`), each cut written in as `[⋯ 1,240 px hidden]`;
   - the clipboard receives `@<path>` references to every tile and `text.md`, then a space, so
-    Claude Code's file picker closes on paste;
+    Claude Code's file picker closes on paste, with Capture Text's chime;
   - both come from the render, never the original, so a cut band never reaches Claude and a
     blurred area reaches it only as the blur's noised blocks, from which no text is read;
   - the editor exports the render of the edits it saves; the thumbnail exports the

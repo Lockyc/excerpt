@@ -89,7 +89,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         preferences: preferences, onEdit: { [weak self] url in self?.openEditor(url) },
         onEditAll: { [weak self] urls in self?.openEditors(urls) },
         onClaude: { [weak self] url in self?.forClaude(url) })
-    private let claude = ClaudeExporter()
+    private lazy var claude = ClaudeExporter(preferences: preferences)
     private lazy var filing = LibraryFiling(preferences: preferences)
     /// Open editors by primary, so opening a capture again (or its master) brings its window
     /// forward.
