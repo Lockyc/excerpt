@@ -302,9 +302,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Each unsaved editor asks Save / Don't Save / Cancel, once however many captures it holds,
     /// the screenshot editors first; Cancel keeps the app running. Save writes before it
-    /// answers, so with one unsaved the quit waits on them, asked in turn; an editor still
-    /// writing an earlier save keeps the app running. Then a recording in progress is stopped
-    /// and kept, and the quit waits for every recording's save.
+    /// answers, so with one unsaved the quit waits on them, asked in turn, and on an editor
+    /// still writing an earlier save. Then a recording in progress is stopped and kept, and the
+    /// quit waits for every recording's save.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         var asked = Set<ObjectIdentifier>()
         let screenshots = editors.values.filter {

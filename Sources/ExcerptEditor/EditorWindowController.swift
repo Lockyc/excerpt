@@ -89,6 +89,16 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
     private var saving = false {
         didSet { update() }
     }
+    /// Told whether the save in flight wrote every capture, once it ends.
+    private var afterSave: [(Bool) -> Void] = []
+
+    /// Ends the save in flight and tells each waiting on it whether it wrote.
+    private func endSaving(written: Bool) {
+        saving = false
+        let waiting = afterSave
+        afterSave = []
+        for body in waiting { body(written) }
+    }
 
     /// `captures` is the series in order, one capture for a plain editor. `save` writes a
     /// capture's document (the app's `LibraryStore.saveEdits`, off the main thread) and returns
@@ -538,8 +548,8 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         Task {
             let written = await writeDocuments(unsaved)
             let acted = written ? await action(documents) : false
-            saving = false
             if acted && !isDirty { window?.close() }
+            endSaving(written: written)
         }
     }
 
@@ -575,6 +585,7 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
 
     /// Refused while a save writes; with unsaved edits it asks, and closes once that allows.
     public func windowShouldClose(_ sender: NSWindow) -> Bool {
+        guard !saving else { return false }
         guard hasUnsavedChanges() else { return true }
         confirmClose { [weak self] closes in
             if closes { self?.window?.close() }
@@ -591,10 +602,17 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
 
     /// Asks Save / Don't Save / Cancel when there are unsaved edits, then calls `done` with
     /// whether the editor may close: true when nothing is unsaved, on Don't Save, or once Save
-    /// wrote every capture with nothing edited meanwhile; false on Cancel, a failed save, or
-    /// while a save writes. Shared by the window's close and the app's quit.
+    /// wrote every capture; false on Cancel or a failed save. A save in flight, this one's Save
+    /// included, is waited for, then anything edited meanwhile is asked about in turn. Shared
+    /// by the window's close and the app's quit.
     public func confirmClose(then done: @escaping (Bool) -> Void) {
-        guard !saving else { return done(false) }
+        guard !saving else {
+            afterSave.append { [weak self] written in
+                guard written, let self else { return done(false) }
+                confirmClose(then: done)
+            }
+            return
+        }
         canvas.commitInProgress()
         let dirty = pages.filter(\.model.isDirty)
         guard let first = dirty.first else { return done(true) }
@@ -612,11 +630,8 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         case .alertFirstButtonReturn:
             let unsaved = dirty.map { ($0, $0.model.document) }
             saving = true
-            Task {
-                let written = await writeDocuments(unsaved)
-                saving = false
-                done(written && !isDirty)
-            }
+            confirmClose(then: done)
+            Task { endSaving(written: await writeDocuments(unsaved)) }
         case .alertSecondButtonReturn: done(true)
         default: done(false)
         }

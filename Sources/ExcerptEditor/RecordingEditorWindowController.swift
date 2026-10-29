@@ -35,6 +35,8 @@ public final class RecordingEditorWindowController: NSWindowController, NSWindow
     private var player: Timer?
     private var playedFrom: (time: Double, at: Date)?
     private var saving = false
+    /// Told whether the save in flight worked, once it ends.
+    private var afterSave: [(Bool) -> Void] = []
     /// The frame at the playhead couldn't be decoded, so none is shown.
     private var frameUnreadable = false
 
@@ -459,7 +461,7 @@ public final class RecordingEditorWindowController: NSWindowController, NSWindow
     }
 
     /// Hands the edits to `save` with the controls disabled meanwhile, marking them saved when it
-    /// worked.
+    /// worked, then tells `done` and each waiting on the save whether it did.
     private func write(then done: @escaping (Bool) -> Void) {
         guard !saving else { return }
         pause()
@@ -473,6 +475,9 @@ public final class RecordingEditorWindowController: NSWindowController, NSWindow
             if saved && model.edits == edits { model.markSaved() }
             update()
             done(saved)
+            let waiting = afterSave
+            afterSave = []
+            for body in waiting { body(saved) }
         }
     }
 
@@ -487,9 +492,16 @@ public final class RecordingEditorWindowController: NSWindowController, NSWindow
 
     /// Asks Save / Don't Save / Cancel when there are unsaved edits, then calls `done` with
     /// whether the editor may close: true when nothing is unsaved, on Don't Save, or once Save
-    /// worked; false on Cancel or a failed save. Shared by the window's close and the app's quit.
+    /// worked; false on Cancel or a failed save. A save in flight is waited for first. Shared by
+    /// the window's close and the app's quit.
     public func confirmClose(then done: @escaping (Bool) -> Void) {
-        guard !saving else { return done(false) }
+        guard !saving else {
+            afterSave.append { [weak self] saved in
+                guard saved, let self else { return done(false) }
+                confirmClose(then: done)
+            }
+            return
+        }
         guard model.hasUnsavedChanges else { return done(true) }
         pause()
         show()
