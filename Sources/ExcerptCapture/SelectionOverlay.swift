@@ -154,6 +154,8 @@ public final class SelectionOverlay {
             // A selection reopened on another display takes the keys and the mode bar there.
             let settled = windows.first(where: \.overlayView.isSettled)
             if let settled { _ = clearSelections(except: settled.overlayView) }
+            // On the next turn, once the stills are on screen under the pointer.
+            DispatchQueue.main.async { [weak self] in self?.showPointer() }
             Task { await activate(keying: settled) }
         }
     }
@@ -166,6 +168,14 @@ public final class SelectionOverlay {
         NSApp.activate(ignoringOtherApps: true)
         let mouse = NSEvent.mouseLocation
         (settled ?? windows.first { $0.frame.contains(mouse) } ?? windows.first)?.makeKey()
+        showPointer()
+    }
+
+    /// The pointer for the overlay under the mouse, as `OverlayView.showPointer` gives it.
+    private func showPointer() {
+        guard continuation != nil else { return }
+        let mouse = NSEvent.mouseLocation
+        windows.first { $0.isVisible && $0.frame.contains(mouse) }?.overlayView.showPointer()
     }
 
     /// Ends the waiting `run` cancelled but keeps the overlay up, so the next `run` presents the
@@ -315,14 +325,16 @@ final class OverlayView: NSView {
     static let barInset: CGFloat = 6
 
     /// The still is drawn into this view's own layer once per `present`; the tint over it is up
-    /// to four solid bands around the highlight, and everything else is drawn into `chrome` in
-    /// the rects of the marks that changed. A pointer move then repaints a loupe and a
-    /// crosshair, not a display's worth of pixels, which kept WindowServer too busy to move the
-    /// pointer smoothly. The bands are plain colour layers, which the GPU composites as they
-    /// are: a shape layer's even-odd path is rasterised on the CPU at the display's full
-    /// resolution, and that held each display's first frame back by about a quarter second.
+    /// to four solid bands around the highlight, the crosshair two thin lines over those, and
+    /// everything else is drawn into `chrome` in the rects of the marks that changed. A pointer
+    /// move then repaints a loupe, not a display's worth of pixels, which kept WindowServer too
+    /// busy to move the pointer smoothly. The bands and lines are plain colour layers, which the
+    /// GPU composites as they are and moves without a repaint: a shape layer's even-odd path is
+    /// rasterised on the CPU at the display's full resolution, and a drawn crosshair's two
+    /// full-length strips dirty a rect as large as the display.
     private let dim = CALayer()
     private let dimBands = (0..<4).map { _ in CALayer() }
+    private let crosshairLines = (0..<2).map { _ in CALayer() }
     private let dimHost = PassThroughView()
     private let chrome = PassThroughView()
     /// The marks `chrome` shows, as of the last `refresh`.
@@ -341,6 +353,10 @@ final class OverlayView: NSView {
         for band in dimBands {
             band.backgroundColor = NSColor.black.withAlphaComponent(0.35).cgColor
             dim.addSublayer(band)
+        }
+        for line in crosshairLines {
+            line.backgroundColor = NSColor.white.withAlphaComponent(0.6).cgColor
+            dim.addSublayer(line)
         }
         dimHost.layer = dim  // layer-hosting: the bands are placed, never drawn by AppKit
         dimHost.wantsLayer = true
@@ -497,6 +513,15 @@ final class OverlayView: NSView {
         hoveredChoice = choiceIndex(at: point)
         updatePointer(at: point)
         refresh()
+    }
+
+    /// Shows the pointer for where the mouse is now, without waiting for it to move: a cursor
+    /// set while the overlay was still being ordered in, or before Excerpt was active, only
+    /// takes once a later event makes the window server look again.
+    func showPointer() {
+        guard let window else { return }
+        let point = convert(window.mouseLocationOutsideOfEventStream, from: nil)
+        if mode?.settles == true { updatePointer(at: point) } else { NSCursor.current.set() }
     }
 
     /// Over a settled selection, the pointer shows what a press there does: move, resize, or
@@ -799,7 +824,6 @@ final class OverlayView: NSView {
         case windowTarget(CGRect)
         case startButton(String, CGRect)
         case bar(CGRect, hovered: Int?, available: Bool)
-        case crosshair(CGPoint)
         case loupe(CGPoint)
     }
 
@@ -841,14 +865,20 @@ final class OverlayView: NSView {
             marks.append(
                 .bar(bar, hovered: hoveredChoice, available: settled && selectedPixels != nil))
         }
-        // While drawing or resizing; not while moving, nor over the bar.
-        let shaping = !settled || reshaping?.grip.isEmpty == false
-        if mode.isArea, shaping, let cursor, bar?.contains(cursor) != true {
-            if selection == nil { marks.append(.crosshair(cursor)) }
-            marks.append(.loupe(cursor))
-        }
+        if let loupe = loupePoint { marks.append(.loupe(loupe)) }
         return marks
     }
+
+    /// Where the loupe shows: while drawing or resizing; not while moving, nor over the bar.
+    private var loupePoint: CGPoint? {
+        guard let mode, mode.isArea, !settled || reshaping?.grip.isEmpty == false, let cursor,
+            bar?.contains(cursor) != true
+        else { return nil }
+        return cursor
+    }
+
+    /// Where the crosshair crosses: at the loupe, until a selection is begun.
+    private var crosshairPoint: CGPoint? { selection == nil ? loupePoint : nil }
 
     /// The rects `mark` paints, with room for strokes and antialiasing.
     private func frames(of mark: Mark) -> [CGRect] {
@@ -857,11 +887,6 @@ final class OverlayView: NSView {
             case .outline(let rect, _): [rect.insetBy(dx: -5, dy: -5)]
             case .sizeLabel(let rect, let button): [sizeLabel(for: rect, avoiding: button).pill]
             case .windowTarget(let rect), .startButton(_, let rect), .bar(let rect, _, _): [rect]
-            case .crosshair(let point):
-                [
-                    CGRect(x: point.x - 1, y: 0, width: 2, height: bounds.height),
-                    CGRect(x: 0, y: point.y - 1, width: bounds.width, height: 2),
-                ]
             case .loupe(let point): [loupeFrame(at: point)]
             }
         return rects.map { $0.insetBy(dx: -2, dy: -2).integral }
@@ -878,6 +903,15 @@ final class OverlayView: NSView {
         CATransaction.setDisableActions(true)  // no implicit fade as the selection moves
         for (index, band) in dimBands.enumerated() {
             band.frame = index < bands.count ? bands[index] : .zero
+        }
+        let lines = crosshairPoint.map { point in
+            [
+                CGRect(x: point.x - 0.25, y: 0, width: 0.5, height: bounds.height),
+                CGRect(x: 0, y: point.y - 0.25, width: bounds.width, height: 0.5),
+            ].map { dimHost.convert($0, from: self) }
+        }
+        for (index, line) in crosshairLines.enumerated() {
+            line.frame = lines?[index] ?? .zero
         }
         CATransaction.commit()
         let now = marks
@@ -914,7 +948,8 @@ final class OverlayView: NSView {
 
     private func drawMarks() {
         guard let still else { return }
-        for mark in shown {
+        // Only those in the rects being repainted: a loupe move needn't redraw the bar.
+        for mark in shown where frames(of: mark).contains(where: chrome.needsToDraw) {
             switch mark {
             case .outline(let rect, let handles):
                 NSColor.white.setStroke()
@@ -926,7 +961,6 @@ final class OverlayView: NSView {
             case .windowTarget(let rect): drawWindowTarget(rect)
             case .startButton(let title, let rect): drawStartButton(title, in: rect)
             case .bar(let rect, _, _): drawBar(in: rect)
-            case .crosshair(let point): drawCrosshair(at: point)
             case .loupe(let point): drawLoupe(at: point, in: still)
             }
         }
@@ -1021,17 +1055,6 @@ final class OverlayView: NSView {
         text.draw(
             at: CGPoint(x: frame.midX - size.width / 2, y: frame.midY - size.height / 2),
             withAttributes: attributes)
-    }
-
-    private func drawCrosshair(at point: CGPoint) {
-        NSColor.white.withAlphaComponent(0.6).setStroke()
-        let path = NSBezierPath()
-        path.lineWidth = 0.5
-        path.move(to: CGPoint(x: point.x, y: 0))
-        path.line(to: CGPoint(x: point.x, y: bounds.height))
-        path.move(to: CGPoint(x: 0, y: point.y))
-        path.line(to: CGPoint(x: bounds.width, y: point.y))
-        path.stroke()
     }
 
     private static let sizeLabelAttributes: [NSAttributedString.Key: Any] = [
