@@ -104,9 +104,17 @@ final class CaptureCoordinator {
         defer { overlay.close() }
         if requested.selects { overlay.cover() }
         // Every selecting mode can switch to Window, so each takes the window stills; the
-        // overlay shows without waiting for them.
-        let windowStills = Task { requested.selects ? try await capturer.windowStills() : [] }
-        defer { windowStills.cancel() }
+        // overlay shows without waiting for them, and Window mode highlights from the list,
+        // waiting on the images only once a window is picked.
+        let windowList = Task { requested.selects ? try await capturer.windowList() : nil }
+        let windowStills = Task {
+            guard let list = try await windowList.value else { return [WindowStill]() }
+            return await capturer.windowStills(of: list)
+        }
+        defer {
+            windowList.cancel()
+            windowStills.cancel()
+        }
         overlay.activatesAfter = { _ = await windowStills.result }
         do {
             let stills = try await capturer.stills()
@@ -114,7 +122,8 @@ final class CaptureCoordinator {
             while true {
                 switchedTo = nil
                 try await capture(
-                    action, stills: stills, windowStills: windowStills, overlay: overlay)
+                    action, stills: stills, windowList: windowList, windowStills: windowStills,
+                    overlay: overlay)
                 guard let next = switchedTo else { return }
                 if next == .scrolling && !overlay.aside({ scrollingMayStart() }) { return }
                 action = next
@@ -145,7 +154,8 @@ final class CaptureCoordinator {
     /// Runs `action` on the stills already taken.
     private func capture(
         _ action: HotKeyAction, stills: [DisplayStill],
-        windowStills: Task<[WindowStill], Error>, overlay: SelectionOverlay
+        windowList: Task<WindowList?, Error>, windowStills: Task<[WindowStill], Error>,
+        overlay: SelectionOverlay
     ) async throws {
         switch action {
         case .area, .text:
@@ -155,11 +165,10 @@ final class CaptureCoordinator {
                 try await use(action, still: still, pixelRect: rect, overlay: overlay)
             }
         case .window:
-            let shots = try await windowStills.value
+            let windows = try await windowList.value?.pickable ?? []
             if case .window(let window) = await select(
-                .window(windows: shots.map(\.window)), for: action, overlay: overlay,
-                stills: stills),
-                let shot = shots.first(where: {
+                .window(windows: windows), for: action, overlay: overlay, stills: stills),
+                let shot = try await windowStills.value.first(where: {
                     $0.window.window.windowID == window.window.windowID
                 })
             {

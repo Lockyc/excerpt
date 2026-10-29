@@ -103,14 +103,13 @@ public final class ScreenCapturer {
 
     /// Normal-layer, on-screen windows of other apps, frontmost first.
     public func windowsFrontToBack() async throws -> [CapturableWindow] {
-        try await stack().pickable
+        try await windowList().pickable
     }
 
     /// Every on-screen window front to back (CGWindowList gives the z-order; ScreenCaptureKit's
-    /// list does not), and those of them a capture can pick.
-    private func stack() async throws -> (
-        content: SCShareableContent, all: [SCWindow], pickable: [CapturableWindow]
-    ) {
+    /// list does not), and those of them a capture can pick: quick to list, so a selection can
+    /// show the windows while `windowStills(of:)` is still taking their images.
+    public func windowList() async throws -> WindowList {
         let content = try await SCShareableContent.excludingDesktopWindows(
             true, onScreenWindowsOnly: true)
         let ownPID = ProcessInfo.processInfo.processIdentifier
@@ -133,7 +132,7 @@ public final class ScreenCapturer {
                     fromQuartz: window.frame, primaryHeight: NSScreen.primaryHeight),
                 title: window.title ?? window.owningApplication?.applicationName ?? "")
         }
-        return (content, all, pickable)
+        return WindowList(content: content, all: all, pickable: pickable)
     }
 
     /// The desktop picture of display `displayID` as it shows now, at `scale`, dynamic and
@@ -157,11 +156,11 @@ public final class ScreenCapturer {
             contentFilter: filter, configuration: configuration)
     }
 
-    /// Every window a capture can pick, each by itself as it shows now, frontmost first: the
-    /// window stills, taken with the display stills so they keep hover states and the menus
-    /// that activating Excerpt closes. A window that closes meanwhile is left out.
-    public func windowStills() async throws -> [WindowStill] {
-        let (content, all, pickable) = try await stack()
+    /// Every window of `list` a capture can pick, each by itself as it shows now, frontmost
+    /// first: the window stills, taken with the display stills so they keep hover states and
+    /// the menus that activating Excerpt closes. A window that closes meanwhile is left out.
+    public func windowStills(of list: WindowList) async -> [WindowStill] {
+        let (content, all, pickable) = (list.content, list.all, list.pickable)
         let stacked = all.map {
             StackedWindow(
                 id: $0.windowID, pid: $0.owningApplication?.processID ?? 0,
@@ -235,6 +234,15 @@ public final class ScreenCapturer {
             filter: SCContentFilter(display: display, including: [window.window] + overlays),
             configuration: configuration)
     }
+}
+
+/// The on-screen windows as `ScreenCapturer.windowList` found them.
+public struct WindowList {
+    let content: SCShareableContent
+    /// Every on-screen window, front to back.
+    let all: [SCWindow]
+    /// The windows a capture can pick, frontmost first.
+    public let pickable: [CapturableWindow]
 }
 
 /// A window as it showed when the capture started, with its app's menus and popovers over it.
