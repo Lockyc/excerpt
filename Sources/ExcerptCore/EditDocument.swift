@@ -16,7 +16,7 @@ public enum EditDocumentError: Error, Equatable, LocalizedError {
     /// The edits JSON isn't a readable edit document at all.
     case damaged
 
-    /// The one wording for why saved edits can't be used, shown by the app and `excerpt read`.
+    /// The one wording for why saved edits can't be used.
     public var errorDescription: String? {
         switch self {
         case .unsupportedVersion: "It was edited by a newer version of Excerpt."

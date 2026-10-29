@@ -23,9 +23,9 @@ import Testing
         for key in ["s", "c", "w", "x", "v", "a", "z"] {
             #expect(HotKeyBinding(character: key, flags: [.command]) != nil)
         }
-        let forClaude = HotKeyBinding(character: "c", flags: [.command, .shift])
-        #expect(forClaude?.display == "⌘⇧C")
-        #expect(forClaude?.keyCode == UInt32(kVK_ANSI_C))
+        let redo = HotKeyBinding(character: "z", flags: [.command, .shift])
+        #expect(redo?.display == "⌘⇧Z")
+        #expect(redo?.keyCode == UInt32(kVK_ANSI_Z))
         #expect(HotKeyBinding(character: "é", flags: [.command]) == nil)
     }
 

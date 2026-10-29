@@ -73,8 +73,8 @@ enum HotKeyAction: UInt32, CaseIterable {
 }
 
 extension HotKeyAction {
-    /// The shortcuts no action may take, by title: the editor's own (`For Claude in the
-    /// editor`), since a global hotkey gets the press before the editor sees it, and those every
+    /// The shortcuts no action may take, by title: the editor's own (`Save in the editor`),
+    /// since a global hotkey gets the press before the editor sees it, and those every
     /// app answers. Rebinding judges a candidate against these alongside the other actions'
     /// bindings.
     static let reservedShortcuts: [String: HotKeyBinding] = Dictionary(

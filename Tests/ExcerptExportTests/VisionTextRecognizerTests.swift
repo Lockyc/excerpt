@@ -27,7 +27,7 @@ import Testing
         // doing and not a font or model miss.
         let plain = Renderer.render(image, edits: EditDocument(scale: 2, annotations: [], salt: 7))
         let plainText = try CaptureText.read(
-            plain.image, map: plain.map, scale: 2, recognizer: VisionTextRecognizer())
+            plain.image, scale: 2, recognizer: VisionTextRecognizer())
         #expect(plainText.contains("hunter2"))
         #expect(plainText.contains("swordfish"))
         let edits = EditDocument(
@@ -37,7 +37,7 @@ import Testing
             ], salt: 7)
         let render = Renderer.render(image, edits: edits)
         let text = try CaptureText.read(
-            render.image, map: render.map, scale: 2, recognizer: VisionTextRecognizer())
+            render.image, scale: 2, recognizer: VisionTextRecognizer())
         #expect(text.contains("Quarterly revenue report"))
         #expect(text.contains("Northwind Traders 4821"))
         #expect(text.contains("Totals carried forward"))
@@ -75,7 +75,7 @@ import Testing
             salt: 7)
         let render = Renderer.render(image, edits: edits)
         return try CaptureText.read(
-            render.image, map: render.map, scale: scale, recognizer: VisionTextRecognizer())
+            render.image, scale: scale, recognizer: VisionTextRecognizer())
     }
 
     @Test(
@@ -134,15 +134,14 @@ import Testing
     }
 }
 
-/// A short, wide kept segment below a cut, its top rows holding the seam's torn edge: read by
-/// real Vision only once the region is padded to a readable shape.
+/// A short, wide selection, one line tall across a wide window: read by real Vision only once
+/// the region is padded to a readable shape.
 @Suite struct ShortRegionTests {
-    @Test(.timeLimit(.minutes(3))) func aShortWideStripBelowACutIsRead() throws {
+    @Test(.timeLimit(.minutes(3))) func aShortWideStripIsRead() throws {
         let scale = 2.0
-        let (widthPt, heightPt) = (1500, 410)
+        let (widthPt, heightPt) = (1500, 40)
         let lines: [(String, top: Double, lineHeight: Double)] = [
-            ("Quarterly revenue report 2026", 0, 40), ("CUTAWAY 5512 band", 320, 50),
-            ("Footer totals carried forward", 370, 40),
+            ("Footer totals carried forward", 0, 40)
         ]
         let (w, h) = (Int(Double(widthPt) * scale), Int(Double(heightPt) * scale))
         let context = PixelBuffer.makeContext(width: w, height: h)
@@ -161,18 +160,10 @@ import Testing
                 x: 30 * scale, y: Double(h) - (top + 0.75 * lineHeight) * scale)
             CTLineDraw(line, context)
         }
-        let edits = EditDocument(
-            scale: scale, cuts: [Cut(axis: .horizontal, lower: 640, upper: 740)],
-            crop: PixelRect(x: 10, y: 0, width: w - 20, height: h - 4), salt: 7)
-        let render = Renderer.render(context.makeImage()!, edits: edits)
-        let below = CaptureText.regions(of: render.map, scale: scale).last!.rect
-        #expect(below.height < below.width / 30)
+        #expect(h < w / 30)
         let text = try CaptureText.read(
-            render.image, map: render.map, scale: scale, recognizer: VisionTextRecognizer())
-        #expect(
-            text
-                == "Quarterly revenue report 2026\n[⋯ 50 px hidden]\nFooter totals carried forward\n"
-        )
+            context.makeImage()!, scale: scale, recognizer: VisionTextRecognizer())
+        #expect(text == "Footer totals carried forward\n")
     }
 }
 

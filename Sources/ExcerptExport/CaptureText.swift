@@ -9,41 +9,21 @@ public protocol TextRecognizer: Sendable {
     func recognize(_ image: CGImage) throws -> [RecognizedText]
 }
 
-/// Why a render can't be read. The description is a sentence about the capture that doesn't name
-/// it: `excerpt read` puts the path before it, the app's export alert names the capture.
-public enum CaptureTextError: Error, Equatable, LocalizedError {
-    /// The render's cuts split it into more regions than `CaptureText.maximumRegions`.
-    case tooManyRegions(Int)
-
-    public var errorDescription: String? {
-        switch self {
-        case .tooManyRegions(let count):
-            "Its cuts split it into \(LengthText.count(count)) parts to read; text is read from at most \(LengthText.count(CaptureText.maximumRegions))."
-        }
-    }
-}
-
-/// The text of a render, read only from what the render shows, with every cut written in where
-/// it was made. The render is the primary's pixels: a cut band is not in it, and a blurred area
-/// is only `BlurRenderer`'s blocks, which hold no readable text.
+/// The text of an image in reading order: what Capture Text copies.
 public enum CaptureText {
-    /// A part of the render read on its own: one kept span of rows by one kept span of columns,
-    /// sliced by `sliceLength` when tall, so a recogniser never sees a seam or its label.
+    /// A part of the image read on its own: the full width by one slice of the rows, so a tall
+    /// image is read in pieces the recogniser handles well.
     public struct Region: Equatable, Sendable {
-        /// In rendered pixels.
+        /// In the image's pixels.
         public let rect: PixelRect
-        /// The rendered rows whose runs this region reports, so runs in the rows two slices
-        /// share are reported once.
+        /// The rows whose runs this region reports, so runs in the rows two slices share are
+        /// reported once.
         public let owned: Range<Int>
     }
 
-    /// The most regions one read takes. Each is a recognition pass of its own, so a render cut
-    /// into more is refused before any is read rather than recognised for hours.
-    public static let maximumRegions = 4_000
-
     /// The most a region's longer side may be, in multiples of its shorter side, as the
-    /// recogniser is shown it. Vision finds nothing on a strip much flatter than this (a short
-    /// kept segment below a seam, full width), so such a region is padded first.
+    /// recogniser is shown it. Vision finds nothing on a strip much flatter than this (a full
+    /// width selection a line tall), so such a region is padded first.
     public static let maximumAspect = 8
 
     /// What the recogniser is shown for a `width`×`height` region: a white canvas whose shorter
@@ -57,8 +37,8 @@ public enum CaptureText {
         public let content: PixelRect
 
         /// The most pixels a canvas for a region of `region` pixels may have: four times the
-        /// region, or 16 megapixels when that is more. Padding stops there, so a tiny file of a
-        /// very wide, very short image can't make a canvas of gigabytes.
+        /// region, or 16 megapixels when that is more. Padding stops there, so a very wide, very
+        /// short image can't make a canvas of gigabytes.
         public static func maximumPixels(region: Int) -> Int { max(4 * region, 16_000_000) }
 
         public init(width regionWidth: Int, height regionHeight: Int) {
@@ -91,76 +71,34 @@ public enum CaptureText {
     }
 
     /// How tall a region is sliced, in points, and the tallest left whole. Vision misses small
-    /// text in a region much taller than this, so regions keep this length whatever size the
-    /// tiles are.
+    /// text in a region much taller than this.
     public static let sliceLength = 1_500
     public static let wholeLength = 1_568
 
-    /// Regions too thin to hold a line of text are not read.
+    /// An image too thin to hold a line of text is not read.
     public static let minimumRegionSide = 8
 
-    /// Every region to read, top to bottom, then left to right. The margin is read with the
-    /// image beside it: the first and last segments of each axis reach through it.
-    public static func regions(of map: RenderMap, scale: Double) -> [Region] {
+    /// Every region to read of a `width`×`height` image, top to bottom.
+    public static func regions(width: Int, height: Int, scale: Double) -> [Region] {
+        guard width >= minimumRegionSide, height >= minimumRegionSide else { return [] }
         let tile = Int((Double(sliceLength) * scale).rounded())
         let overlap = Int((Double(Tiling.overlap) * scale).rounded())
         let fits = Int((Double(wholeLength) * scale).rounded())
-        let rowSpans = spans(map.rows, leading: map.margin.top, trailing: map.margin.bottom)
-        let columnSpans = spans(
-            map.columns, leading: map.margin.left, trailing: map.margin.right)
-        var regions: [Region] = []
-        for rows in rowSpans where rows.count >= minimumRegionSide {
-            let slices = Tiling.spans(length: rows.count, tile: tile, overlap: overlap, fits: fits)
-            for (slice, owned) in zip(slices, Tiling.ownedBands(slices)) {
-                for columns in columnSpans where columns.count >= minimumRegionSide {
-                    regions.append(
-                        Region(
-                            rect: PixelRect(
-                                x: columns.lowerBound, y: rows.lowerBound + slice.lowerBound,
-                                width: columns.count, height: slice.count),
-                            owned: (rows.lowerBound + owned.lowerBound)..<(rows.lowerBound
-                                + owned.upperBound)))
-                }
-            }
+        let slices = Tiling.spans(length: height, tile: tile, overlap: overlap, fits: fits)
+        return zip(slices, Tiling.ownedBands(slices)).map { slice, owned in
+            Region(
+                rect: PixelRect(x: 0, y: slice.lowerBound, width: width, height: slice.count),
+                owned: owned)
         }
-        return regions
     }
 
-    /// Each kept segment's rendered span, shifted past the leading margin. A segment at the
-    /// image's edge reaches on through the margin beside it, so a label straddling the edge is
-    /// read whole; a margin beyond an edge cut is a span of its own.
-    private static func spans(_ axis: AxisMap, leading: Int, trailing: Int) -> [Range<Int>] {
-        let length = axis.renderedLength
-        var spans = axis.segments.map { segment in
-            let start = leading + segment.destination
-            let end = start + segment.source.count
-            return
-                (segment.destination == 0 ? 0 : start)..<(end == leading + length
-                ? end + trailing : end)
-        }
-        if leading > 0, spans.first?.lowerBound != 0 { spans.insert(0..<leading, at: 0) }
-        let total = leading + length + trailing
-        if trailing > 0, spans.last?.upperBound != total {
-            spans.append((leading + length)..<total)
-        }
-        return spans
-    }
-
-    /// Reads every region of `image`, the render `map` describes, each shown to the recogniser
-    /// on its `Canvas`, and writes the text. Throws
-    /// `tooManyRegions` before reading any when there are more than `maximumRegions`.
+    /// Reads every region of `image`, each shown to the recogniser on its `Canvas`, and writes
+    /// the text.
     public static func read(
-        _ image: CGImage, map: RenderMap, scale: Double, recognizer: any TextRecognizer
+        _ image: CGImage, scale: Double, recognizer: any TextRecognizer
     ) throws -> String {
-        precondition(
-            image.width == map.renderedWidth && image.height == map.renderedHeight,
-            "the map describes this render")
-        let regions = regions(of: map, scale: scale)
-        guard regions.count <= maximumRegions else {
-            throw CaptureTextError.tooManyRegions(regions.count)
-        }
         var runs: [RecognizedText] = []
-        for region in regions {
+        for region in regions(width: image.width, height: image.height, scale: scale) {
             let piece = image.cropping(to: region.rect.cgRect)!
             let canvas = Canvas(width: piece.width, height: piece.height)
             for run in try recognizer.recognize(canvas.image(of: piece)) {
@@ -172,7 +110,7 @@ public enum CaptureText {
                 }
             }
         }
-        return compose(runs, map: map, scale: scale) { gutter, rows in
+        return compose(runs) { gutter, rows in
             backgroundChanges(image, gutter: gutter, rows: rows)
         }
     }
@@ -206,15 +144,6 @@ public enum CaptureText {
         return Double(differing.count) >= backgroundChangedFraction * Double(rows.count)
     }
 
-    /// The text of an image with nothing cut: what Capture Text copies.
-    public static func read(
-        _ image: CGImage, scale: Double, recognizer: any TextRecognizer
-    ) throws -> String {
-        let map = Renderer.map(
-            width: image.width, height: image.height, edits: EditDocument(scale: scale))
-        return try read(image, map: map, scale: scale, recognizer: recognizer)
-    }
-
     /// Bounds a run can be placed by: finite, and near enough the image that its middle is an
     /// `Int`. A recogniser's NaN or infinite box is dropped rather than trapping the conversion.
     static func usable(_ bounds: CGRect) -> Bool {
@@ -222,65 +151,16 @@ public enum CaptureText {
         return values.allSatisfy { $0.isFinite && abs($0) <= 1e9 }
     }
 
-    /// `[⋯ 1,240 px hidden]`: the seam's own label, in brackets.
-    public static func marker(removedPixels: Int, scale: Double) -> String {
-        "[\(SeamLabel.text(removedPixels: removedPixels, scale: scale))]"
-    }
-
-    /// The text of `runs` (rendered pixels): lines in reading order, a row cut on its own line
-    /// where it was made, and a column cut between the runs either side of it on each line it
-    /// splits. A column cut no line spans is written on its own line at the top. Runs whose bounds
-    /// aren't `usable` are dropped. Each kept segment's runs are read as `ReadingOrder.blocks`
-    /// split by `backgroundChanges`, which never splits by default. Empty when there is neither
-    /// text nor a cut.
+    /// The text of `runs`: lines in reading order, read as `ReadingOrder.blocks` split by
+    /// `backgroundChanges`, which never splits by default. Runs whose bounds aren't `usable` are
+    /// dropped. Empty when there is no text.
     public static func compose(
-        _ runs: [RecognizedText], map: RenderMap, scale: Double,
+        _ runs: [RecognizedText],
         backgroundChanges: ReadingOrder.BackgroundChange = { _, _ in false }
     ) -> String {
-        let runs = runs.filter { usable($0.bounds) }
-        let margin = map.margin
-        let columnSpans = spans(map.columns, leading: margin.left, trailing: margin.right)
-        func column(_ run: RecognizedText) -> Int {
-            columnSpans.lastIndex { Double($0.lowerBound) <= Double(run.bounds.midX) } ?? 0
-        }
-        var spanned = Set<Int>()
-        func write(_ line: TextLine) -> String {
-            var text = line.runs[0].string
-            for (left, right) in zip(line.runs, line.runs.dropFirst()) {
-                let (a, b) = (column(left), column(right))
-                if a < b {
-                    let end = columnSpans[a].upperBound
-                    let start = columnSpans[b].lowerBound
-                    for (index, gap) in map.columns.gaps.enumerated()
-                    where gap.destination.lowerBound + margin.left >= end
-                        && gap.destination.upperBound + margin.left <= start
-                    {
-                        spanned.insert(index)
-                        text += " " + marker(removedPixels: gap.removed, scale: scale)
-                    }
-                }
-                text += " " + right.string
-            }
-            return text
-        }
-
-        var body: [String] = []
-        var gaps = map.rows.gaps[...]
-        for rows in spans(map.rows, leading: margin.top, trailing: margin.bottom) {
-            while let gap = gaps.first, gap.destination.lowerBound + margin.top < rows.lowerBound {
-                body.append(marker(removedPixels: gap.removed, scale: scale))
-                gaps.removeFirst()
-            }
-            let blocks = ReadingOrder.blocks(
-                runs.filter { rows.contains(Int($0.bounds.midY)) },
-                backgroundChanges: backgroundChanges)
-            body += ReadingOrder.text(blocks: blocks, write: write)
-        }
-        body += gaps.map { marker(removedPixels: $0.removed, scale: scale) }
-        let unspanned = map.columns.gaps.indices.filter { !spanned.contains($0) }.map {
-            marker(removedPixels: map.columns.gaps[$0].removed, scale: scale)
-        }
-        let all = unspanned + body
-        return all.isEmpty ? "" : all.joined(separator: "\n") + "\n"
+        let blocks = ReadingOrder.blocks(
+            runs.filter { usable($0.bounds) }, backgroundChanges: backgroundChanges)
+        let lines = ReadingOrder.text(blocks: blocks)
+        return lines.isEmpty ? "" : lines.joined(separator: "\n") + "\n"
     }
 }

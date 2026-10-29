@@ -44,8 +44,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             hotKeyStates: { [weak self] in self?.hotKeyStates() ?? [:] },
             updater: Updater.make())
         statusMenu?.onStopRecording = { [weak self] in self?.coordinator.stopRecording() }
-        claude.onBusyChange = { [weak self] primary in self?.showPreparingForClaude(primary) }
-        claude.startPruning()
         filing.start()
     }
 
@@ -87,9 +85,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private lazy var thumbnails = ThumbnailStack(
         preferences: preferences, onEdit: { [weak self] url in self?.openEditor(url) },
-        onEditAll: { [weak self] urls in self?.openEditors(urls) },
-        onClaude: { [weak self] url in self?.forClaude(url) })
-    private lazy var claude = ClaudeExporter(preferences: preferences)
+        onEditAll: { [weak self] urls in self?.openEditors(urls) })
     private lazy var filing = LibraryFiling(preferences: preferences)
     /// Open editors by primary, so opening a capture again (or its master) brings its window
     /// forward.
@@ -213,10 +209,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     return false
                 }
             },
-            forClaude: { [weak self] capture, original, document in
-                self?.claude.export(
-                    original: original, edits: document, primary: capture.primary)
-            },
             borderStyle: preferences.editorBorder,
             rememberBorder: { [weak self] in self?.preferences.editorBorder = $0 },
             annotationStyle: preferences.editorStyle,
@@ -229,7 +221,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             })
         for primary in arranged.series { editors[primary] = editor }
-        editor.isPreparingForClaude = arranged.series.contains { claude.isExporting($0) }
         editor.show()
     }
 
@@ -282,21 +273,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 })
             recordingEditors[key] = editor
             editor.show()
-        }
-    }
-
-    /// For Claude from a thumbnail: the primary as `excerpt read` takes it, with its master's
-    /// edits while it is exactly the master's render, and as its own pixels once changed since.
-    func forClaude(_ url: URL) {
-        claude.export(primary: url)
-    }
-
-    /// Brings every For Claude button of the capture at `capture` in line with its export.
-    private func showPreparingForClaude(_ capture: URL) {
-        let busy = claude.isExporting(capture)
-        thumbnails.setPreparingForClaude(busy) { self.claude.isSameCapture($0, capture) }
-        for (primary, editor) in editors where claude.isSameCapture(primary, capture) {
-            editor.isPreparingForClaude = busy
         }
     }
 
@@ -387,7 +363,7 @@ extension LibraryStore {
     /// size limits, before any pixel is decoded or drawn.
     func loadForRendering(_ url: URL) throws -> LoadedCapture {
         try load(url) { file, width, height, edits in
-            try ImageInput.checkEditable(file.path, width: width, height: height, edits: edits)
+            try EditLimits.check(file.path, width: width, height: height, edits: edits)
         }
     }
 }

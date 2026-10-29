@@ -1,27 +1,8 @@
-import CoreGraphics
-import ExcerptTestSupport
 import Testing
 
 @testable import ExcerptCore
 
 @Suite struct TilingTests {
-    @Test func tilesAreAsTallAsTheEdgeAndTokenLimitsAllow() {
-        #expect(Tiling.tileLength(width: 0) == 2_000)
-        #expect(Tiling.tileLength(width: 1_440) == 2_000)
-        // 69 patches across leave 69 rows of the 4,784-token budget.
-        #expect(Tiling.tileLength(width: 1_920) == 1_932)
-        #expect(Tiling.tileLength(width: 2_000) == 1_848)
-        #expect(Tiling.tileLength(width: 5_000) == 1_848)
-        for width in 1...6_000 {
-            let tile = Tiling.tileLength(width: width)
-            let read = min(width, Tiling.maximumEdge)
-            let tokens = ((read + 27) / 28) * ((tile * read / width + 27) / 28)
-            #expect(tile <= Tiling.maximumEdge && tile > Tiling.overlap)
-            #expect(tile == Tiling.maximumEdge || tile % Tiling.patch == 0)
-            #expect(tokens <= Tiling.maximumTokens, "width \(width)")
-        }
-    }
-
     @Test func aCaptureThatFitsIsOneSpan() {
         #expect(Tiling.spans(length: 900, tile: 1_500) == [0..<900])
         #expect(Tiling.spans(length: 1_500, tile: 1_500) == [0..<1_500])
@@ -77,71 +58,5 @@ import Testing
                 #expect(top + Tiling.overlap <= spans[owner].upperBound)
             }
         }
-    }
-
-    @Test func tilesAreAtOnePixelPerPoint() {
-        let image = Fixtures.sheet(width: 400, height: 6_000)
-        let tiles = Tiling.tiles(of: image, scale: 2)
-        #expect(tiles.count == 2)
-        #expect(tiles.allSatisfy { $0.width == 200 && $0.height == Tiling.tileLength(width: 200) })
-        #expect(Tiling.atPoints(image, scale: 2).height == 3_000)
-    }
-
-    @Test func aOneTimesCaptureThatFitsIsItself() {
-        let image = Fixtures.sheet(width: 300, height: 800)
-        let tiles = Tiling.tiles(of: image, scale: 1)
-        #expect(tiles.count == 1)
-        #expect(PixelBuffer(tiles[0]) == PixelBuffer(image))
-    }
-
-    /// A source in another pixel format still comes out as 8-bit sRGB RGBA, so a later PNG
-    /// encode cannot fail on it.
-    @Test func atPointsAlwaysNormalisesToEightBitSRGB() {
-        let space = CGColorSpace(name: CGColorSpace.sRGB)!
-        let info = CGBitmapInfo(
-            rawValue: CGImageAlphaInfo.premultipliedLast.rawValue
-                | CGBitmapInfo.byteOrder16Little.rawValue)
-        let context = CGContext(
-            data: nil, width: 40, height: 30, bitsPerComponent: 16, bytesPerRow: 0, space: space,
-            bitmapInfo: info.rawValue)!
-        context.setFillColor(CGColor(srgbRed: 1, green: 0, blue: 0, alpha: 1))
-        context.fill(CGRect(x: 0, y: 0, width: 40, height: 30))
-        let source = context.makeImage()!
-        #expect(source.bitsPerComponent == 16)
-        for scale in [1.0, 2.0] {
-            let out = Tiling.atPoints(source, scale: scale)
-            #expect(out.bitsPerComponent == 8 && out.bitsPerPixel == 32)
-            #expect(out.colorSpace?.name == CGColorSpace.sRGB)
-            #expect(PixelBuffer(out)[x: 0, y: 0] == RGBA(r: 255, g: 0, b: 0, a: 255))
-        }
-    }
-
-    /// Each tile's first and last rows are the point rows its span names, including the
-    /// pulled-back last tile.
-    @Test(arguments: [(1, 4_000), (2, 4_000), (3, 4_000)])
-    func tilesHoldTheRowsTheirSpansName(scale: Int, points: Int) {
-        let image = Fixtures.paint(width: 12, height: points * scale) { _, y in
-            Fixtures.rowColor(y / scale)
-        }
-        let tiles = Tiling.tiles(of: image, scale: Double(scale))
-        let spans = Tiling.spans(length: points, tile: Tiling.tileLength(width: 12 / scale))
-        #expect(tiles.count == spans.count && spans.count > 2)
-        for (tile, span) in zip(tiles, spans) {
-            let buffer = PixelBuffer(tile)
-            #expect(buffer.height == span.count && buffer.width == 12 / scale)
-            #expect(buffer[x: 1, y: 0] == Fixtures.rowColor(span.lowerBound))
-            #expect(buffer[x: 1, y: span.count - 1] == Fixtures.rowColor(span.upperBound - 1))
-        }
-    }
-
-    @Test func anOddPixelHeightRoundsToTheNearestPoint() {
-        let image = Fixtures.sheet(width: 40, height: 1_001)
-        #expect(Tiling.atPoints(image, scale: 2).height == 501)
-    }
-
-    @Test func aNonFiniteScaleIsOneTimes() {
-        let image = Fixtures.sheet(width: 40, height: 100)
-        #expect(Tiling.atPoints(image, scale: .nan).height == 100)
-        #expect(Tiling.atPoints(image, scale: .infinity).height == 100)
     }
 }
