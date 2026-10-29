@@ -167,15 +167,20 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     /// size until then.
     private func loadThumbnail(_ url: URL, into entry: NSMenuItem) {
         let size = Self.thumbnailSize
+        let scale = NSScreen.main?.backingScaleFactor ?? 2
         if LibraryNaming.recordingExtensions.contains(url.pathExtension.lowercased()) {
+            let longest = Int((max(size.width, size.height) * scale).rounded(.up))
             Task { @MainActor in
-                guard let poster = await RecordingPoster.firstFrame(of: url) else { return }
+                guard
+                    let poster = await RecordingPoster.firstFrame(
+                        of: url, maximumPixelSize: longest)
+                else { return }
                 entry.image = Self.fit(poster, in: size)
             }
             return
         }
         let request = QLThumbnailGenerator.Request(
-            fileAt: url, size: size, scale: NSScreen.main?.backingScaleFactor ?? 2,
+            fileAt: url, size: size, scale: scale,
             representationTypes: .thumbnail)
         QLThumbnailGenerator.shared.generateBestRepresentation(for: request) {
             representation, _ in
