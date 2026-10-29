@@ -17,8 +17,11 @@ public enum GIFLZW {
             return writer.finish()
         }
         // The string table as a flat trie: the code for `prefix` followed by `symbol` sits at
-        // `prefix * alphabet + symbol`, 0 meaning absent (no added code is ever 0).
+        // `prefix * alphabet + symbol`, 0 meaning absent (no added code is ever 0). A clear
+        // zeroes only the keys it filled, not the whole table.
         var table = [UInt16](repeating: 0, count: 4096 * alphabet)
+        var filled: [Int] = []
+        filled.reserveCapacity(4096)
         var next = end + 1
         var prefix = Int(first)
         indices.withUnsafeBufferPointer { input in
@@ -35,12 +38,14 @@ public enum GIFLZW {
                     writer.write(prefix, bits: codeSize)
                     if next == 4096 {
                         writer.write(clear, bits: codeSize)
-                        trie.update(repeating: 0)
+                        for filledKey in filled { trie[filledKey] = 0 }
+                        filled.removeAll(keepingCapacity: true)
                         codeSize = minimumCodeSize + 1
                         next = end + 1
                     } else {
                         if next >= 1 << codeSize { codeSize += 1 }
                         trie[key] = UInt16(next)
+                        filled.append(key)
                         next += 1
                     }
                     prefix = symbol
