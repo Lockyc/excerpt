@@ -38,6 +38,13 @@ import Testing
         #expect(bottom >= 16 && bottom < 22)
     }
 
+    @Test func aFaintWallpaperFixedBehindThePageDoesNotHideTheMove() {
+        let match = StitchMatcher.match(
+            ScrollFixtures.wallpapered(frame(0)), ScrollFixtures.wallpapered(frame(120)),
+            ignoringRightColumns: 0)
+        #expect(offset(match) == 120)
+    }
+
     /// `frame` with the footer's shadow cast up over the 3 rows above it, blending them toward
     /// grey.
     func shadowed(_ frame: PixelBuffer) -> PixelBuffer {

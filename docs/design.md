@@ -150,7 +150,10 @@ holding one.
 3. **Stitching** (Core): frames reduce to row signatures; the offset from the previous frame is
    the one with the highest share of matching evidence rows (unique, non-uniform) in the overlap,
    clearly ahead of the others; a row redrawn at most one level off per channel (a browser
-   re-dithering an image) counts as matching. **Sticky regions** — top/bottom rows unchanged
+   re-dithering an image) counts as matching. A faint wallpaper fixed behind the page (a chat's
+   doodles) is matched as plain background, within `StitchMatcher.faintLevels` of the frame's
+   commonest colour, when nothing matches otherwise; the stitch keeps its pixels, so the
+   wallpaper breaks at each join. **Sticky regions** — top/bottom rows unchanged
    while the rows between them move — are kept once: the header from the first frame, the footer
    from the last. A bar from the page that pins under the header during a move joins the header;
    something over the page's bottom that stays in place (a floating button, a composer, a fade
