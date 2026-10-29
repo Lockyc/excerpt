@@ -154,8 +154,8 @@ import Testing
         #expect(!editor.model(at: 0).isDirty)
     }
 
-    /// While a save writes, the window won't close and a quit's confirmation answers no
-    /// without asking.
+    /// While a save writes, the window won't close, and a quit's confirmation waits for it,
+    /// then answers yes with nothing left unsaved.
     @Test func closingWaitsForASaveInFlight() async throws {
         let calls = Calls(holdingSaves: true)
         let editor = series(calls: calls)
@@ -168,10 +168,11 @@ import Testing
         #expect(!editor.windowShouldClose(window))
         var answer: Bool?
         editor.confirmClose { answer = $0 }
-        #expect(answer == false)
+        #expect(answer == nil)
         calls.release.open()
         await calls.copiedAll.wait()
         await Task.yield()
+        #expect(answer == true)
         #expect(calls.closed)
         #expect(!editor.hasUnsavedChanges())
         #expect(calls.saved.count == 1)
