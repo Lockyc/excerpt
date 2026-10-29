@@ -150,7 +150,7 @@ final class ThumbnailPanel: NSPanel {
         self.seconds = seconds
         let width = ThumbnailStack.width
         let imageHeight = min(220, width * CGFloat(image.height) / CGFloat(image.width))
-        let barHeight: CGFloat = 44
+        let barHeight: CGFloat = 52
         let noteHeight: CGFloat = note == nil ? 0 : 20
         let below = barHeight + noteHeight
         super.init(
@@ -229,7 +229,7 @@ final class ThumbnailPanel: NSPanel {
         b.target = self
         b.action = action
         b.bezelStyle = .recessed
-        b.controlSize = .large
+        if #available(macOS 26, *) { b.controlSize = .extraLarge } else { b.controlSize = .large }
     }
 
     /// At the delay's end the pointer's position decides: over the panel, the delay starts
