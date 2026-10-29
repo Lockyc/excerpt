@@ -225,11 +225,15 @@ final class ThumbnailPanel: NSPanel {
         return b
     }
 
+    /// Buttons fill the bar but for an even margin: a flexible push bezel draws at the height it
+    /// is given, where a recessed one keeps its control size's height inside a taller frame.
     private func style(_ b: NSButton, _ action: Selector) {
         b.target = self
         b.action = action
-        b.bezelStyle = .recessed
-        if #available(macOS 26, *) { b.controlSize = .extraLarge } else { b.controlSize = .large }
+        b.bezelStyle = .flexiblePush
+        b.controlSize = .large
+        b.font = .systemFont(ofSize: 15, weight: .medium)
+        b.heightAnchor.constraint(equalToConstant: 40).isActive = true
     }
 
     /// At the delay's end the pointer's position decides: over the panel, the delay starts
