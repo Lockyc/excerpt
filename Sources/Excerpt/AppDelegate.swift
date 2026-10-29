@@ -98,6 +98,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var recordingEditors: [URL: RecordingEditorWindowController] = [:]
     /// Masters being read for an editor, so opening one again meanwhile doesn't open a second.
     private var openingRecordings: Set<URL> = []
+    /// Captures being loaded for an editor, by each path that names them (the file opened and
+    /// the primary beside a master), so opening one again meanwhile doesn't open a second.
+    private var openingCaptures: Set<URL> = []
     private lazy var coordinator = CaptureCoordinator(
         preferences: preferences,
         onDelivered: { [weak self] url, image in self?.thumbnails.show(url: url, image: image) },
@@ -119,12 +122,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func openEditor(_ url: URL) { openEditors([url]) }
 
     /// Opens the captures in one editor, a series when there are several, in creation order. A
-    /// capture already open (or its master) brings its own window forward and is left out. A
-    /// recording (its primary or master) opens in a recording editor of its own.
+    /// capture already open (or its master) brings its own window forward and is left out, and
+    /// so is one still loading for an editor. A recording (its primary or master) opens in a
+    /// recording editor of its own. The captures are read, decoded and checked against their
+    /// masters off the main thread, in turn, so a tall one never stalls the app; a note names
+    /// what is opening once that takes long enough to notice.
     func openEditors(_ urls: [URL]) {
         let store = preferences.store
-        var captures: [URL: LoadedCapture] = [:]
-        var items: [(url: URL, created: Date)] = []
+        var loading: [URL] = []
+        var names: Set<URL> = []
         for url in urls {
             if let paths = store.recordingPaths(for: url) {
                 openRecordingEditor(paths, opened: url)
@@ -134,21 +140,54 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let directory = url.deletingLastPathComponent()
             let sibling = LibraryNaming.primaryName(forOriginal: url.lastPathComponent)
                 .map { directory.appendingPathComponent($0) }
-            if let open = [url, sibling].compactMap({ $0 })
-                .lazy.compactMap({ self.editors[$0.standardizedFileURL] }).first
-            {
+            let paths = [url, sibling].compactMap { $0?.standardizedFileURL }
+            if let open = paths.lazy.compactMap({ self.editors[$0] }).first {
                 open.show()
                 continue
             }
-            do {
-                let capture = try store.loadForRendering(url)
+            guard openingCaptures.isDisjoint(with: paths), names.isDisjoint(with: paths) else {
+                continue
+            }
+            names.formUnion(paths)
+            loading.append(url)
+        }
+        guard !loading.isEmpty else { return }
+        openingCaptures.formUnion(names)
+        let what =
+            loading.count == 1
+            ? loading[0].deletingPathExtension().lastPathComponent : "\(loading.count) captures"
+        let note = Task { @MainActor in
+            try await Task.sleep(for: .milliseconds(400))
+            return Toast.show("Opening \(what)…", seconds: nil)
+        }
+        Task { @MainActor [weak self] in
+            let loaded = await Task.detached(priority: .userInitiated) {
+                loading.map { url in (url, Result { try store.loadForRendering(url) }) }
+            }.value
+            note.cancel()
+            if let token = try? await note.value { Toast.dismiss(token) }
+            guard let self else { return }
+            openingCaptures.subtract(names)
+            openLoaded(loaded)
+        }
+    }
+
+    /// Opens the loaded captures in one editor, as `openEditors` describes; each that failed to
+    /// load says why.
+    private func openLoaded(_ loaded: [(url: URL, result: Result<LoadedCapture, any Error>)]) {
+        let store = preferences.store
+        var captures: [URL: LoadedCapture] = [:]
+        var items: [(url: URL, created: Date)] = []
+        for (url, result) in loaded {
+            switch result {
+            case .success(let capture):
                 let primary = capture.primary.standardizedFileURL
                 captures[primary] = capture
                 let created =
                     (try? primary.resourceValues(forKeys: [.creationDateKey]).creationDate)
                     ?? .distantPast
                 items.append((primary, created))
-            } catch {
+            case .failure(let error):
                 Alerts.openFailed(url, error)
             }
         }
