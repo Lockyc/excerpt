@@ -32,12 +32,15 @@ private final class Page {
         canvas = CanvasView(model: model)
     }
 
-    /// The PNG Save copies: the one last written while it still renders the document.
-    func png() throws -> Data {
-        let document = model.document
+    /// The PNG Save copies for `document`: the one last written while it renders `document`,
+    /// or else the render of it, made and encoded off the main thread.
+    func png(of document: EditDocument) async throws -> Data {
         if let written, written.document == document { return written.png }
-        let image = Renderer.render(model.original, edits: document).image
-        return try PNGCodec.encode(image, scale: document.scale)
+        let original = model.original
+        return try await Task.detached(priority: .userInitiated) {
+            let image = Renderer.render(original, edits: document).image
+            return try PNGCodec.encode(image, scale: document.scale)
+        }.value
     }
 }
 
@@ -53,7 +56,7 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
     private let pages: [Page]
     /// The capture in view.
     public private(set) var current = 0
-    private let save: (LoadedCapture, EditDocument) throws -> Data
+    private let save: (LoadedCapture, EditDocument) async throws -> Data
     private let copy: (() throws -> [Data]) -> Bool
     private let forClaude: (LoadedCapture, CGImage, EditDocument) -> Void
     private let onClose: () -> Void
@@ -81,18 +84,25 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         didSet { update() }
     }
 
+    /// While Save or For Claude writes and renders, they and Discard are disabled and the
+    /// window won't close; the canvas stays live, and an edit made meanwhile stays unsaved.
+    private var saving = false {
+        didSet { update() }
+    }
+
     /// `captures` is the series in order, one capture for a plain editor. `save` writes a
-    /// capture's document (the app's `LibraryStore.saveEdits`) and returns the primary's PNG it
-    /// wrote; `copy`, Save's last step, is handed a closure that renders every capture's PNG in
-    /// order, puts them on the pasteboard, reports any failure, the render's included, and
-    /// returns whether it worked; `forClaude` exports the capture in view with its current
+    /// capture's document (the app's `LibraryStore.saveEdits`, off the main thread) and returns
+    /// the primary's PNG it wrote; `copy`, Save's last step, is handed a closure that returns
+    /// every capture's PNG in order, or why one couldn't be rendered, puts them on the
+    /// pasteboard, reports any failure, the render's included, and returns whether it worked; `forClaude` exports the capture in view with its current
     /// edits; `borderStyle` is the border a capture without one gets when turned on, and
     /// `rememberBorder` is told each colour or width the user picks; `annotationStyle` is what
     /// new annotations start with, and `rememberStyle` is told each colour, size or background
     /// the user picks; `marginColor` fills the margin of a capture that has none yet; `onClose`
     /// runs once the window has closed.
     public init(
-        captures: [LoadedCapture], save: @escaping (LoadedCapture, EditDocument) throws -> Data,
+        captures: [LoadedCapture],
+        save: @escaping (LoadedCapture, EditDocument) async throws -> Data,
         copy: @escaping (() throws -> [Data]) -> Bool,
         forClaude: @escaping (LoadedCapture, CGImage, EditDocument) -> Void,
         borderStyle: Border, rememberBorder: @escaping (Border) -> Void,
@@ -252,7 +262,6 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         )
         discardButton.bezelColor = .systemRed
         discardButton.hasDestructiveAction = true
-        discardButton.toolTip = "Close without saving"
         discardButton.target = self
         discardButton.action = #selector(discardPressed)
         claudeButton.target = self
@@ -412,21 +421,29 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         let limit = model.tool == .cut ? model.cutLimitNote : ""
         let hint =
             !limit.isEmpty ? limit : model.tool == .cut || model.tool == .crop ? Self.snapHint : ""
-        window?.subtitle = [hint, model.hiddenNote(map: canvas.map)]
+        window?.subtitle = [saving ? "Saving…" : "", hint, model.hiddenNote(map: canvas.map)]
             .filter { !$0.isEmpty }.joined(separator: " · ")
 
         undoButton.isEnabled = model.canUndo
         undoButton.toolTip = model.canUndo ? "Undo (⌘Z)" : "Nothing to undo"
         redoButton.isEnabled = model.canRedo
         redoButton.toolTip = model.canRedo ? "Redo (⇧⌘Z)" : "Nothing to redo"
-        claudeButton.isEnabled = !isPreparingForClaude
+        claudeButton.isEnabled = !isPreparingForClaude && !saving
         claudeButton.toolTip =
-            isPreparingForClaude
-            ? "Preparing for Claude…"
-            : "Save, copy tiles and text of the image for Claude and close (⇧⌘C)"
+            saving
+            ? "Saving…"
+            : isPreparingForClaude
+                ? "Preparing for Claude…"
+                : "Save, copy tiles and text of the image for Claude and close (⇧⌘C)"
         let images = pages.count == 1 ? "the image" : "the \(pages.count) images"
+        saveButton.isEnabled = !saving
         saveButton.toolTip =
-            isDirty ? "Save, copy \(images) and close (⌘S)" : "Copy \(images) and close (⌘S)"
+            saving
+            ? "Saving…"
+            : isDirty
+                ? "Save, copy \(images) and close (⌘S)" : "Copy \(images) and close (⌘S)"
+        discardButton.isEnabled = !saving
+        discardButton.toolTip = saving ? "Saving…" : "Close without saving"
         window?.isDocumentEdited = isDirty
         fitWidth()  // a column cut changes the rendered width
     }
@@ -465,17 +482,21 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
     @objc private func undoPressed() { undo() }
     @objc private func redoPressed() { redo() }
 
-    /// Closes at once, dropping unsaved edits without asking.
+    /// Closes at once, dropping unsaved edits without asking; not while a save writes.
     @objc private func discardPressed() {
+        guard !saving else { return }
         canvas.commitInProgress()
         window?.close()
     }
 
     /// ⇧⌘C: like Save, it writes unsaved edits first, so what Claude reads is what the library
-    /// holds.
+    /// holds: the capture in view when it was pressed, with the edits written.
     @objc func forClaudePressed() {
-        finish {
-            forClaude(page.capture, model.original, model.document)
+        let index = current
+        finish { [weak self] documents in
+            guard let self else { return false }
+            let page = pages[index]
+            forClaude(page.capture, page.model.original, documents[index])
             return true
         }
     }
@@ -484,16 +505,42 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
     /// nothing unsaved there is nothing to write, so an unedited capture stays one file.
     @objc func saveDocument() {
         let pages = pages
-        finish { copy { try pages.map { try $0.png() } } }
+        let copy = copy
+        finish { documents in
+            let made: Result<[Data], any Error>
+            do {
+                var pngs: [Data] = []
+                for (page, document) in zip(pages, documents) {
+                    pngs.append(try await page.png(of: document))
+                }
+                made = .success(pngs)
+            } catch {
+                made = .failure(error)
+            }
+            return copy { try made.get() }
+        }
     }
 
     /// Save and For Claude each end the edit: every capture's unsaved edits are written (the
-    /// master keeps the original, so they stay adjustable), then `action` runs, then the window
-    /// closes. A failed save or action leaves it open.
-    private func finish(_ action: () -> Bool) {
+    /// master keeps the original, so they stay adjustable), then `action` runs with every
+    /// capture's document as written, then the window closes unless an edit made meanwhile is
+    /// unsaved. The writing and rendering run off the main thread, `saving` meanwhile; pressed
+    /// again then, it beeps. A failed save or action leaves the window open.
+    private func finish(_ action: @escaping ([EditDocument]) async -> Bool) {
+        guard !saving else {
+            NSSound.beep()
+            return
+        }
         canvas.commitInProgress()
-        guard writeDocuments(), action() else { return }
-        window?.close()
+        let documents = pages.map(\.model.document)
+        let unsaved = pages.filter(\.model.isDirty).map { ($0, $0.model.document) }
+        saving = true
+        Task {
+            let written = await writeDocuments(unsaved)
+            let acted = written ? await action(documents) : false
+            saving = false
+            if acted && !isDirty { window?.close() }
+        }
     }
 
     private var isDirty: Bool { pages.contains { $0.model.isDirty } }
@@ -508,16 +555,13 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         model.redo()
     }
 
-    /// Writes the primary and master of every capture with unsaved edits; false (after telling
-    /// the user) at the first that failed.
-    private func writeDocuments() -> Bool {
-        canvas.commitInProgress()
-        defer { update() }
-        for page in pages where page.model.isDirty {
+    /// Writes the primary and master of each capture with the document it was unsaved with;
+    /// false (after telling the user) at the first that failed.
+    private func writeDocuments(_ unsaved: [(page: Page, document: EditDocument)]) async -> Bool {
+        for (page, document) in unsaved {
             do {
-                let document = page.model.document
-                page.written = (document, try save(page.capture, document))
-                page.model.markSaved()
+                page.written = (document, try await save(page.capture, document))
+                page.model.markSaved(document)
             } catch {
                 let alert = NSAlert()
                 alert.messageText = "Couldn't save \(page.capture.primary.lastPathComponent)"
@@ -529,14 +573,31 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         return true
     }
 
-    public func windowShouldClose(_ sender: NSWindow) -> Bool { confirmClose() }
+    /// Refused while a save writes; with unsaved edits it asks, and closes once that allows.
+    public func windowShouldClose(_ sender: NSWindow) -> Bool {
+        guard hasUnsavedChanges() else { return true }
+        confirmClose { [weak self] closes in
+            if closes { self?.window?.close() }
+        }
+        return false
+    }
 
-    /// True when nothing is unsaved, or the user chose Save (and it worked) or Don't Save;
-    /// false on Cancel or a failed save. Shared by the window's close and the app's quit.
-    public func confirmClose() -> Bool {
+    /// Whether closing must ask or wait: a save is writing, or an edit is unsaved, the one in
+    /// progress included, which this commits.
+    public func hasUnsavedChanges() -> Bool {
+        canvas.commitInProgress()
+        return saving || isDirty
+    }
+
+    /// Asks Save / Don't Save / Cancel when there are unsaved edits, then calls `done` with
+    /// whether the editor may close: true when nothing is unsaved, on Don't Save, or once Save
+    /// wrote every capture with nothing edited meanwhile; false on Cancel, a failed save, or
+    /// while a save writes. Shared by the window's close and the app's quit.
+    public func confirmClose(then done: @escaping (Bool) -> Void) {
+        guard !saving else { return done(false) }
         canvas.commitInProgress()
         let dirty = pages.filter(\.model.isDirty)
-        guard let first = dirty.first else { return true }
+        guard let first = dirty.first else { return done(true) }
         show()
         let alert = NSAlert()
         alert.messageText =
@@ -548,9 +609,16 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         alert.addButton(withTitle: "Don't Save")
         alert.addButton(withTitle: "Cancel")
         switch alert.runModal() {
-        case .alertFirstButtonReturn: return writeDocuments()
-        case .alertSecondButtonReturn: return true
-        default: return false
+        case .alertFirstButtonReturn:
+            let unsaved = dirty.map { ($0, $0.model.document) }
+            saving = true
+            Task {
+                let written = await writeDocuments(unsaved)
+                saving = false
+                done(written && !isDirty)
+            }
+        case .alertSecondButtonReturn: done(true)
+        default: done(false)
         }
     }
 
