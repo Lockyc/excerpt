@@ -9,18 +9,22 @@ import Testing
 @MainActor
 @Suite struct CanvasViewTests {
     /// The picture, inside the canvas's gutter, drawn at one pixel per point, whatever the
-    /// screen's backing scale.
+    /// screen's backing scale. Its second repaint, so the base comes from its tiles.
     func snapshot(_ view: CanvasView) -> PixelBuffer {
         let g = CanvasView.gutter * view.model.document.scale * view.zoom
         let picture = view.bounds.insetBy(dx: g, dy: g)
-        let rep = NSBitmapImageRep(
-            bitmapDataPlanes: nil, pixelsWide: Int(picture.width.rounded()),
-            pixelsHigh: Int(picture.height.rounded()), bitsPerSample: 8, samplesPerPixel: 4,
-            hasAlpha: true, isPlanar: false, colorSpaceName: .calibratedRGB, bytesPerRow: 0,
-            bitsPerPixel: 0)!
-        rep.size = picture.size
-        view.cacheDisplay(in: picture, to: rep)
-        return PixelBuffer(rep.cgImage!)
+        func paint() -> NSBitmapImageRep {
+            let rep = NSBitmapImageRep(
+                bitmapDataPlanes: nil, pixelsWide: Int(picture.width.rounded()),
+                pixelsHigh: Int(picture.height.rounded()), bitsPerSample: 8, samplesPerPixel: 4,
+                hasAlpha: true, isPlanar: false, colorSpaceName: .calibratedRGB, bytesPerRow: 0,
+                bitsPerPixel: 0)!
+            rep.size = picture.size
+            view.cacheDisplay(in: picture, to: rep)
+            return rep
+        }
+        _ = paint()
+        return PixelBuffer(paint().cgImage!)
     }
 
     @Test func atFullSizeTheCanvasMatchesTheRender() {
@@ -168,6 +172,21 @@ import Testing
         canvas.refresh()
         #expect(canvas.base.image !== first)
         #expect(canvas.frame.height == CGFloat(400 - 100 + 18 + 2 * CanvasView.gutter))
+    }
+
+    @Test func anAnnotationChangeRepaintsWithoutResamplingTheBase() {
+        let model = EditorModel(original: sheet(), document: EditDocument(scale: 1))
+        let canvas = CanvasView(model: model)
+        canvas.zoom = 0.5
+        _ = snapshot(canvas)
+        let drawn = canvas.scaledBase.tilesDrawn
+        #expect(drawn > 0)
+        model.apply { $0.annotations.append(note(1, CGRect(x: 10, y: 10, width: 40, height: 40))) }
+        _ = snapshot(canvas)
+        #expect(canvas.scaledBase.tilesDrawn == drawn)
+        model.apply { $0.cuts.append(Cut(axis: .horizontal, lower: 100, upper: 200)) }
+        _ = snapshot(canvas)
+        #expect(canvas.scaledBase.tilesDrawn > drawn)
     }
 
     @Test func theCanvasFollowsTheModelWithoutBeingTold() {

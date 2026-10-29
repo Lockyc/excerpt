@@ -33,6 +33,8 @@ final class CanvasView: NSView, NSTextViewDelegate {
 
     private(set) var base: RenderResult
     private var baseDocument: EditDocument
+    /// `base` at the screen's resolution, so a repaint copies it rather than resampling it.
+    let scaledBase = ScaledBase()
     /// The picture's placement, margin included: the base's map with the margin laid out. It
     /// holds still while a drag or path is in progress, since laying out again under the
     /// pointer would move what the pointer maps to and push the item further out; the margin
@@ -74,11 +76,13 @@ final class CanvasView: NSView, NSTextViewDelegate {
 
     override var isFlipped: Bool { true }
 
-    /// Hosts the item bar over the scroll view, and moves it with the scroll.
+    /// Hosts the item bar over the scroll view, and moves it with the scroll. Out of the window
+    /// (another capture of a series in view), it lets go of the base's tiles.
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         guard window != nil else {
             itemBar.removeFromSuperview()
+            scaledBase.removeAll()
             return
         }
         if let clip = enclosingScrollView?.contentView {
@@ -259,7 +263,6 @@ final class CanvasView: NSView, NSTextViewDelegate {
         context.saveGState()
         context.scaleBy(x: zoom, y: zoom)
         context.translateBy(x: g, y: g)
-        context.interpolationQuality = zoom < 1 ? .high : .none
 
         // The margin the annotations reach now, around the image where the layout put it.
         let image = CGRect(
@@ -275,22 +278,18 @@ final class CanvasView: NSView, NSTextViewDelegate {
             context.fill(picture)
         }
 
-        // The base, cut to the dirty region so a tall capture draws only what is visible.
-        let visible = CGRect(
-            x: dirtyRect.minX / zoom - g, y: dirtyRect.minY / zoom - g,
-            width: dirtyRect.width / zoom, height: dirtyRect.height / zoom
-        ).integral.intersection(image)
-        if !visible.isEmpty,
-            let piece = base.image.cropping(to: visible.offsetBy(dx: -image.minX, dy: -image.minY))
-        {
-            context.saveGState()
-            context.translateBy(x: 0, y: visible.maxY)
-            context.scaleBy(x: 1, y: -1)
-            context.draw(
-                piece,
-                in: CGRect(x: visible.minX, y: 0, width: visible.width, height: visible.height))
-            context.restoreGState()
+        // The base, from tiles at the screen's resolution, only where it is dirty; tiles within
+        // half a screen of what the scroll view shows stay for the next repaint.
+        func rendered(_ rect: CGRect) -> CGRect {
+            CGRect(
+                x: rect.minX / zoom - g, y: rect.minY / zoom - g, width: rect.width / zoom,
+                height: rect.height / zoom)
         }
+        let shown = visibleRect
+        scaledBase.draw(
+            base.image, in: image, visible: rendered(dirtyRect),
+            kept: rendered(shown.insetBy(dx: 0, dy: -shown.height / 2)),
+            quality: zoom < 1 ? .high : .none, into: context)
 
         // Annotations through Core, in its bottom-left canvas space.
         context.saveGState()
