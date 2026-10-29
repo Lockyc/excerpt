@@ -198,9 +198,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let editor = EditorWindowController(
             captures: series,
             save: { capture, document in
-                try store.saveEdits(
-                    primary: capture.primary, original: capture.original, edits: document,
-                    replacingMaster: capture.supersedesMaster)
+                try await Task.detached(priority: .userInitiated) {
+                    try store.saveEdits(
+                        primary: capture.primary, original: capture.original, edits: document,
+                        replacingMaster: capture.supersedesMaster)
+                }.value
             },
             copy: { makePNGs in
                 do {
@@ -298,32 +300,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Each unsaved editor asks Save / Don't Save / Cancel, once however many captures it holds;
-    /// Cancel keeps the app running. A recording editor's Save renders before it answers, so
-    /// with one unsaved the quit waits on them, asked in turn. Then a recording in progress is
-    /// stopped and kept, and the quit waits for every recording's save.
+    /// Each unsaved editor asks Save / Don't Save / Cancel, once however many captures it holds,
+    /// the screenshot editors first; Cancel keeps the app running. Save writes before it
+    /// answers, so with one unsaved the quit waits on them, asked in turn; an editor still
+    /// writing an earlier save keeps the app running. Then a recording in progress is stopped
+    /// and kept, and the quit waits for every recording's save.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         var asked = Set<ObjectIdentifier>()
-        for editor in editors.values where asked.insert(ObjectIdentifier(editor)).inserted {
-            if !editor.confirmClose() { return .terminateCancel }
+        let screenshots = editors.values.filter {
+            asked.insert(ObjectIdentifier($0)).inserted && $0.hasUnsavedChanges()
         }
-        let unsaved = recordingEditors.values.filter(\.hasUnsavedChanges)
+        let unsaved =
+            screenshots.map { $0.confirmClose(then:) }
+            + recordingEditors.values.filter(\.hasUnsavedChanges).map { $0.confirmClose(then:) }
         guard !unsaved.isEmpty || coordinator.isRecordingOrSaving else { return .terminateNow }
         confirmQuit(unsaved[...])
         return .terminateLater
     }
 
-    /// Asks each recording editor in turn, answering the pending quit once all may close and
-    /// the recordings are saved, or at the first that may not.
-    private func confirmQuit(_ unsaved: ArraySlice<RecordingEditorWindowController>) {
-        guard let editor = unsaved.first else {
+    /// Asks each editor in turn, answering the pending quit once all may close and the
+    /// recordings are saved, or at the first that may not.
+    private func confirmQuit(_ unsaved: ArraySlice<@MainActor (@escaping (Bool) -> Void) -> Void>) {
+        guard let confirmClose = unsaved.first else {
             Task { @MainActor in
                 await coordinator.finishRecordings()
                 NSApp.reply(toApplicationShouldTerminate: true)
             }
             return
         }
-        editor.confirmClose { [weak self] closes in
+        confirmClose { [weak self] closes in
             guard closes else {
                 NSApp.reply(toApplicationShouldTerminate: false)
                 return

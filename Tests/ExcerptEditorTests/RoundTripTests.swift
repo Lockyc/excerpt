@@ -26,7 +26,7 @@ import Testing
     /// and returns its height.
     func save(_ m: EditorModel, _ store: LibraryStore, _ primary: URL) throws -> Int {
         try store.saveEdits(primary: primary, original: m.original, edits: m.document)
-        m.markSaved()
+        m.markSaved(m.document)
         let data = try Data(contentsOf: primary)
         #expect(try PNGChunks.text(keyword: PNGChunks.editsKeyword, in: data) == nil)
         #expect(try !PNGChunks.chunkTypes(in: data).contains("iTXt"))

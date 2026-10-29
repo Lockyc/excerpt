@@ -132,7 +132,7 @@ import Testing
     @Test func undoAcrossASaveTracksDirtiness() {
         let m = model()
         m.apply { $0.cuts.append(Cut(axis: .horizontal, lower: 40, upper: 120)) }
-        m.markSaved()
+        m.markSaved(m.document)
         #expect(!m.isDirty)
         m.apply { $0.annotations.append(note(1, CGRect(x: 0, y: 0, width: 10, height: 10))) }
         #expect(m.isDirty)

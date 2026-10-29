@@ -7,9 +7,35 @@ import Testing
 
 @MainActor
 @Suite struct SeriesEditorTests {
+    /// Opens once; `wait` returns at once after that.
+    final class Gate {
+        private var waiting: [CheckedContinuation<Void, Never>] = []
+        private(set) var isOpen = false
+
+        func open() {
+            isOpen = true
+            for continuation in waiting { continuation.resume() }
+            waiting = []
+        }
+
+        func wait() async {
+            guard !isOpen else { return }
+            await withCheckedContinuation { waiting.append($0) }
+        }
+    }
+
     final class Calls {
         var saved: [URL] = []
         var copied: [Data] = []
+        let saving = Gate()
+        /// Each save waits on it before it returns.
+        let release = Gate()
+        let copiedAll = Gate()
+        var closed = false
+
+        init(holdingSaves: Bool = false) {
+            if !holdingSaves { release.open() }
+        }
     }
 
     func series(_ count: Int = 3, calls: Calls = Calls()) -> EditorWindowController {
@@ -23,14 +49,17 @@ import Testing
             captures: captures,
             save: { capture, _ in
                 calls.saved.append(capture.primary)
+                calls.saving.open()
+                await calls.release.wait()
                 return Data([UInt8(calls.saved.count)])
             },
             copy: { make in
                 calls.copied = (try? make()) ?? []
+                calls.copiedAll.open()
                 return true
             },
             forClaude: { _, _, _ in }, borderStyle: .initial, rememberBorder: { _ in },
-            annotationStyle: .initial, rememberStyle: { _ in }, onClose: {})
+            annotationStyle: .initial, rememberStyle: { _ in }, onClose: { calls.closed = true })
     }
 
     func addStep(to editor: EditorWindowController, at index: Int) {
@@ -92,15 +121,60 @@ import Testing
         #expect(editor.model(at: 1).document.firstStep == 1)
     }
 
-    @Test func saveWritesOnlyChangedCapturesAndCopiesEveryRenderInOrder() {
+    @Test func saveWritesOnlyChangedCapturesAndCopiesEveryRenderInOrder() async {
         let calls = Calls()
         let editor = series(calls: calls)
         defer { editor.window?.orderOut(nil) }
         addStep(to: editor, at: 1)
         editor.saveDocument()
+        await calls.copiedAll.wait()
         #expect(calls.saved == [URL(fileURLWithPath: "/tmp/probe-1.png")])
         #expect(calls.copied.count == 3)
         #expect(calls.copied[1] == Data([1]))
+        await Task.yield()
+        #expect(calls.closed)
+    }
+
+    /// The save writes the document as it was when Save was pressed; an edit made while it
+    /// writes stays unsaved, so the window stays open with it.
+    @Test func anEditWhileSavingStaysUnsavedAndKeepsTheWindowOpen() async {
+        let calls = Calls(holdingSaves: true)
+        let editor = series(calls: calls)
+        defer { editor.window?.orderOut(nil) }
+        addStep(to: editor, at: 0)
+        editor.saveDocument()
+        await calls.saving.wait()
+        addStep(to: editor, at: 0)
+        calls.release.open()
+        await calls.copiedAll.wait()
+        await Task.yield()
+        #expect(editor.model(at: 0).isDirty)
+        #expect(!calls.closed)
+        editor.model(at: 0).undo()
+        #expect(!editor.model(at: 0).isDirty)
+    }
+
+    /// While a save writes, the window won't close and a quit's confirmation answers no
+    /// without asking.
+    @Test func closingWaitsForASaveInFlight() async throws {
+        let calls = Calls(holdingSaves: true)
+        let editor = series(calls: calls)
+        defer { editor.window?.orderOut(nil) }
+        let window = try #require(editor.window)
+        addStep(to: editor, at: 0)
+        editor.saveDocument()
+        await calls.saving.wait()
+        #expect(editor.hasUnsavedChanges())
+        #expect(!editor.windowShouldClose(window))
+        var answer: Bool?
+        editor.confirmClose { answer = $0 }
+        #expect(answer == false)
+        calls.release.open()
+        await calls.copiedAll.wait()
+        await Task.yield()
+        #expect(calls.closed)
+        #expect(!editor.hasUnsavedChanges())
+        #expect(calls.saved.count == 1)
     }
 
     @Test func theBracketKeysMoveBetweenCapturesAndStopAtTheEnds() throws {

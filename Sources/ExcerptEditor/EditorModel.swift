@@ -252,8 +252,9 @@ final class EditorModel {
         }
     }
 
-    /// The document now matches what ⌘S wrote.
-    func markSaved() { saved = document }
+    /// `document` is what ⌘S wrote: the model is clean while its document is that one, so an
+    /// edit made while the save was writing stays unsaved.
+    func markSaved(_ document: EditDocument) { saved = document }
 
     /// Turns the render's border on or off, as one undoable step.
     func setBorder(_ on: Bool) { apply { $0.border = on ? borderStyle : nil } }
