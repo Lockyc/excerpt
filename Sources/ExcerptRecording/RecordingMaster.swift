@@ -95,9 +95,11 @@ public struct RecordingMaster: Sendable {
         return times.sorted()
     }
 
-    /// Replaces the master's edit document, keeping its frames and log.
+    /// Replaces the master's edit document, keeping its frames and log. A master already holding
+    /// `edits` is left as it is: the rewrite copies the whole movie.
     public static func writeEdits(_ edits: RecordingEdits, to url: URL) async throws {
         let master = try await read(url)
+        guard master.edits != edits else { return }
         try await writeMetadata(log: master.log, edits: edits, to: url)
     }
 
