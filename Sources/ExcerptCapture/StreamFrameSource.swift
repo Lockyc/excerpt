@@ -3,6 +3,7 @@ import CoreMedia
 import ExcerptCore
 import Foundation
 import ScreenCaptureKit
+import os
 
 /// Live frames of the scrolling region from an `SCStream`, without any of Excerpt's windows (so
 /// the HUD and preview never appear in a frame) and without the cursor. The stream excludes
@@ -85,18 +86,58 @@ public final class StreamFrameSource: FrameSource {
     }
 }
 
-/// The stream's callbacks, on its own queue: converts each frame there, then hands it to the
-/// main actor in arrival order.
+/// Hands the newest frame from the stream's queue to the main actor: a frame posted while an
+/// earlier one still waits replaces it, and at most one wakeup is pending. A main actor slow to
+/// take frames holds one, never a queue of 25 MB blocks; the mailbox keeps only the newest
+/// anyway.
+final class FrameRelay: @unchecked Sendable {
+    /// Runs a block on the main queue; replaced in tests by one the test runs by hand.
+    typealias Schedule = @Sendable (@escaping @Sendable () -> Void) -> Void
+
+    private let state = OSAllocatedUnfairLock<(frame: PixelBuffer?, scheduled: Bool)>(
+        initialState: (nil, false))
+    private let schedule: Schedule
+    private let deliver: @MainActor (PixelBuffer) -> Void
+
+    init(
+        schedule: @escaping Schedule = { DispatchQueue.main.async(execute: $0) },
+        deliver: @escaping @MainActor (PixelBuffer) -> Void
+    ) {
+        self.schedule = schedule
+        self.deliver = deliver
+    }
+
+    func post(_ frame: PixelBuffer) {
+        let wake = state.withLock { state in
+            state.frame = frame
+            defer { state.scheduled = true }
+            return !state.scheduled
+        }
+        if wake { schedule { MainActor.assumeIsolated { self.take() } } }
+    }
+
+    @MainActor private func take() {
+        let frame = state.withLock { state in
+            state.scheduled = false
+            defer { state.frame = nil }
+            return state.frame
+        }
+        if let frame { deliver(frame) }
+    }
+}
+
+/// The stream's callbacks, on its own queue: converts each frame there, then hands the newest to
+/// the main actor (`FrameRelay`).
 final class StreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
     let queue = DispatchQueue(label: "excerpt.scroll-frames")
-    private let onFrame: @MainActor (PixelBuffer) -> Void
+    private let relay: FrameRelay
     private let onError: @MainActor (Error) -> Void
 
     init(
         onFrame: @escaping @MainActor (PixelBuffer) -> Void,
         onError: @escaping @MainActor (Error) -> Void
     ) {
-        self.onFrame = onFrame
+        relay = FrameRelay(deliver: onFrame)
         self.onError = onError
     }
 
@@ -108,7 +149,7 @@ final class StreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
         switch FrameConversion.content(status) {
         case .picture:
             guard let frame = FrameConversion.pixels(sampleBuffer) else { return }
-            DispatchQueue.main.async { MainActor.assumeIsolated { self.onFrame(frame) } }
+            relay.post(frame)
         case .unchanged:
             return
         case .stalled:
