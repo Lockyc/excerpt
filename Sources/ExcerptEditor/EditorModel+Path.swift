@@ -99,42 +99,46 @@ extension EditorModel {
     /// or more vertices. A path left with under two vertices is dropped and records nothing.
     func finishPath(closing: Bool = false) {
         guard let building else { return }
-        if case .freehand(let id, let from, let raw)? = drag {
-            setDrag(nil)
-            settleFreehand(id: id, from: from, raw: raw)
+        batch {
+            if case .freehand(let id, let from, let raw)? = drag {
+                setDrag(nil)
+                settleFreehand(id: id, from: from, raw: raw)
+            }
+            setBuilding(nil)
+            var points: [CGPoint] = []
+            for p in vertices(building.id) {
+                if let last = points.last, hypot(p.x - last.x, p.y - last.y) < 0.5 { continue }
+                points.append(p)
+            }
+            guard points.count >= 2 else {
+                preview(building.before)
+                return
+            }
+            var next = document
+            if let i = next.annotations.firstIndex(where: { $0.id == building.id }),
+                case .path(_, _, let fill) = next.annotations[i].shape
+            {
+                next.annotations[i].shape = .path(
+                    points: points, closed: closing && points.count >= 3, fill: fill)
+            }
+            preview(next)
+            commit(from: building.before)
+            selection = .annotation(building.id)
         }
-        setBuilding(nil)
-        var points: [CGPoint] = []
-        for p in vertices(building.id) {
-            if let last = points.last, hypot(p.x - last.x, p.y - last.y) < 0.5 { continue }
-            points.append(p)
-        }
-        guard points.count >= 2 else {
-            preview(building.before)
-            return
-        }
-        var next = document
-        if let i = next.annotations.firstIndex(where: { $0.id == building.id }),
-            case .path(_, _, let fill) = next.annotations[i].shape
-        {
-            next.annotations[i].shape = .path(
-                points: points, closed: closing && points.count >= 3, fill: fill)
-        }
-        preview(next)
-        commit(from: building.before)
-        selection = .annotation(building.id)
     }
 
     /// Escape while building: drops the last vertex; dropping the only one abandons the path.
     func dropLastVertex() {
         guard let building else { return }
-        let points = vertices(building.id)
-        guard points.count > 1 else {
-            setBuilding(nil)
-            preview(building.before)
-            return
+        batch {
+            let points = vertices(building.id)
+            guard points.count > 1 else {
+                setBuilding(nil)
+                preview(building.before)
+                return
+            }
+            previewVertices(building.id, Array(points.dropLast()))
         }
-        previewVertices(building.id, Array(points.dropLast()))
     }
 
     /// The selected arrow's or path's own handle under `p`: a vertex — an arrow's tail or head,

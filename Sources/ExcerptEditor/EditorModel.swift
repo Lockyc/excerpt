@@ -13,24 +13,30 @@ enum Selection: Equatable {
 /// identical pixels across undo and redo.
 final class EditorModel {
     let original: CGImage
-    private(set) var document: EditDocument { didSet { onChange?() } }
+    private(set) var document: EditDocument { didSet { changed() } }
     /// Called after anything the editor shows changed: the document, tool, selection, a drag.
+    /// Once per call into the model however much it changed (`batch`), so one input event is
+    /// one refresh.
     var onChange: (() -> Void)?
+    private var batchDepth = 0
+    private var changedInBatch = false
     /// The text being typed: shown live by `displayDocument`, written to the document only by
     /// `endTyping`. Its id is the document annotation it retypes, or the next free id for new
     /// text.
-    private(set) var typing: Annotation? { didSet { onChange?() } }
+    private(set) var typing: Annotation? { didSet { changed() } }
     private var saved: EditDocument
     private var history = UndoStack<EditDocument>()
 
     var tool: Tool = .arrow {
         didSet {
-            endTyping()
-            cancelDrag()
-            // Pressing the current tool's key again is not a switch: the path carries on.
-            if tool != oldValue { finishPath() }
-            selection = nil
-            onChange?()
+            batch {
+                endTyping()
+                cancelDrag()
+                // Pressing the current tool's key again is not a switch: the path carries on.
+                if tool != oldValue { finishPath() }
+                selection = nil
+                changed()
+            }
         }
     }
     /// What new annotations get; choosing a colour, size or background sets it.
@@ -47,18 +53,18 @@ final class EditorModel {
     }
     /// Called when the user picks a border colour or width, so the next editor starts with it.
     var onBorderStyleChange: ((Border) -> Void)?
-    var selection: Selection? { didSet { onChange?() } }
+    var selection: Selection? { didSet { changed() } }
     /// View points per rendered pixel, so hit slop and minimum drags stay the same size on screen.
     var viewScale: Double = 1 {
         didSet { precondition(viewScale > 0, "viewScale must be positive") }
     }
     /// The overlay for a drag in progress.
-    private(set) var pending: Pending? { didSet { onChange?() } }
+    private(set) var pending: Pending? { didSet { changed() } }
     /// The drag in progress; undo and redo wait for it to end.
-    private(set) var drag: Drag? { didSet { onChange?() } }
+    private(set) var drag: Drag? { didSet { changed() } }
     /// The path being built under the path tool: previewed into the document, recorded once by
     /// `finishPath`.
-    private(set) var building: PathBuild? { didSet { onChange?() } }
+    private(set) var building: PathBuild? { didSet { changed() } }
     /// The original's pixels, for snapping; read on first use.
     private(set) lazy var pixels = PixelBuffer(original)
 
@@ -80,6 +86,25 @@ final class EditorModel {
         var borderStyle = document.border ?? borderStyle
         borderStyle.outside = true
         self.borderStyle = borderStyle
+    }
+
+    /// Runs `body` as one change: whatever it changes, `onChange` is called once, after it, and
+    /// not at all when nothing changed. Nests: only the outermost batch calls it.
+    func batch<Result>(_ body: () -> Result) -> Result {
+        batchDepth += 1
+        defer {
+            batchDepth -= 1
+            if batchDepth == 0, changedInBatch {
+                changedInBatch = false
+                onChange?()
+            }
+        }
+        return body()
+    }
+
+    /// Marks a change: told now outside a batch, at its end inside one.
+    func changed() {
+        if batchDepth > 0 { changedInBatch = true } else { onChange?() }
     }
 
     /// Edits not yet written by ⌘S.
@@ -160,13 +185,15 @@ final class EditorModel {
     /// flight is cancelled first, so its release can't undo or double-record this change, and a
     /// path being built finishes first.
     func apply(_ change: (inout EditDocument) -> Void) {
-        finishPath()
-        if drag != nil { cancelDrag() }
-        var next = document
-        change(&next)
-        guard next != document else { return }
-        history.record(document)
-        document = next
+        batch {
+            finishPath()
+            if drag != nil { cancelDrag() }
+            var next = document
+            change(&next)
+            guard next != document else { return }
+            history.record(document)
+            document = next
+        }
     }
 
     func setDrag(_ drag: Drag?) { self.drag = drag }
@@ -187,20 +214,28 @@ final class EditorModel {
     /// being built finishes first, so undo removes it whole; one too short to keep is dropped,
     /// and that is the whole undo.
     func undo() {
-        if let building {
-            finishPath()
-            guard document.annotations.contains(where: { $0.id == building.id }) else { return }
+        batch {
+            if let building {
+                finishPath()
+                guard document.annotations.contains(where: { $0.id == building.id }) else {
+                    return
+                }
+            }
+            guard drag == nil, let previous = history.undo(from: document) else { return }
+            document = previous
+            keepSelectionIfPresent()
         }
-        guard drag == nil, let previous = history.undo(from: document) else { return }
-        document = previous
-        keepSelectionIfPresent()
     }
 
     /// Does nothing while a drag is in flight or a path is being built.
     func redo() {
-        guard building == nil, drag == nil, let next = history.redo(from: document) else { return }
-        document = next
-        keepSelectionIfPresent()
+        batch {
+            guard building == nil, drag == nil, let next = history.redo(from: document) else {
+                return
+            }
+            document = next
+            keepSelectionIfPresent()
+        }
     }
 
     /// After a history step the selection stays when its annotation or seam is still there.
@@ -269,14 +304,16 @@ final class EditorModel {
     /// nothing unless a path is selected. A path being built finishes first, selected, so the
     /// bar's Closed acts on it.
     func editSelectedPath(_ change: (inout [CGPoint], inout Bool, inout Bool) -> Void) {
-        finishPath()
-        guard case .annotation(let id) = selection else { return }
-        apply { doc in
-            guard let i = doc.annotations.firstIndex(where: { $0.id == id }),
-                case .path(var points, var closed, var fill) = doc.annotations[i].shape
-            else { return }
-            change(&points, &closed, &fill)
-            doc.annotations[i].shape = .path(points: points, closed: closed, fill: fill)
+        batch {
+            finishPath()
+            guard case .annotation(let id) = selection else { return }
+            apply { doc in
+                guard let i = doc.annotations.firstIndex(where: { $0.id == id }),
+                    case .path(var points, var closed, var fill) = doc.annotations[i].shape
+                else { return }
+                change(&points, &closed, &fill)
+                doc.annotations[i].shape = .path(points: points, closed: closed, fill: fill)
+            }
         }
     }
 
@@ -329,19 +366,21 @@ final class EditorModel {
     /// Starts typing into the text under `pointer`, or new text there in the current style.
     /// Whatever was being typed commits first.
     func beginTyping(at pointer: Pointer, map: RenderMap) {
-        endTyping()
-        if let id = textID(at: pointer, map: map),
-            let annotation = document.annotations.first(where: { $0.id == id })
-        {
-            selection = .annotation(id)
-            typing = annotation
-            return
+        batch {
+            endTyping()
+            if let id = textID(at: pointer, map: map),
+                let annotation = document.annotations.first(where: { $0.id == id })
+            {
+                selection = .annotation(id)
+                typing = annotation
+                return
+            }
+            selection = nil
+            typing = Annotation(
+                id: document.nextAnnotationID,
+                shape: .text(origin: pointer.original, string: "", background: style.background),
+                color: style.color, width: style.width)
         }
-        selection = nil
-        typing = Annotation(
-            id: document.nextAnnotationID,
-            shape: .text(origin: pointer.original, string: "", background: style.background),
-            color: style.color, width: style.width)
     }
 
     var typedString: String { typing.map(Self.string(of:)) ?? "" }
@@ -358,24 +397,29 @@ final class EditorModel {
     /// emptied removed. The text stays selected. Does nothing when nothing is being typed.
     func endTyping() {
         guard let typed = typing else { return }
-        typing = nil
-        let empty = Self.string(of: typed).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        apply { doc in
-            if let i = doc.annotations.firstIndex(where: { $0.id == typed.id }) {
-                if empty { doc.annotations.remove(at: i) } else { doc.annotations[i] = typed }
-            } else if !empty {
-                doc.annotations.append(typed)
+        batch {
+            typing = nil
+            let empty = Self.string(of: typed).trimmingCharacters(in: .whitespacesAndNewlines)
+                .isEmpty
+            apply { doc in
+                if let i = doc.annotations.firstIndex(where: { $0.id == typed.id }) {
+                    if empty { doc.annotations.remove(at: i) } else { doc.annotations[i] = typed }
+                } else if !empty {
+                    doc.annotations.append(typed)
+                }
             }
+            selection = empty ? nil : .annotation(typed.id)
         }
-        selection = empty ? nil : .annotation(typed.id)
     }
 
     /// Drops the text being typed, removing it from the document if it was already there.
     func deleteTyping() {
         guard let typed = typing else { return }
-        typing = nil
-        apply { $0.annotations.removeAll { $0.id == typed.id } }
-        selection = nil
+        batch {
+            typing = nil
+            apply { $0.annotations.removeAll { $0.id == typed.id } }
+            selection = nil
+        }
     }
 
     private static func string(of annotation: Annotation) -> String {
@@ -392,23 +436,25 @@ final class EditorModel {
     /// Removes the selected annotation or seam; with nothing selected under the crop tool,
     /// removes the crop. A path being built is abandoned, recording nothing.
     func deleteSelection() {
-        if let building {
-            setBuilding(nil)
-            if case .freehand? = drag { setDrag(nil) }
-            preview(building.before)
-            return
-        }
-        switch selection {
-        case .annotation(let id):
-            apply { $0.annotations.removeAll { $0.id == id } }
-        case .seam(let axis, let band):
-            apply { $0.cuts = Gestures.removing($0.cuts, axis: axis, band: band) }
-        case nil:
-            if tool == .crop {
-                apply { $0.setCrop(nil, width: original.width, height: original.height) }
+        batch {
+            if let building {
+                setBuilding(nil)
+                if case .freehand? = drag { setDrag(nil) }
+                preview(building.before)
+                return
             }
+            switch selection {
+            case .annotation(let id):
+                apply { $0.annotations.removeAll { $0.id == id } }
+            case .seam(let axis, let band):
+                apply { $0.cuts = Gestures.removing($0.cuts, axis: axis, band: band) }
+            case nil:
+                if tool == .crop {
+                    apply { $0.setCrop(nil, width: original.width, height: original.height) }
+                }
+            }
+            selection = nil
         }
-        selection = nil
     }
 
     /// The selected step's index in the document and the indices of the steps either side of it

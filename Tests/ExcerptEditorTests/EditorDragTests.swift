@@ -62,6 +62,39 @@ import Testing
                 == .arrow(tail: CGPoint(x: 200, y: 150), head: CGPoint(x: 100, y: 150)))
     }
 
+    /// Each step of a move changes the document, the drag and, for a blur, the pending outline;
+    /// the canvas and window refresh once for it.
+    @Test func eachInputEventIsOneChange() {
+        let m = model(
+            EditDocument(
+                scale: 1,
+                annotations: [
+                    note(1, CGRect(x: 20, y: 20, width: 80, height: 60)),
+                    Annotation(
+                        id: 2, shape: .blur(rect: CGRect(x: 200, y: 200, width: 80, height: 60))),
+                ], salt: 7))
+        var changes = 0
+        m.onChange = { changes += 1 }
+        m.tool = Tool.select
+        #expect(changes == 1)
+        let map = self.map(m)
+        for start in [CGPoint(x: 20, y: 50), CGPoint(x: 240, y: 230)] {
+            changes = 0
+            m.mouseDown(Pointer(rendered: start, map: map), map: map)
+            #expect(changes == 1)
+            changes = 0
+            let moved = CGPoint(x: start.x + 30, y: start.y + 20)
+            m.mouseDragged(Pointer(rendered: moved, map: map), map: map, snap: false)
+            #expect(changes == 1)
+            changes = 0
+            m.mouseUp(Pointer(rendered: moved, map: map), map: map, snap: false)
+            #expect(changes == 1)
+        }
+        changes = 0
+        m.undo()
+        #expect(changes == 1)
+    }
+
     @Test func rectanglesAndHighlightsAreDraggedOutFromAnyCorner() {
         let m = model()
         m.tool = .rectangle
