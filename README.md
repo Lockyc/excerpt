@@ -15,8 +15,7 @@ captures of web pages and forms.
 
 It also does everything you'd expect of a screenshot tool: area, window, fullscreen and
 scrolling capture, copying the text out of a capture (OCR), a floating preview after each
-capture, and an editor for arrows, text and highlights. Tall captures can be exported as tiles
-sized for Claude to read. It records an area, window or display as a GIF (or MP4) small enough
+capture, and an editor for arrows, text and highlights. It records an area, window or display as a GIF (or MP4) small enough
 for GitHub, Slack and Google Chat, with the shortcuts you press and the clicks you make drawn in,
 and an editor to trim and blur it.
 
@@ -29,16 +28,14 @@ curl -fsSL https://raw.githubusercontent.com/lockyc/excerpt/main/install.sh | ba
 ```
 
 The installer downloads the latest release, checks that it is signed by Excerpt's developer and
-notarized by Apple, then installs `/Applications/Excerpt.app`, links the `excerpt` command into
-`/usr/local/bin` and starts the app in the menu bar. It asks for your password only when one of
-those folders isn't writable. From a clone of this repo, Claude Code's `/excerpt:install` runs
-the same install and checks the command works from a new shell.
+notarized by Apple, then installs `/Applications/Excerpt.app` and starts it in the menu bar. It
+asks for your password only when `/Applications` isn't writable. From a clone of this repo,
+Claude Code's `/excerpt:install` runs the same install.
 
 **Updates** install themselves: Excerpt checks daily, and **Check for Updates…** in its menu
 checks now. Running the installer again also updates.
 
-**Uninstall** by quitting Excerpt, deleting `/Applications/Excerpt.app`,
-`/usr/local/bin/excerpt` and the cache `~/Library/Caches/excerpt`, running
+**Uninstall** by quitting Excerpt, deleting `/Applications/Excerpt.app`, running
 `defaults delete com.lockyc.excerpt`, and removing Excerpt from Screen Recording,
 Accessibility and Input Monitoring in System Settings → Privacy & Security. Your captures stay
 where they were saved.
@@ -70,7 +67,7 @@ after that it belongs to the app you're recording, so Discard is how to throw a 
 A recording stops at 5 minutes, and quitting Excerpt stops and saves one in progress.
 
 Each capture is saved to `~/Documents/Screenshots/` (a setting), copied to the clipboard and
-shown as a thumbnail with **Edit**, **For Claude** and **Close**. Files in that folder older
+shown as a thumbnail with **Edit** and **Close**. Files in that folder older
 than 30 days move into `YYYY/MM-Month/` folders, names unchanged (also a setting). The editor has
 arrow, rectangle, path (click or freehand lines and outlines, optionally filled), text (plain or
 on a background of its colour), numbered steps, highlight, blur,
@@ -91,24 +88,15 @@ between them. Step numbers carry on from one capture to the next, and any captur
 
 A recording is saved as a GIF fitted to GitHub's 10 MB limit, or as an MP4 (a setting); one too
 long for that GIF is saved as MP4, and its thumbnail says so. Its full-resolution
-`… original.mov` is kept beside it, and **For Claude** is for screenshots only. A recording's
+`… original.mov` is kept beside it. A recording's
 **Edit** opens the recording editor: drag the timeline's ends to trim, draw blurs over the whole
 clip or a span of it, turn the drawn **Shortcuts** and **Clicks** on or off, and choose GIF or
 MP4.
 
 ![The cut invoice sheet with the two overdue rows highlighted, numbered 1 and 2, and their client names blurred](docs/screenshots/annotate.png)
 
-**For Claude** (⇧⌘C in the editor) writes the capture as tiles sized for Claude to read plus a
-`text.md` of its text with each cut marked, and copies `@` references to paste into Claude
-Code. The same works for any image file from the command line:
-
-```bash
-excerpt read shot.png   # text on stdout, tile paths on stderr
-```
-
-Known limits: tiles split on height only, so a capture over 2000pt wide reaches Claude downscaled;
-side-by-side columns on one background are read across, line by line, so their text interleaves
-in `text.md`; scrolling capture stops on pages
+Known limits: Capture Text reads side-by-side columns on one background across, line by line,
+so their text interleaves; scrolling capture stops on pages
 with large animations or video; a recording covers one display, a recorded window is the fixed
 area it covered when you clicked it, and a recording's blurs stay where they're drawn rather than
 following moving content.
@@ -122,15 +110,12 @@ and `shellcheck` for the gate.
 just gate     # shellcheck, format check, build, tests
 just run      # build the signed app and launch it
 just install  # build, install to /Applications and launch
-
-swift run Excerpt read shot.png   # the excerpt command, without building the app
 ```
 
 Signing uses a `Developer ID Application` identity from your keychain; set
 `APPLE_SIGNING_IDENTITY` when more than one is present. Without one,
 `APPLE_SIGNING_IDENTITY=- just run` signs ad hoc, and macOS then asks for Screen Recording again
-after each rebuild. `just install` doesn't link the `excerpt` command; link
-`/Applications/Excerpt.app/Contents/MacOS/Excerpt` as `excerpt` on your `PATH` to get it.
+after each rebuild.
 
 What's planned is in [docs/roadmap.md](docs/roadmap.md).
 
