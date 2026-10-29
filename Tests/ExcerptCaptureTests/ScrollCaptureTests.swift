@@ -1,5 +1,6 @@
 import ExcerptCore
 import ExcerptTestSupport
+import Foundation
 import Testing
 
 @testable import ExcerptCapture
@@ -516,6 +517,25 @@ final class AnimatedPage: FrameSource, Scroller {
         #expect(fake.scrolls.count == 1)
         #expect(!phases.contains(.halted(.uncertain)))
         #expect(phases.last == .manual(.userScrolled))
+    }
+
+    @Test func aFrameIsMatchedOffTheMainThread() async {
+        final class Seen: @unchecked Sendable { var onMain: [Bool] = [] }
+        let seen = Seen()
+        let first = ScrollFixtures.frame(page, offset: 0, viewport: 200)
+        let next = ScrollFixtures.frame(page, offset: 120, viewport: 200)
+        var session = ScrollSession(first: first, scale: 1, canAutoScroll: true)
+        await ScrollCapture.offMain(&session) {
+            seen.onMain.append(Thread.isMainThread)
+            $0.stepped(next, travel: 120)
+        }
+        let match = await ScrollCapture.offMain {
+            seen.onMain.append(Thread.isMainThread)
+            return StitchMatcher.match(first, next, ignoringRightColumns: 0)
+        }
+        #expect(seen.onMain == [false, false])
+        #expect(session.stitcher.height == 320)
+        #expect(match != .still)
     }
 
     @Test func aTakeOverKeepsTheFrameTheStepSettledOn() async {

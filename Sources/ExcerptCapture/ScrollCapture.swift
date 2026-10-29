@@ -170,7 +170,7 @@ public final class ScrollCapture {
         while true {
             switch request {
             case .finish:
-                session.finish()
+                await Self.offMain(&session) { $0.finish() }
                 return .saved(session.stitcher.image)
             case .cancel: return .cancelled
             case nil: break
@@ -198,9 +198,13 @@ public final class ScrollCapture {
                             if tookOver {
                                 tookOver = false
                                 session.takeOver()
-                                session.sampled(latest)
+                                await Self.offMain(&session) {
+                                    [latest] in $0.sampled(latest)
+                                }
                             } else {
-                                session.stepped(latest, travel: travel)
+                                await Self.offMain(&session) {
+                                    [latest] in $0.stepped(latest, travel: travel)
+                                }
                             }
                         } else {
                             session.fallBack(.eventFailed)
@@ -219,9 +223,13 @@ public final class ScrollCapture {
                         if tookOver {
                             tookOver = false
                             session.takeOver()
-                            session.sampled(latest)
+                            await Self.offMain(&session) {
+                                [latest] in $0.sampled(latest)
+                            }
                         } else {
-                            session.checkedEnd(latest)
+                            await Self.offMain(&session) {
+                                [latest] in $0.checkedEnd(latest)
+                            }
                         }
                     } else {
                         session.fallBack(.eventFailed)
@@ -229,7 +237,7 @@ public final class ScrollCapture {
                     onChange?(session)
                 case .manual:
                     if let frame = try await read(timeout: Self.sampleTimeout) {
-                        session.sampled(frame)
+                        await Self.offMain(&session) { $0.sampled(frame) }
                         onChange?(session)
                     }
                 case .halted:
@@ -242,13 +250,30 @@ public final class ScrollCapture {
                 // keeping the stitch, unless the user already asked to end it.
                 switch request {
                 case .finish:
-                    session.finish()
+                    await Self.offMain(&session) { $0.finish() }
                     return .saved(session.stitcher.image)
                 case .cancel: return .cancelled
                 case nil: return .failed(error, partial: session.stitcher.image)
                 }
             }
         }
+    }
+
+    /// Makes `change` to `session` off the main actor: matching a frame that doesn't match
+    /// plainly (flattened copies, pinned headers, the band search) takes up to a few hundred
+    /// milliseconds, through which the HUD, Return, Esc and the wheel monitor stay live. The
+    /// session is changed in place, never copied, so an append never duplicates the stitch.
+    @concurrent
+    nonisolated static func offMain(
+        _ session: inout ScrollSession, _ change: @Sendable (inout ScrollSession) -> Void
+    ) async {
+        change(&session)
+    }
+
+    /// `work`'s answer, worked out off the main actor (`offMain(_:_:)`).
+    @concurrent
+    nonisolated static func offMain<T: Sendable>(_ work: @Sendable () -> T) async -> T {
+        work()
     }
 
     /// The frame once the page has settled after a step. First the page answers: reads run for
@@ -269,7 +294,10 @@ public final class ScrollCapture {
                 let frame = try await read(timeout: answered - clock.now)
             else { return newest ?? previous }
             newest = frame
-            if StitchMatcher.match(previous, frame, ignoringRightColumns: ignored) != .still {
+            let match = await Self.offMain {
+                StitchMatcher.match(previous, frame, ignoringRightColumns: ignored)
+            }
+            if match != .still {
                 slowestAnswer = max(slowestAnswer ?? .zero, clock.now - posted)
                 break
             }
