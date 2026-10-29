@@ -1,14 +1,13 @@
 #!/usr/bin/env bash
 # install.sh — install or update Excerpt from its latest GitHub release.
 #   curl -fsSL https://raw.githubusercontent.com/lockyc/excerpt/main/install.sh | bash
-# Installs /Applications/Excerpt.app and links `excerpt` into /usr/local/bin. Re-run to update.
-# EXCERPT_ZIP_URL, EXCERPT_APP_DIR and EXCERPT_BIN_DIR override the download and the two places.
+# Installs /Applications/Excerpt.app. Re-run to update.
+# EXCERPT_ZIP_URL and EXCERPT_APP_DIR override the download and the place.
 set -euo pipefail
 
 main() {
     zip_url=${EXCERPT_ZIP_URL:-https://github.com/lockyc/excerpt/releases/latest/download/Excerpt.zip}
     app_dir=${EXCERPT_APP_DIR:-/Applications}
-    bin_dir=${EXCERPT_BIN_DIR:-/usr/local/bin}
     team=G9V8U6ZU5E
 
     fail() { echo "excerpt: $*" >&2; exit 1; }
@@ -66,18 +65,8 @@ main() {
     fi
     in_dir "$app_dir" rm -rf "$old"
 
-    echo "→ linking $bin_dir/excerpt"
-    [ -d "$bin_dir" ] || in_dir "$(dirname "$bin_dir")" mkdir -p "$bin_dir"
-    in_dir "$bin_dir" ln -sfn "$target/Contents/MacOS/Excerpt" "$bin_dir/excerpt"
-    "$bin_dir/excerpt" help >/dev/null || fail "$bin_dir/excerpt doesn't run."
-
     open "$target"
     echo "✓ Excerpt $version is in $target and running in the menu bar."
-    echo "  \`excerpt read <image>\` reads any image for Claude."
-    case ":$PATH:" in
-        *":$bin_dir:"*) ;;
-        *) echo "  $bin_dir isn't on your PATH; add it to run \`excerpt\` by name." ;;
-    esac
 }
 
 main "$@"

@@ -11,7 +11,6 @@ final class ThumbnailStack {
     private let preferences: Preferences
     private let onEdit: (URL) -> Void
     private let onEditAll: ([URL]) -> Void
-    private let onClaude: (URL) -> Void
     private var panels: [ThumbnailPanel] = []
     /// Every capture shown since the stack was last empty, oldest first, including those whose
     /// thumbnail has already gone: what Edit All opens.
@@ -24,12 +23,11 @@ final class ThumbnailStack {
 
     init(
         preferences: Preferences, onEdit: @escaping (URL) -> Void,
-        onEditAll: @escaping ([URL]) -> Void, onClaude: @escaping (URL) -> Void
+        onEditAll: @escaping ([URL]) -> Void
     ) {
         self.preferences = preferences
         self.onEdit = onEdit
         self.onEditAll = onEditAll
-        self.onClaude = onClaude
     }
 
     /// Shows a capture's thumbnail. A recording shows `image`, its first frame, as its poster
@@ -39,7 +37,7 @@ final class ThumbnailStack {
         let held = preferences.thumbnailAtPointer
         let panel = ThumbnailPanel(
             url: url, image: image, isRecording: isRecording, note: note,
-            seconds: preferences.thumbnailSeconds, held: held, onEdit: onEdit, onClaude: onClaude
+            seconds: preferences.thumbnailSeconds, held: held, onEdit: onEdit
         ) { [weak self] closing in
             guard let self else { return }
             if closing === atPointer { stopWatchingPointer() }
@@ -98,14 +96,6 @@ final class ThumbnailStack {
         atPointer = nil
     }
 
-    /// Shows For Claude as busy on the thumbnails whose capture `isCapture` picks while its
-    /// export runs.
-    func setPreparingForClaude(_ busy: Bool, isCapture: (URL) -> Bool) {
-        for panel in panels where isCapture(panel.url) {
-            panel.setPreparingForClaude(busy)
-        }
-    }
-
     /// Opens the whole run as a series and clears the stack.
     private func editAll() {
         let captures = run
@@ -139,9 +129,7 @@ final class ThumbnailPanel: NSPanel {
     let url: URL
     let isRecording: Bool
     private let onEdit: (URL) -> Void
-    private let onClaude: (URL) -> Void
     var onEditAll: () -> Void = {}
-    private let claudeButton: NSButton
     private let editAllButton: NSButton
     private let onClose: (ThumbnailPanel) -> Void
     private var timer: Timer?
@@ -151,15 +139,12 @@ final class ThumbnailPanel: NSPanel {
 
     init(
         url: URL, image: CGImage, isRecording: Bool, note: String?, seconds: Double, held: Bool,
-        onEdit: @escaping (URL) -> Void, onClaude: @escaping (URL) -> Void,
-        onClose: @escaping (ThumbnailPanel) -> Void
+        onEdit: @escaping (URL) -> Void, onClose: @escaping (ThumbnailPanel) -> Void
     ) {
         self.held = held
         self.url = url
         self.isRecording = isRecording
         self.onEdit = onEdit
-        self.onClaude = onClaude
-        claudeButton = FirstMouseButton(title: "For Claude", target: nil, action: nil)
         editAllButton = FirstMouseButton(title: "Edit All", target: nil, action: nil)
         self.onClose = onClose
         self.seconds = seconds
@@ -223,9 +208,6 @@ final class ThumbnailPanel: NSPanel {
         style(editAllButton, #selector(editAllTapped))
         editAllButton.isHidden = true
         bar.addArrangedSubview(editAllButton)
-        style(claudeButton, #selector(claudeTapped))
-        setPreparingForClaude(false)
-        bar.addArrangedSubview(claudeButton)
         bar.addArrangedSubview(button("Close", #selector(closeTapped)))
         container.addSubview(bar)
         contentView = container
@@ -248,17 +230,6 @@ final class ThumbnailPanel: NSPanel {
         b.action = action
         b.bezelStyle = .recessed
         b.controlSize = .large
-    }
-
-    /// While the capture's export runs, For Claude is disabled and says why; on a recording it
-    /// is always disabled.
-    func setPreparingForClaude(_ busy: Bool) {
-        claudeButton.isEnabled = !busy && !isRecording
-        claudeButton.toolTip =
-            isRecording
-            ? "For Claude reads screenshots, not recordings"
-            : busy
-                ? "Preparing for Claude…" : "Copy tiles and text Claude can read, as @ references"
     }
 
     /// At the delay's end the pointer's position decides: over the panel, the delay starts
@@ -288,7 +259,6 @@ final class ThumbnailPanel: NSPanel {
         dismiss()
     }
     @objc private func editAllTapped() { onEditAll() }
-    @objc private func claudeTapped() { onClaude(url) }
 
     /// Shows Edit All, naming how many captures it opens, or hides it for nil.
     func setEditAll(count: Int?) {

@@ -14,7 +14,6 @@ import Testing
             supersedesMaster: false)
         return EditorWindowController(
             captures: [capture], save: { _, _ in Data() }, copy: { _ in true },
-            forClaude: { _, _, _ in },
             borderStyle: .initial, rememberBorder: { _ in }, annotationStyle: .initial,
             rememberStyle: { _ in }, onClose: {})
     }

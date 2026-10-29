@@ -58,7 +58,7 @@ import Testing
                 calls.copiedAll.open()
                 return true
             },
-            forClaude: { _, _, _ in }, borderStyle: .initial, rememberBorder: { _ in },
+            borderStyle: .initial, rememberBorder: { _ in },
             annotationStyle: .initial, rememberStyle: { _ in }, onClose: { calls.closed = true })
     }
 
@@ -246,7 +246,7 @@ import Testing
         }
         return EditorWindowController(
             captures: captures, save: { _, _ in Data() }, copy: { _ in true },
-            forClaude: { _, _, _ in }, borderStyle: .initial, rememberBorder: { _ in },
+            borderStyle: .initial, rememberBorder: { _ in },
             annotationStyle: .initial, rememberStyle: { _ in }, onClose: {})
     }
 

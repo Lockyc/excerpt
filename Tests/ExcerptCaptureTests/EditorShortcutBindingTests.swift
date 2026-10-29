@@ -16,6 +16,6 @@ import Testing
         #expect(Set(bindings.compactMap { $0 }).count == EditorShortcut.allCases.count)
         #expect(
             bindings.contains(
-                HotKeyBinding(keyCode: UInt32(kVK_ANSI_C), modifiers: HotKeyBinding.commandShift)))
+                HotKeyBinding(keyCode: UInt32(kVK_ANSI_Z), modifiers: HotKeyBinding.commandShift)))
     }
 }

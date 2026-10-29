@@ -5,14 +5,11 @@ import ExcerptTestSupport
 
 /// A recogniser that reads colour, not letters: each word of `palette` is painted as a solid
 /// block of its colour, and a block is read wherever at least `minimumPixels` of exactly that
-/// colour appear. A blur's averaged, noised blocks are never an exact palette colour, so a
-/// blurred word is unreadable to it, as to a real recogniser.
+/// colour appear.
 struct ColourWords: TextRecognizer {
     static let palette: [(word: String, colour: RGBA)] = [
         ("alpha", RGBA(r: 200, g: 30, b: 30, a: 255)),
         ("beta", RGBA(r: 30, g: 160, b: 30, a: 255)),
-        ("secret", RGBA(r: 30, g: 30, b: 200, a: 255)),
-        ("cutaway", RGBA(r: 200, g: 120, b: 0, a: 255)),
         ("left", RGBA(r: 120, g: 0, b: 160, a: 255)),
         ("right", RGBA(r: 0, g: 140, b: 160, a: 255)),
         ("omega", RGBA(r: 90, g: 90, b: 20, a: 255)),

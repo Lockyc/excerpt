@@ -58,7 +58,6 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
     public private(set) var current = 0
     private let save: (LoadedCapture, EditDocument) async throws -> Data
     private let copy: (() throws -> [Data]) -> Bool
-    private let forClaude: (LoadedCapture, CGImage, EditDocument) -> Void
     private let onClose: () -> Void
     private var page: Page { pages[current] }
     private var model: EditorModel { page.model }
@@ -76,15 +75,9 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
     private let undoButton = NSButton()
     private let redoButton = NSButton()
     private let discardButton = NSButton(title: "Discard", target: nil, action: nil)
-    private let claudeButton = NSButton(title: "For Claude", target: nil, action: nil)
     private let saveButton = NSButton(title: "Save", target: nil, action: nil)
 
-    /// While the app prepares this capture for Claude, For Claude is disabled and says why.
-    public var isPreparingForClaude = false {
-        didSet { update() }
-    }
-
-    /// While Save or For Claude writes and renders, they and Discard are disabled and the
+    /// While Save writes and renders, it and Discard are disabled and the
     /// window won't close; the canvas stays live, and an edit made meanwhile stays unsaved.
     private var saving = false {
         didSet { update() }
@@ -104,8 +97,8 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
     /// capture's document (the app's `LibraryStore.saveEdits`, off the main thread) and returns
     /// the primary's PNG it wrote; `copy`, Save's last step, is handed a closure that returns
     /// every capture's PNG in order, or why one couldn't be rendered, puts them on the
-    /// pasteboard, reports any failure, the render's included, and returns whether it worked; `forClaude` exports the capture in view with its current
-    /// edits; `borderStyle` is the border a capture without one gets when turned on, and
+    /// pasteboard, reports any failure, the render's included, and returns whether it worked;
+    /// `borderStyle` is the border a capture without one gets when turned on, and
     /// `rememberBorder` is told each colour or width the user picks; `annotationStyle` is what
     /// new annotations start with, and `rememberStyle` is told each colour, size or background
     /// the user picks; `marginColor` fills the margin of a capture that has none yet; `onClose`
@@ -114,7 +107,6 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         captures: [LoadedCapture],
         save: @escaping (LoadedCapture, EditDocument) async throws -> Data,
         copy: @escaping (() throws -> [Data]) -> Bool,
-        forClaude: @escaping (LoadedCapture, CGImage, EditDocument) -> Void,
         borderStyle: Border, rememberBorder: @escaping (Border) -> Void,
         annotationStyle: AnnotationStyle, rememberStyle: @escaping (AnnotationStyle) -> Void,
         marginColor: RGBA? = nil, onClose: @escaping () -> Void
@@ -122,7 +114,6 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         precondition(!captures.isEmpty, "an editor needs a capture")
         self.save = save
         self.copy = copy
-        self.forClaude = forClaude
         self.onClose = onClose
         pages = captures.map { capture in
             let model = EditorModel(
@@ -274,15 +265,12 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         discardButton.hasDestructiveAction = true
         discardButton.target = self
         discardButton.action = #selector(discardPressed)
-        claudeButton.target = self
-        claudeButton.action = #selector(forClaudePressed)
         saveButton.target = self
         saveButton.action = #selector(saveDocument)
 
-        for control in [
-            tools, borderControl, undoButton, redoButton, discardButton,
-            claudeButton, saveButton,
-        ] as [NSControl] {
+        for control in [tools, borderControl, undoButton, redoButton, discardButton, saveButton]
+            as [NSControl]
+        {
             control.refusesFirstResponder = true
             control.controlSize = .large
         }
@@ -290,8 +278,7 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         // One row: the tools centred on the window while there is room, pushed left of the
         // actions when there isn't; the actions at the right.
         let toolGroup = Self.row([tools, borderControl])
-        let actionGroup = Self.row(
-            [undoButton, redoButton, discardButton, claudeButton, saveButton])
+        let actionGroup = Self.row([undoButton, redoButton, discardButton, saveButton])
         let bar = NSView()
         for view in [toolGroup, actionGroup] as [NSView] {
             view.translatesAutoresizingMaskIntoConstraints = false
@@ -438,13 +425,6 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         undoButton.toolTip = model.canUndo ? "Undo (⌘Z)" : "Nothing to undo"
         redoButton.isEnabled = model.canRedo
         redoButton.toolTip = model.canRedo ? "Redo (⇧⌘Z)" : "Nothing to redo"
-        claudeButton.isEnabled = !isPreparingForClaude && !saving
-        claudeButton.toolTip =
-            saving
-            ? "Saving…"
-            : isPreparingForClaude
-                ? "Preparing for Claude…"
-                : "Save, copy tiles and text of the image for Claude and close (⇧⌘C)"
         let images = pages.count == 1 ? "the image" : "the \(pages.count) images"
         saveButton.isEnabled = !saving
         saveButton.toolTip =
@@ -499,18 +479,6 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         window?.close()
     }
 
-    /// ⇧⌘C: like Save, it writes unsaved edits first, so what Claude reads is what the library
-    /// holds: the capture in view when it was pressed, with the edits written.
-    @objc func forClaudePressed() {
-        let index = current
-        finish { [weak self] documents in
-            guard let self else { return false }
-            let page = pages[index]
-            forClaude(page.capture, page.model.original, documents[index])
-            return true
-        }
-    }
-
     /// ⌘S: writes unsaved edits, puts every image on the clipboard in order and closes. With
     /// nothing unsaved there is nothing to write, so an unedited capture stays one file.
     @objc func saveDocument() {
@@ -531,7 +499,7 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         }
     }
 
-    /// Save and For Claude each end the edit: every capture's unsaved edits are written (the
+    /// Save ends the edit: every capture's unsaved edits are written (the
     /// master keeps the original, so they stay adjustable), then `action` runs with every
     /// capture's document as written, then the window closes unless an edit made meanwhile is
     /// unsaved. The writing and rendering run off the main thread, `saving` meanwhile; pressed
@@ -644,7 +612,7 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
 /// on it, and the app refuses to bind a global hotkey to any, since a global hotkey takes the
 /// press before the editor sees it.
 public enum EditorShortcut: CaseIterable, Sendable {
-    case save, forClaude, close, cut, copy, paste, selectAll, undo, redo, previous, next
+    case save, close, cut, copy, paste, selectAll, undo, redo, previous, next
 
     /// The command as the user knows it.
     public var name: String {
@@ -652,7 +620,6 @@ public enum EditorShortcut: CaseIterable, Sendable {
         case .previous: "Previous Capture"
         case .next: "Next Capture"
         case .save: "Save"
-        case .forClaude: "For Claude"
         case .close: "Close"
         case .cut: "Cut"
         case .copy: "Copy"
@@ -667,7 +634,7 @@ public enum EditorShortcut: CaseIterable, Sendable {
     public var key: String {
         switch self {
         case .save: "s"
-        case .forClaude, .copy: "c"
+        case .copy: "c"
         case .close: "w"
         case .cut: "x"
         case .paste: "v"
@@ -680,7 +647,7 @@ public enum EditorShortcut: CaseIterable, Sendable {
 
     public var modifiers: NSEvent.ModifierFlags {
         switch self {
-        case .forClaude, .redo: [.command, .shift]
+        case .redo: [.command, .shift]
         default: [.command]
         }
     }
@@ -699,14 +666,10 @@ final class EditorWindow: NSWindow {
                 $0.modifiers == flags && $0.key == key
             })
         else { return super.performKeyEquivalent(with: event) }
-        // Save, For Claude and close work everywhere, including while a text field is being
-        // edited.
+        // Save and close work everywhere, including while a text field is being edited.
         switch shortcut {
         case .save:
             editor?.saveDocument()
-            return true
-        case .forClaude:
-            editor?.forClaudePressed()
             return true
         case .close:
             performClose(nil)

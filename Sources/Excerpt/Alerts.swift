@@ -67,32 +67,6 @@ enum Alerts {
         }
     }
 
-    /// The For Claude bundle could not be built: the cache, or text recognition, failed.
-    static func claudeExportFailed(_ name: String, _ error: Error) {
-        show("Couldn't prepare \(name) for Claude", sentence(error.localizedDescription))
-    }
-
-    /// The For Claude bundle is written but its references could not go on the clipboard.
-    static func claudeCopyFailed(_ folder: URL, _ error: Error) {
-        show(
-            "Couldn't copy to the clipboard",
-            sentence(
-                "The tiles and text.md are in \(folder.path), but Excerpt couldn't copy their references: \(error.localizedDescription)"
-            )
-        )
-    }
-
-    /// Expired For Claude bundles stayed in the cache; any export alongside went through.
-    static func claudeCacheNotPruned(_ failures: [ClaudeCacheError]) {
-        let days = Int(ClaudeCache.maximumAge / (24 * 60 * 60))
-        show(
-            "Couldn't remove old Claude bundles",
-            sentence(
-                "Excerpt removes For Claude bundles after \(days) days, but couldn't remove "
-                    + failures.map(\.description).joined(separator: "; "))
-                + " Remove them in Finder.")
-    }
-
     /// Captures old enough to file stayed at the top of the library.
     static func libraryNotFiled(_ failures: [LibraryFilingFailure]) {
         show(
@@ -109,16 +83,6 @@ enum Alerts {
             "Couldn't file captures",
             sentence(
                 "Excerpt files captures into month folders, but couldn't read \(folder.path): \(error.localizedDescription)"
-            ))
-    }
-
-    /// The Claude cache folder couldn't be read, so nothing in it could be pruned.
-    static func claudeCacheUnlistable(_ root: URL, _ error: Error) {
-        let days = Int(ClaudeCache.maximumAge / (24 * 60 * 60))
-        show(
-            "Couldn't clean up old Claude bundles",
-            sentence(
-                "Excerpt removes For Claude bundles after \(days) days, but couldn't read \(root.path): \(error.localizedDescription)"
             ))
     }
 
@@ -145,8 +109,8 @@ enum Alerts {
                 "Excerpt couldn't copy \(file.lastPathComponent): \(error.localizedDescription)"))
     }
 
-    /// A file the editor or a thumbnail's For Claude can't open: not an image, unreadable, too
-    /// large, damaged, or edited by a newer Excerpt. The title names the file at fault.
+    /// A file the editor can't open: not an image, unreadable, too large, damaged, or edited by
+    /// a newer Excerpt. The title names the file at fault.
     static func openFailed(_ opened: URL, _ error: Error) {
         var file = opened
         var error = error
@@ -155,9 +119,9 @@ enum Alerts {
         }
         let reason: String
         switch error {
-        case let input as ImageInputError:
-            file = URL(fileURLWithPath: input.path)
-            reason = input.reason(product: "Excerpt")
+        case let limits as EditLimitsError:
+            file = URL(fileURLWithPath: limits.path)
+            reason = limits.reason
         case is PNGError: reason = "It isn't a PNG Excerpt can read."
         default: reason = sentence(error.localizedDescription)
         }
