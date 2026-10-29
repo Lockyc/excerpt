@@ -47,6 +47,7 @@ final class CaptureCoordinator {
         contentsOfFile:
             "/System/Library/Components/CoreAudio.component/Contents/SharedSupport/SystemSounds/system/Screen Capture.aif",
         byReference: true)
+    static let textRead = NSSound(named: "Glass")
 
     init(
         preferences: Preferences, onDelivered: @escaping (URL, CGImage) -> Void,
@@ -382,11 +383,11 @@ final class CaptureCoordinator {
         return image
     }
 
-    /// Capture Text: reads the selection off the main thread and copies its text, with no file
-    /// and no sound. A selection with no text leaves the clipboard as it was, and says so. The
-    /// read runs after its capture has ended, since it can take a minute while macOS recompiles
-    /// Vision's models, so the next capture never waits on it; once one starts, this read
-    /// copies nothing and says nothing.
+    /// Capture Text: reads the selection off the main thread and copies its text, with no file,
+    /// chiming when the read is done. A selection with no text leaves the clipboard as it was,
+    /// and says so. The read runs after its capture has ended, since it can take a minute while
+    /// macOS recompiles Vision's models, so the next capture never waits on it; once one
+    /// starts, this read copies nothing and says nothing.
     private func copyText(of image: CGImage, scale: CGFloat) async {
         let capture = started
         let reading = Toast.show("Reading text…", seconds: nil)
@@ -400,6 +401,7 @@ final class CaptureCoordinator {
             Toast.dismiss(reading)
             return
         }
+        if case .success = result, preferences.playSound { Self.textRead?.play() }
         switch result {
         case .success(let text) where text.isEmpty:
             Toast.show("No text found · the clipboard is unchanged")

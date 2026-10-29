@@ -250,7 +250,7 @@ struct SettingsView: View {
                     isOn: $model.fileOldCaptures)
             }
             Section("Capture") {
-                Toggle("Play shutter sound", isOn: $model.playSound)
+                Toggle("Play sounds", isOn: $model.playSound)
                 Toggle("Show thumbnail at the pointer", isOn: $model.thumbnailAtPointer)
                 Toggle("Place window captures on a backdrop", isOn: $model.windowBackdrop)
                 LabeledContent("Backdrop padding") {
