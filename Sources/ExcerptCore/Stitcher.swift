@@ -166,11 +166,10 @@ extension Stitcher {
                 !StitchMatcher.columnMoved($0, previous, frame, offset: offset, rows: overlap)
             }
         if !side.isEmpty, let background = StitchMatcher.background(previous) {
-            let flatPrevious = StitchMatcher.flattened(previous, toward: background)
-            let flatFrame = StitchMatcher.flattened(frame, toward: background)
             side = side.filter {
                 !StitchMatcher.columnMoved(
-                    $0, flatPrevious, flatFrame, offset: offset, rows: overlap)
+                    $0, previous, frame, offset: offset, rows: overlap,
+                    flattenedToward: background)
             }
         }
         guard !side.isEmpty, !rows.isEmpty else { return out }

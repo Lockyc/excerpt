@@ -45,6 +45,29 @@ import Testing
         #expect(offset(match) == 120)
     }
 
+    @Test func aColumnComparedTowardTheBackgroundMovesAsItsFlattenedColumnDoes() {
+        let previous = ScrollFixtures.wallpapered(frame(0))
+        let next = ScrollFixtures.wallpapered(frame(120))
+        let background = StitchMatcher.background(previous)!
+        let flatPrevious = StitchMatcher.flattened(previous, toward: background)
+        let flatNext = StitchMatcher.flattened(next, toward: background)
+        var moved = 0
+        for offset in [0, 60, 120] {
+            for x in 0..<90 {
+                let rows = 0..<(200 - offset)
+                let flat = StitchMatcher.columnMoved(
+                    x, flatPrevious, flatNext, offset: offset, rows: rows)
+                #expect(
+                    StitchMatcher.columnMoved(
+                        x, previous, next, offset: offset, rows: rows,
+                        flattenedToward: background) == flat)
+                if flat { moved += 1 }
+            }
+        }
+        // Both answers occur, or the comparison proves nothing.
+        #expect(moved > 0 && moved < 270)
+    }
+
     /// `frame` with the footer's shadow cast up over the 3 rows above it, blending them toward
     /// grey.
     func shadowed(_ frame: PixelBuffer) -> PixelBuffer {

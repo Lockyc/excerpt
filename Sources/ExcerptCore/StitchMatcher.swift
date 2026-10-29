@@ -92,16 +92,23 @@ public enum StitchMatcher {
         out.bytes.withUnsafeMutableBytes { raw in
             for i in stride(from: 0, to: raw.count, by: 4) {
                 let pixel = raw.loadUnaligned(fromByteOffset: i, as: UInt32.self)
-                let faint = (0..<3).allSatisfy { channel in
-                    let shift = UInt32(channel * 8)
-                    let a = Int(pixel >> shift & 0xFF)
-                    let b = Int(background >> shift & 0xFF)
-                    return abs(a - b) <= faintLevels
-                }
-                if faint { raw.storeBytes(of: background, toByteOffset: i, as: UInt32.self) }
+                raw.storeBytes(
+                    of: flat(pixel, toward: background), toByteOffset: i, as: UInt32.self)
             }
         }
         return out
+    }
+
+    /// `background` when `pixel` is within `faintLevels` of it on each colour channel, else
+    /// `pixel`: one pixel of `flattened`.
+    @inline(__always)
+    static func flat(_ pixel: UInt32, toward background: UInt32) -> UInt32 {
+        for shift in stride(from: UInt32(0), to: 24, by: 8) {
+            let a = Int(pixel >> shift & 0xFF)
+            let b = Int(background >> shift & 0xFF)
+            if abs(a - b) > faintLevels { return pixel }
+        }
+        return background
     }
 
     static func matchPixels(
@@ -396,17 +403,21 @@ public enum StitchMatcher {
     }
 
     /// Whether column `x` moved up by `offset` from `previous` to `next`: each of `next`'s
-    /// `rows` is `previous`'s row `offset` lower.
+    /// `rows` is `previous`'s row `offset` lower. With `background`, compared as `flattened`
+    /// toward it, pixel by pixel, without flattening either frame.
     static func columnMoved(
-        _ x: Int, _ previous: PixelBuffer, _ next: PixelBuffer, offset: Int, rows: Range<Int>
+        _ x: Int, _ previous: PixelBuffer, _ next: PixelBuffer, offset: Int, rows: Range<Int>,
+        flattenedToward background: UInt32? = nil
     ) -> Bool {
         previous.bytes.withUnsafeBytes { pa in
             next.bytes.withUnsafeBytes { pb in
                 rows.allSatisfy { y in
-                    let a = ((y + offset) * previous.width + x) * 4
-                    let b = (y * next.width + x) * 4
-                    return pa.loadUnaligned(fromByteOffset: a, as: UInt32.self)
-                        == pb.loadUnaligned(fromByteOffset: b, as: UInt32.self)
+                    let a = pa.loadUnaligned(
+                        fromByteOffset: ((y + offset) * previous.width + x) * 4, as: UInt32.self)
+                    let b = pb.loadUnaligned(
+                        fromByteOffset: (y * next.width + x) * 4, as: UInt32.self)
+                    guard a != b, let background else { return a == b }
+                    return flat(a, toward: background) == flat(b, toward: background)
                 }
             }
         }
