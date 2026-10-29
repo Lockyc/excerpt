@@ -314,11 +314,15 @@ final class OverlayView: NSView {
     static let choiceSize = CGSize(width: 96, height: 60)
     static let barInset: CGFloat = 6
 
-    /// The still is drawn into this view's own layer once per `present`; the tint over it is a
-    /// shape layer, and everything else is drawn into `chrome` in the rects of the marks that
-    /// changed. A pointer move then repaints a loupe and a crosshair, not a display's worth of
-    /// pixels, which kept WindowServer too busy to move the pointer smoothly.
-    private let dim = CAShapeLayer()
+    /// The still is drawn into this view's own layer once per `present`; the tint over it is up
+    /// to four solid bands around the highlight, and everything else is drawn into `chrome` in
+    /// the rects of the marks that changed. A pointer move then repaints a loupe and a
+    /// crosshair, not a display's worth of pixels, which kept WindowServer too busy to move the
+    /// pointer smoothly. The bands are plain colour layers, which the GPU composites as they
+    /// are: a shape layer's even-odd path is rasterised on the CPU at the display's full
+    /// resolution, and that held each display's first frame back by about a quarter second.
+    private let dim = CALayer()
+    private let dimBands = (0..<4).map { _ in CALayer() }
     private let dimHost = PassThroughView()
     private let chrome = PassThroughView()
     /// The marks `chrome` shows, as of the last `refresh`.
@@ -334,9 +338,11 @@ final class OverlayView: NSView {
         super.init(frame: CGRect(origin: .zero, size: size))
         wantsLayer = true
         layerContentsRedrawPolicy = .onSetNeedsDisplay
-        dim.fillColor = NSColor.black.withAlphaComponent(0.35).cgColor
-        dim.fillRule = .evenOdd
-        dimHost.layer = dim  // layer-hosting: the path is set, never drawn by AppKit
+        for band in dimBands {
+            band.backgroundColor = NSColor.black.withAlphaComponent(0.35).cgColor
+            dim.addSublayer(band)
+        }
+        dimHost.layer = dim  // layer-hosting: the bands are placed, never drawn by AppKit
         dimHost.wantsLayer = true
         chrome.wantsLayer = true
         chrome.topLeft = true  // the overlay's own coordinates, so marks need no conversion
@@ -372,7 +378,6 @@ final class OverlayView: NSView {
         self.mode = mode
         image = NSImage(cgImage: still.image, size: still.frame.size)
         needsDisplay = true
-        dim.contentsScale = still.scale
         chrome.needsDisplay = true
         shown = []
         if case .window(let list) = mode {
@@ -864,14 +869,16 @@ final class OverlayView: NSView {
 
     /// Brings the tint and `chrome` up to date, repainting only the marks that changed.
     private func refresh() {
-        let path = CGMutablePath()
-        if still != nil, mode != nil {
-            path.addRect(dimHost.bounds)
-            if let highlight { path.addRect(dimHost.convert(highlight, from: self)) }
-        }
+        let bands =
+            still != nil && mode != nil
+            ? Self.tint(
+                around: highlight.map { dimHost.convert($0, from: self) }, in: dimHost.bounds)
+            : []
         CATransaction.begin()
         CATransaction.setDisableActions(true)  // no implicit fade as the selection moves
-        dim.path = path
+        for (index, band) in dimBands.enumerated() {
+            band.frame = index < bands.count ? bands[index] : .zero
+        }
         CATransaction.commit()
         let now = marks
         for mark in shown where !now.contains(mark) {
@@ -881,6 +888,28 @@ final class OverlayView: NSView {
             frames(of: mark).forEach(chrome.setNeedsDisplay)
         }
         shown = now
+    }
+
+    /// The tint: `bounds` less `highlight`, as at most four rects that don't overlap — the full
+    /// width below and above it, and its own height either side of it. All of `bounds` with no
+    /// highlight, or one that misses it.
+    static func tint(around highlight: CGRect?, in bounds: CGRect) -> [CGRect] {
+        guard let highlight, case let clear = highlight.intersection(bounds), !clear.isNull,
+            !clear.isEmpty
+        else { return [bounds] }
+        return [
+            CGRect(
+                x: bounds.minX, y: bounds.minY, width: bounds.width,
+                height: clear.minY - bounds.minY),
+            CGRect(
+                x: bounds.minX, y: clear.maxY, width: bounds.width, height: bounds.maxY - clear.maxY
+            ),
+            CGRect(
+                x: bounds.minX, y: clear.minY, width: clear.minX - bounds.minX, height: clear.height
+            ),
+            CGRect(
+                x: clear.maxX, y: clear.minY, width: bounds.maxX - clear.maxX, height: clear.height),
+        ].filter { !$0.isEmpty }
     }
 
     private func drawMarks() {

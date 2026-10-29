@@ -62,6 +62,28 @@ import Testing
         #expect(tintedBlue.2 > 140 && tintedBlue.2 < 190 && tintedBlue.0 == 0)
     }
 
+    /// The tint is plain bands around the highlight that cover the rest exactly once.
+    @Test func tintBandsCoverAllButTheHighlight() {
+        let bounds = CGRect(x: 0, y: 0, width: 400, height: 300)
+        #expect(OverlayView.tint(around: nil, in: bounds) == [bounds])
+        #expect(
+            OverlayView.tint(around: CGRect(x: 500, y: 0, width: 10, height: 10), in: bounds)
+                == [bounds])
+        let highlight = CGRect(x: 100, y: 50, width: 200, height: 200)
+        let bands = OverlayView.tint(around: highlight, in: bounds)
+        #expect(bands.count == 4)
+        let covered: CGFloat = bands.map { $0.width * $0.height }.reduce(0, +)
+        #expect(covered == CGFloat(400 * 300 - 200 * 200))
+        for (i, a) in bands.enumerated() {
+            #expect(!a.intersects(highlight))
+            for b in bands[(i + 1)...] { #expect(!a.intersects(b)) }
+        }
+        // A highlight touching an edge leaves no empty band.
+        #expect(
+            OverlayView.tint(around: CGRect(x: 0, y: 0, width: 400, height: 100), in: bounds)
+                == [CGRect(x: 0, y: 100, width: 400, height: 200)])
+    }
+
     @Test func selectionIsOutlined() {
         let bitmap = rendered()
         // Just outside the left edge, above the start button.
