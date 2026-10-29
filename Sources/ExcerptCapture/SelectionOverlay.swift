@@ -314,6 +314,16 @@ final class OverlayView: NSView {
     static let choiceSize = CGSize(width: 96, height: 60)
     static let barInset: CGFloat = 6
 
+    /// The still is drawn into this view's own layer once per `present`; the tint over it is a
+    /// shape layer, and everything else is drawn into `chrome` in the rects of the marks that
+    /// changed. A pointer move then repaints a loupe and a crosshair, not a display's worth of
+    /// pixels, which kept WindowServer too busy to move the pointer smoothly.
+    private let dim = CAShapeLayer()
+    private let dimHost = PassThroughView()
+    private let chrome = PassThroughView()
+    /// The marks `chrome` shows, as of the last `refresh`.
+    private var shown: [Mark] = []
+
     init(
         size: CGSize, finish: @escaping (SelectionResult) -> Void,
         beginDrag: @escaping (OverlayView) -> Bool, wholeDisplay: @escaping () -> Void
@@ -322,6 +332,20 @@ final class OverlayView: NSView {
         self.beginDrag = beginDrag
         self.wholeDisplay = wholeDisplay
         super.init(frame: CGRect(origin: .zero, size: size))
+        wantsLayer = true
+        layerContentsRedrawPolicy = .onSetNeedsDisplay
+        dim.fillColor = NSColor.black.withAlphaComponent(0.35).cgColor
+        dim.fillRule = .evenOdd
+        dimHost.layer = dim  // layer-hosting: the path is set, never drawn by AppKit
+        dimHost.wantsLayer = true
+        chrome.wantsLayer = true
+        chrome.topLeft = true  // the overlay's own coordinates, so marks need no conversion
+        chrome.drawer = { [weak self] in self?.drawMarks() }
+        for view in [dimHost, chrome] {
+            view.frame = bounds
+            view.autoresizingMask = [.width, .height]
+            addSubview(view)
+        }
         addTrackingArea(
             NSTrackingArea(
                 rect: .zero, options: [.mouseMoved, .activeAlways, .inVisibleRect], owner: self))
@@ -333,6 +357,7 @@ final class OverlayView: NSView {
     /// window it landed on; area modes end its drag if it was already released. Presenting again
     /// after an interrupt starts over, with nothing selected.
     func present(still: DisplayStill, mode: SelectionMode) {
+        defer { refresh() }
         if self.still != nil {
             earlyPress = nil
             releasedEarly = false
@@ -347,6 +372,9 @@ final class OverlayView: NSView {
         self.mode = mode
         image = NSImage(cgImage: still.image, size: still.frame.size)
         needsDisplay = true
+        dim.contentsScale = still.scale
+        chrome.needsDisplay = true
+        shown = []
         if case .window(let list) = mode {
             if let earlyPress {
                 finish(
@@ -388,7 +416,7 @@ final class OverlayView: NSView {
         anchor = rect.origin
         current = CGPoint(x: rect.maxX, y: rect.maxY)
         settled = true
-        needsDisplay = true
+        refresh()
         return true
     }
 
@@ -463,7 +491,7 @@ final class OverlayView: NSView {
         updateHover()
         hoveredChoice = choiceIndex(at: point)
         updatePointer(at: point)
-        needsDisplay = true
+        refresh()
     }
 
     /// Over a settled selection, the pointer shows what a press there does: move, resize, or
@@ -518,7 +546,7 @@ final class OverlayView: NSView {
                 clickedWindow = nil  // moved or resized, it is an area
                 reshaping = (grip, selection, point)
                 if grip.isEmpty { NSCursor.closedHand.set() }
-                needsDisplay = true
+                refresh()
             }
             return
         }
@@ -528,13 +556,13 @@ final class OverlayView: NSView {
         clickedWindow = nil
         anchor = point
         current = point
-        needsDisplay = true
+        refresh()
     }
 
     /// Clears a settled selection and the mode bar; reports whether there was a selection.
     func clearSettledSelection() -> Bool {
         idlePoint = nil
-        needsDisplay = true
+        refresh()
         guard settled else { return false }
         clearSelection()
         return true
@@ -547,7 +575,7 @@ final class OverlayView: NSView {
         reshaping = nil
         anchor = nil
         current = nil
-        needsDisplay = true
+        refresh()
     }
 
     override func mouseDragged(with event: NSEvent) {
@@ -560,7 +588,7 @@ final class OverlayView: NSView {
                 within: bounds)
             anchor = rect.origin
             current = CGPoint(x: rect.maxX, y: rect.maxY)
-            needsDisplay = true
+            refresh()
             return
         }
         if moving, let anchor, let current {
@@ -569,7 +597,7 @@ final class OverlayView: NSView {
             self.anchor = CGPoint(x: anchor.x + dx, y: anchor.y + dy)
         }
         current = point
-        needsDisplay = true
+        refresh()
     }
 
     override func mouseUp(with event: NSEvent) {
@@ -584,7 +612,7 @@ final class OverlayView: NSView {
                 current = CGPoint(x: reshaping.from.maxX, y: reshaping.from.maxY)
             }
             updatePointer(at: convert(event.locationInWindow, from: nil))
-            needsDisplay = true
+            refresh()
             return
         }
         endDrag()
@@ -611,7 +639,7 @@ final class OverlayView: NSView {
         if mode.settles {
             settled = true
             idlePoint = nil
-            needsDisplay = true
+            refresh()
         } else {
             confirm()
         }
@@ -758,50 +786,120 @@ final class OverlayView: NSView {
 
     // MARK: Drawing
 
+    /// One thing drawn over the still, carrying everything its look depends on, so a mark that
+    /// compares equal needs no repaint.
+    private enum Mark: Equatable {
+        case outline(CGRect, handles: Bool)
+        case sizeLabel(CGRect, avoiding: CGRect?)
+        case windowTarget(CGRect)
+        case startButton(String, CGRect)
+        case bar(CGRect, hovered: Int?, available: Bool)
+        case crosshair(CGPoint)
+        case loupe(CGPoint)
+    }
+
+    /// Only the still: the rest is `dim` and `chrome`, over it.
     override func draw(_ dirtyRect: NSRect) {
-        guard let still, let image, let mode else { return }  // clear while covering
-        image.draw(
+        image?.draw(
             in: bounds, from: .zero, operation: .copy, fraction: 1, respectFlipped: true, hints: nil
         )
-        let highlight: CGRect? = {
-            switch mode {
-            case .area, .scrollingArea, .modeBar: return selection
-            case .recordingArea: return selection ?? hoveredArea
-            case .window:
-                guard let hovered, let window = self.window else { return nil }
-                let local = window.convertFromScreen(hovered.frame)
-                return CGRect(
-                    x: local.minX, y: bounds.height - local.maxY, width: local.width,
-                    height: local.height)
-            }
-        }()
+    }
 
-        let dim = NSBezierPath(rect: bounds)
-        if let highlight {
-            dim.append(NSBezierPath(rect: highlight))
-            dim.windingRule = .evenOdd
+    /// The rect left clear of the tint, outlined.
+    private var highlight: CGRect? {
+        switch mode {
+        case nil: return nil
+        case .area, .scrollingArea, .modeBar: return selection
+        case .recordingArea: return selection ?? hoveredArea
+        case .window:
+            guard let hovered, let window else { return nil }
+            let local = window.convertFromScreen(hovered.frame)
+            return CGRect(
+                x: local.minX, y: bounds.height - local.maxY, width: local.width,
+                height: local.height)
         }
-        NSColor.black.withAlphaComponent(0.35).setFill()
-        dim.fill()
+    }
 
+    /// What `chrome` shows now, in drawing order; nothing while covering.
+    private var marks: [Mark] {
+        guard still != nil, let mode else { return [] }
+        var marks: [Mark] = []
         if let highlight {
-            NSColor.white.setStroke()
-            let border = NSBezierPath(rect: highlight.insetBy(dx: -0.5, dy: -0.5))
-            border.lineWidth = 1
-            border.stroke()
-            if settled { drawHandles(on: highlight) }
-            if mode.isArea { drawSizeLabel(for: highlight, avoiding: startButton ?? bar) }
+            marks.append(.outline(highlight, handles: settled))
+            if mode.isArea { marks.append(.sizeLabel(highlight, avoiding: startButton ?? bar)) }
         }
-        if selection != nil, let target = hoveredArea { drawWindowTarget(target) }
+        if selection != nil, let target = hoveredArea { marks.append(.windowTarget(target)) }
         if let startButton, let style = startButtonStyle {
-            drawStartButton(style.title, in: startButton)
+            marks.append(.startButton(style.title, startButton))
         }
-        if let bar { drawBar(in: bar) }
+        if let bar {
+            marks.append(
+                .bar(bar, hovered: hoveredChoice, available: settled && selectedPixels != nil))
+        }
         // While drawing or resizing; not while moving, nor over the bar.
         let shaping = !settled || reshaping?.grip.isEmpty == false
         if mode.isArea, shaping, let cursor, bar?.contains(cursor) != true {
-            if selection == nil { drawCrosshair(at: cursor) }
-            drawLoupe(at: cursor, in: still)
+            if selection == nil { marks.append(.crosshair(cursor)) }
+            marks.append(.loupe(cursor))
+        }
+        return marks
+    }
+
+    /// The rects `mark` paints, with room for strokes and antialiasing.
+    private func frames(of mark: Mark) -> [CGRect] {
+        let rects: [CGRect] =
+            switch mark {
+            case .outline(let rect, _): [rect.insetBy(dx: -5, dy: -5)]
+            case .sizeLabel(let rect, let button): [sizeLabel(for: rect, avoiding: button).pill]
+            case .windowTarget(let rect), .startButton(_, let rect), .bar(let rect, _, _): [rect]
+            case .crosshair(let point):
+                [
+                    CGRect(x: point.x - 1, y: 0, width: 2, height: bounds.height),
+                    CGRect(x: 0, y: point.y - 1, width: bounds.width, height: 2),
+                ]
+            case .loupe(let point): [loupeFrame(at: point)]
+            }
+        return rects.map { $0.insetBy(dx: -2, dy: -2).integral }
+    }
+
+    /// Brings the tint and `chrome` up to date, repainting only the marks that changed.
+    private func refresh() {
+        let path = CGMutablePath()
+        if still != nil, mode != nil {
+            path.addRect(dimHost.bounds)
+            if let highlight { path.addRect(dimHost.convert(highlight, from: self)) }
+        }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)  // no implicit fade as the selection moves
+        dim.path = path
+        CATransaction.commit()
+        let now = marks
+        for mark in shown where !now.contains(mark) {
+            frames(of: mark).forEach(chrome.setNeedsDisplay)
+        }
+        for mark in now where !shown.contains(mark) {
+            frames(of: mark).forEach(chrome.setNeedsDisplay)
+        }
+        shown = now
+    }
+
+    private func drawMarks() {
+        guard let still else { return }
+        for mark in shown {
+            switch mark {
+            case .outline(let rect, let handles):
+                NSColor.white.setStroke()
+                let border = NSBezierPath(rect: rect.insetBy(dx: -0.5, dy: -0.5))
+                border.lineWidth = 1
+                border.stroke()
+                if handles { drawHandles(on: rect) }
+            case .sizeLabel(let rect, let button): drawSizeLabel(for: rect, avoiding: button)
+            case .windowTarget(let rect): drawWindowTarget(rect)
+            case .startButton(let title, let rect): drawStartButton(title, in: rect)
+            case .bar(let rect, _, _): drawBar(in: rect)
+            case .crosshair(let point): drawCrosshair(at: point)
+            case .loupe(let point): drawLoupe(at: point, in: still)
+            }
         }
     }
 
@@ -907,13 +1005,25 @@ final class OverlayView: NSView {
         path.stroke()
     }
 
+    private static let sizeLabelAttributes: [NSAttributedString.Key: Any] = [
+        .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium),
+        .foregroundColor: NSColor.white,
+    ]
+
     private func drawSizeLabel(for rect: CGRect, avoiding button: CGRect?) {
+        let label = sizeLabel(for: rect, avoiding: button)
+        NSColor.black.withAlphaComponent(0.7).setFill()
+        NSBezierPath(roundedRect: label.pill, xRadius: 4, yRadius: 4).fill()
+        label.text.draw(at: label.origin, withAttributes: Self.sizeLabelAttributes)
+    }
+
+    /// The selection's size as text, where it is drawn and the pill behind it: below the
+    /// selection's bottom-right corner, unless that would cover `button`.
+    private func sizeLabel(for rect: CGRect, avoiding button: CGRect?)
+        -> (text: NSString, origin: CGPoint, pill: CGRect)
+    {
         let text = "\(Int(rect.width)) × \(Int(rect.height))" as NSString
-        let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium),
-            .foregroundColor: NSColor.white,
-        ]
-        let size = text.size(withAttributes: attributes)
+        let size = text.size(withAttributes: Self.sizeLabelAttributes)
         var origin = CGPoint(
             x: rect.maxX - size.width - 8, y: min(rect.maxY + 6, bounds.height - size.height - 6))
         var pill = CGRect(origin: origin, size: size).insetBy(dx: -6, dy: -3)
@@ -923,15 +1033,23 @@ final class OverlayView: NSView {
             if origin.y < 3 { origin.y = rect.minY + 6 }
             pill = CGRect(origin: origin, size: size).insetBy(dx: -6, dy: -3)
         }
-        NSColor.black.withAlphaComponent(0.7).setFill()
-        NSBezierPath(roundedRect: pill, xRadius: 4, yRadius: 4).fill()
-        text.draw(at: origin, withAttributes: attributes)
+        return (text, origin, pill)
+    }
+
+    private static let loupeDiameter: CGFloat = 120
+
+    /// The loupe's circle's bounds: below and right of the cursor, flipped to stay on the display.
+    private func loupeFrame(at point: CGPoint) -> CGRect {
+        let diameter = Self.loupeDiameter
+        var frame = CGRect(x: point.x + 20, y: point.y + 20, width: diameter, height: diameter)
+        if frame.maxX > bounds.width { frame.origin.x = point.x - 20 - diameter }
+        if frame.maxY > bounds.height { frame.origin.y = point.y - 20 - diameter }
+        return frame
     }
 
     /// 8× magnification of the frozen pixels around the cursor, beside it.
     private func drawLoupe(at point: CGPoint, in still: DisplayStill) {
-        let diameter: CGFloat = 120
-        let sourcePoints: CGFloat = diameter / 8
+        let sourcePoints: CGFloat = Self.loupeDiameter / 8
         let source = DisplayGeometry.pixelRect(
             forLocalPoints: CGRect(
                 x: point.x - sourcePoints / 2, y: point.y - sourcePoints / 2, width: sourcePoints,
@@ -939,9 +1057,7 @@ final class OverlayView: NSView {
             scale: still.scale,
             imageSize: CGSize(width: still.image.width, height: still.image.height))
         guard let crop = still.image.cropping(to: source) else { return }
-        var frame = CGRect(x: point.x + 20, y: point.y + 20, width: diameter, height: diameter)
-        if frame.maxX > bounds.width { frame.origin.x = point.x - 20 - diameter }
-        if frame.maxY > bounds.height { frame.origin.y = point.y - 20 - diameter }
+        let frame = loupeFrame(at: point)
         NSGraphicsContext.saveGraphicsState()
         let circle = NSBezierPath(ovalIn: frame)
         circle.addClip()
@@ -953,4 +1069,15 @@ final class OverlayView: NSView {
         circle.lineWidth = 2
         circle.stroke()
     }
+}
+
+/// A layer over the overlay that never takes the pointer, so every event reaches the
+/// `OverlayView` beneath; draws through `drawer` when it has one.
+final class PassThroughView: NSView {
+    var drawer: (() -> Void)?
+    var topLeft = false
+
+    override var isFlipped: Bool { topLeft }
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    override func draw(_ dirtyRect: NSRect) { drawer?() }
 }
