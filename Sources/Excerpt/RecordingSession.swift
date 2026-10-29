@@ -238,12 +238,23 @@ enum RecordingSave {
 
 /// The first frame of a recording's primary, for its thumbnail.
 enum RecordingPoster {
-    static func firstFrame(of url: URL) async -> CGImage? {
+    /// With `maximumPixelSize`, decoded no larger than that on its longer side.
+    static func firstFrame(of url: URL, maximumPixelSize: Int? = nil) async -> CGImage? {
         if url.pathExtension.lowercased() == "gif" {
             guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
-            return CGImageSourceCreateImageAtIndex(source, 0, nil)
+            guard let maximumPixelSize else {
+                return CGImageSourceCreateImageAtIndex(source, 0, nil)
+            }
+            let options: [CFString: Any] = [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceThumbnailMaxPixelSize: maximumPixelSize,
+            ]
+            return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
         }
         let generator = AVAssetImageGenerator(asset: AVURLAsset(url: url))
+        if let maximumPixelSize {
+            generator.maximumSize = CGSize(width: maximumPixelSize, height: maximumPixelSize)
+        }
         generator.appliesPreferredTrackTransform = true
         generator.requestedTimeToleranceBefore = .zero
         generator.requestedTimeToleranceAfter = .zero
