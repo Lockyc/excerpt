@@ -51,7 +51,60 @@ public enum StitchMatcher {
         max(0, min(Int((scrollBarPoints * scale).rounded()), width / 8))
     }
 
+    /// How far a pixel may sit from `previous`'s commonest colour, in levels on every channel, and
+    /// still be background when the frames match no other way: a faint wallpaper fixed behind the
+    /// page (a chat app's doodles) doesn't scroll with it, so every row it shows through differs
+    /// at the page's true offset.
+    public static let faintLevels = 16
+
+    /// The frames as they are, failing that with faint pixels taken as background
+    /// (`faintLevels`). Rows are matched, never copied, from the flattened frames: the stitch
+    /// keeps each frame's own pixels.
     public static func match(
+        _ previous: PixelBuffer, _ next: PixelBuffer, ignoringRightColumns ignored: Int
+    ) -> FrameMatch {
+        let plain = matchPixels(previous, next, ignoringRightColumns: ignored)
+        guard plain == .uncertain, let background = background(previous) else { return plain }
+        return matchPixels(
+            flattened(previous, toward: background), flattened(next, toward: background),
+            ignoringRightColumns: ignored)
+    }
+
+    /// The frame's commonest colour over every fourth row and column; nil for an empty frame.
+    static func background(_ frame: PixelBuffer) -> UInt32? {
+        var counts: [UInt32: Int] = [:]
+        frame.bytes.withUnsafeBytes { raw in
+            for y in stride(from: 0, to: frame.height, by: 4) {
+                for x in stride(from: 0, to: frame.width, by: 4) {
+                    counts[
+                        raw.loadUnaligned(
+                            fromByteOffset: (y * frame.width + x) * 4, as: UInt32.self),
+                        default: 0] += 1
+                }
+            }
+        }
+        return counts.max { $0.value != $1.value ? $0.value < $1.value : $0.key > $1.key }?.key
+    }
+
+    /// `frame` with every pixel within `faintLevels` of `background` on each channel set to it.
+    static func flattened(_ frame: PixelBuffer, toward background: UInt32) -> PixelBuffer {
+        var out = frame
+        out.bytes.withUnsafeMutableBytes { raw in
+            for i in stride(from: 0, to: raw.count, by: 4) {
+                let pixel = raw.loadUnaligned(fromByteOffset: i, as: UInt32.self)
+                let faint = (0..<3).allSatisfy { channel in
+                    let shift = UInt32(channel * 8)
+                    let a = Int(pixel >> shift & 0xFF)
+                    let b = Int(background >> shift & 0xFF)
+                    return abs(a - b) <= faintLevels
+                }
+                if faint { raw.storeBytes(of: background, toByteOffset: i, as: UInt32.self) }
+            }
+        }
+        return out
+    }
+
+    static func matchPixels(
         _ previous: PixelBuffer, _ next: PixelBuffer, ignoringRightColumns ignored: Int
     ) -> FrameMatch {
         guard previous.width == next.width, previous.height == next.height, previous.width > 0,

@@ -105,6 +105,16 @@ public enum ScrollFixtures {
         }
     }
 
+    /// `buffer` over a faint pattern fixed to the viewport, not the page, showing through its
+    /// paper: a chat app's doodle wallpaper behind the messages.
+    public static func wallpapered(_ buffer: PixelBuffer) -> PixelBuffer {
+        paint(width: buffer.width, height: buffer.height) { x, y in
+            let c = buffer[x: x, y: y]
+            guard c == paper, mix(5, UInt64(y), UInt64(x)) % 4 == 0 else { return c }
+            return RGBA(r: 243, g: 244, b: 246, a: 255)
+        }
+    }
+
     /// `buffer` with an overlay scroll bar's thumb: a dark band `width` columns wide against the
     /// right edge, from row `y` for `height` rows.
     public static func thumb(

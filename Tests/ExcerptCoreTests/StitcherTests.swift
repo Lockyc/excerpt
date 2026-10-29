@@ -73,6 +73,23 @@ import Testing
         #expect(stitcher.image == ScrollFixtures.stack([ScrollFixtures.rows(page, 0..<720), last]))
     }
 
+    @Test func aWallpaperFixedBehindThePageIsCopiedWithEachFramesRows() {
+        let page = ScrollFixtures.page(width: 90, height: 920)
+        let (stitcher, _) = scrollDressed(page, ScrollFixtures.wallpapered)
+        let image = stitcher.image
+        let paper = StitchMatcher.background(page)!
+        // Which frame's wallpaper shows on a blank row depends on where the frames joined.
+        #expect(StitchMatcher.flattened(image, toward: paper) == page)
+        // The page's margin, wallpaper only, is copied in every frame's rows, never painted flat.
+        // A quarter of its pixels are wallpaper: far more than none in each frame's rows.
+        for rows in stride(from: 200, to: 900, by: 120).map({ $0..<($0 + 100) }) {
+            let marked = rows.reduce(0) { count, y in
+                count + (0..<4).filter { image[x: $0, y: y] != ScrollFixtures.paper }.count
+            }
+            #expect(marked > rows.count * 4 / 8)
+        }
+    }
+
     @Test func aFooterWithAFadeAboveItShowsOnceFromTheLastFrame() {
         // A 30-row footer under 24 rows that blend the page toward grey.
         let footer = ScrollFixtures.bar(width: 90, height: 30, tone: 140)

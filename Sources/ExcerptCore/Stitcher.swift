@@ -151,7 +151,8 @@ extension Stitcher {
     /// Rows of `frame` for the stitch. The scrolling band, the scroll-bar strip (columns from
     /// `matched` on) and every column that moved by `offset` too (each of its `overlap` rows
     /// is `previous`'s row `offset` lower: page columns the coarse band left out, margins,
-    /// borders that repeat with the scroll) are copied. The rest didn't scroll with the page,
+    /// borders that repeat with the scroll, and those that do once faint pixels are taken as
+    /// background: a margin of fixed wallpaper) are copied. The rest didn't scroll with the page,
     /// so each takes its commonest colour in the frame: a side panel shows once, where the
     /// first frame has it, and the page's background runs on under it.
     static func content(
@@ -160,10 +161,18 @@ extension Stitcher {
     ) -> [UInt8] {
         let rowBytes = frame.width * 4
         var out = Array(frame.bytes[(rows.lowerBound * rowBytes)..<(rows.upperBound * rowBytes)])
-        let side = (Array(0..<min(band.lowerBound, matched)) + Array(band.upperBound..<matched))
+        var side = (Array(0..<min(band.lowerBound, matched)) + Array(band.upperBound..<matched))
             .filter {
                 !StitchMatcher.columnMoved($0, previous, frame, offset: offset, rows: overlap)
             }
+        if !side.isEmpty, let background = StitchMatcher.background(previous) {
+            let flatPrevious = StitchMatcher.flattened(previous, toward: background)
+            let flatFrame = StitchMatcher.flattened(frame, toward: background)
+            side = side.filter {
+                !StitchMatcher.columnMoved(
+                    $0, flatPrevious, flatFrame, offset: offset, rows: overlap)
+            }
+        }
         guard !side.isEmpty, !rows.isEmpty else { return out }
         let fill = commonestColours(frame, columns: side)
         out.withUnsafeMutableBytes { raw in
