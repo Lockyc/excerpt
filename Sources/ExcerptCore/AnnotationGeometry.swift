@@ -165,7 +165,8 @@ public enum AnnotationGeometry {
 }
 
 /// Text laid out one CoreText line per `\n`-separated line, in the emphasized system font.
-public struct TextLayout {
+/// `@unchecked Sendable`: its CoreText lines are immutable once made.
+public struct TextLayout: @unchecked Sendable {
     let lines: [CTLine]
     let ascent: CGFloat
     let descent: CGFloat
@@ -174,13 +175,24 @@ public struct TextLayout {
 
     /// The one text font: annotation text is measured, drawn and typed in it. `pixelSize` is the
     /// text size in points times the capture scale (times the editor zoom when typing).
+    /// Memoised by size in `TextCache`.
     public static func font(pixelSize: Double) -> CTFont {
-        let size = CGFloat(pixelSize)
-        return CTFontCreateUIFontForLanguage(.emphasizedSystem, size, nil)
-            ?? CTFontCreateWithName(".AppleSystemUIFont" as CFString, size, nil)
+        TextCache.shared.font(pixelSize: pixelSize) {
+            let size = CGFloat(pixelSize)
+            return CTFontCreateUIFontForLanguage(.emphasizedSystem, size, nil)
+                ?? CTFontCreateWithName(".AppleSystemUIFont" as CFString, size, nil)
+        }
     }
 
+    /// Memoised in `TextCache` by string, size and colour: a repaint measures each text from
+    /// its bounds, hit test, margin and hidden count as well as drawing it.
     init(_ string: String, pixelSize: Double, color: CGColor) {
+        self = TextCache.shared.layout(string, pixelSize: pixelSize, color: color) {
+            TextLayout(laying: string, pixelSize: pixelSize, color: color)
+        }
+    }
+
+    private init(laying string: String, pixelSize: Double, color: CGColor) {
         let font = Self.font(pixelSize: pixelSize)
         let attributes: [NSAttributedString.Key: Any] = [
             NSAttributedString.Key(kCTFontAttributeName as String): font,
@@ -199,5 +211,50 @@ public struct TextLayout {
 
     var size: CGSize {
         CGSize(width: widths.max() ?? 0, height: lineHeight * CGFloat(lines.count))
+    }
+}
+
+/// Fonts by size and text layouts by string, size and colour, shared by every thread that
+/// renders. Each table holds at most `limit` entries and empties when full, so typing, which
+/// lays out a new string per keystroke, can't grow it. `@unchecked Sendable`: `lock` guards both
+/// tables, and what they hold is immutable.
+final class TextCache: @unchecked Sendable {
+    static let shared = TextCache()
+    static let limit = 256
+
+    private struct Key: Hashable {
+        let string: String
+        let pixelSize: Double
+        let color: CGColor
+    }
+
+    private let lock = NSLock()
+    private var fonts: [Double: CTFont] = [:]
+    private var layouts: [Key: TextLayout] = [:]
+
+    /// The number of layouts held, for tests.
+    var layoutCount: Int { lock.withLock { layouts.count } }
+
+    func font(pixelSize: Double, make: () -> CTFont) -> CTFont {
+        if let font = lock.withLock({ fonts[pixelSize] }) { return font }
+        let font = make()
+        lock.withLock {
+            if fonts.count >= Self.limit { fonts.removeAll(keepingCapacity: true) }
+            fonts[pixelSize] = font
+        }
+        return font
+    }
+
+    func layout(
+        _ string: String, pixelSize: Double, color: CGColor, make: () -> TextLayout
+    ) -> TextLayout {
+        let key = Key(string: string, pixelSize: pixelSize, color: color)
+        if let layout = lock.withLock({ layouts[key] }) { return layout }
+        let layout = make()
+        lock.withLock {
+            if layouts.count >= Self.limit { layouts.removeAll(keepingCapacity: true) }
+            layouts[key] = layout
+        }
+        return layout
     }
 }

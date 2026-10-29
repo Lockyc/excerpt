@@ -56,6 +56,35 @@ import Testing
         #expect(size("Total", .thick, scale: 1).width > one.width)
     }
 
+    @Test func textIsLaidOutOncePerStringSizeAndColour() {
+        let cache = TextCache()
+        var made = 0
+        func layout(_ string: String, _ size: Double, _ gray: Double) -> CGSize {
+            cache.layout(string, pixelSize: size, color: CGColor(gray: gray, alpha: 1)) {
+                made += 1
+                return TextLayout(string, pixelSize: size, color: CGColor(gray: gray, alpha: 1))
+            }.size
+        }
+        let first = layout("Total", 26, 0)
+        #expect(layout("Total", 26, 0) == first)
+        #expect(made == 1)
+        _ = layout("Total", 26, 1)
+        _ = layout("Total", 13, 0)
+        _ = layout("Totals", 26, 0)
+        #expect(made == 4)
+    }
+
+    @Test func theTextCacheEmptiesWhenFull() {
+        let cache = TextCache()
+        let black = CGColor(gray: 0, alpha: 1)
+        for i in 0...TextCache.limit {
+            _ = cache.layout(String(i), pixelSize: 10, color: black) {
+                TextLayout(String(i), pixelSize: 10, color: black)
+            }
+        }
+        #expect(cache.layoutCount == 1)
+    }
+
     @Test func countsOnlyAnnotationsWhollyInsideACut() {
         // Rows 100..<200 removed.
         let map = RenderMap(
