@@ -66,6 +66,14 @@ public struct ImageInput {
     public let edits: EditDocument
     /// The capture's primary: the file itself, or for a master the primary beside it.
     public let primary: URL
+    /// The render made to check a primary against its master, kept for `render()`.
+    fileprivate var checkedRender: RenderResult? = nil
+
+    /// `original` rendered with `edits`: the one made to check a primary against its master
+    /// when there was one, so it is drawn once.
+    public func render() -> RenderResult {
+        checkedRender ?? Renderer.render(original, edits: edits)
+    }
 
     /// Checks the file before decoding any pixels: it is a regular file (symlinks followed), no
     /// larger than `maximumBytes`, an image, and its header gives no more than `maximumPixels`
@@ -121,8 +129,9 @@ public struct ImageInput {
         case .done(let input):
             return input
         case .verify(let primary, let master, let scale):
-            if let original = master.original(ifItRenders: primary) {
-                return ImageInput(original: original, edits: master.edits, primary: url)
+            if let (original, render) = master.original(ifItRenders: primary) {
+                return ImageInput(
+                    original: original, edits: master.edits, primary: url, checkedRender: render)
             }
             return ImageInput(
                 original: primary.makeImage(), edits: EditDocument(scale: scale), primary: url)
@@ -172,17 +181,17 @@ private struct MasterCandidate {
         self.edits = edits
     }
 
-    /// The master's original when its render is `primary` pixel for pixel. The primary's file
-    /// and decode are already released; what remains at the peak is the primary's pixels, the
-    /// master's decoded original, the renderer's working images and the render's pixels:
-    /// measured at 3.3 GB resident for `excerpt read` on a 104-megapixel primary with its
-    /// master (3456 × 30,000 at 2×), about 32 bytes per rendered pixel, so near 6.4 GB at
-    /// `maximumPixels`.
-    func original(ifItRenders primary: PixelBuffer) -> CGImage? {
+    /// The master's original, and its render, when that render is `primary` pixel for pixel.
+    /// The primary's file and decode are already released; what remains at the peak is the
+    /// primary's pixels, the master's decoded original, the renderer's working images and the
+    /// render's pixels: measured at 3.3 GB resident for `excerpt read` on a 104-megapixel
+    /// primary with its master (3456 × 30,000 at 2×), about 32 bytes per rendered pixel, so
+    /// near 6.4 GB at `maximumPixels`.
+    func original(ifItRenders primary: PixelBuffer) -> (CGImage, RenderResult)? {
         guard let original = try? file.image(path, upright: false),
-            MasterFile.reproduces(primary, from: original, edits: edits)
+            let render = MasterFile.render(original, edits: edits, reproducing: primary)
         else { return nil }
-        return original
+        return (original, render)
     }
 }
 

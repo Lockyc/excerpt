@@ -28,10 +28,19 @@ extension MasterFile {
     public static func reproduces(
         _ primary: PixelBuffer, from original: CGImage, edits: EditDocument
     ) -> Bool {
+        render(original, edits: edits, reproducing: primary) != nil
+    }
+
+    /// The render of `original` with `edits` when it is `primary` pixel for pixel, as
+    /// `reproduces` judges it; nil otherwise. For a caller that goes on to use the render.
+    public static func render(
+        _ original: CGImage, edits: EditDocument, reproducing primary: PixelBuffer
+    ) -> RenderResult? {
         let map = Renderer.map(width: original.width, height: original.height, edits: edits)
         guard map.renderedWidth == primary.width, map.renderedHeight == primary.height else {
-            return false
+            return nil
         }
-        return PixelBuffer(Renderer.render(original, edits: edits).image) == primary
+        let render = Renderer.render(original, edits: edits)
+        return PixelBuffer(render.image) == primary ? render : nil
     }
 }

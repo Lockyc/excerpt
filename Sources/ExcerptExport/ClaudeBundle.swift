@@ -57,25 +57,50 @@ public struct ClaudeBundle: Sendable {
         original: CGImage, edits: EditDocument, primary: URL, cache: ClaudeCache,
         recognizer: any TextRecognizer, now: Date = Date()
     ) throws -> ClaudeBundle {
+        try write(
+            render: { Renderer.render(original, edits: edits) }, scale: edits.scale,
+            primary: primary, cache: cache, recognizer: recognizer, now: now)
+    }
+
+    /// The bundle for the image file at `url`, taken as `ImageInput.load` takes it: a primary
+    /// brings its master's edits only while it is exactly the master's render, so one changed
+    /// since it was saved exports as its own pixels; the render that check made is the one
+    /// exported. The one way a file reaches Claude, for `excerpt read` and a thumbnail's For
+    /// Claude alike.
+    public static func write(
+        contentsOf url: URL, cache: ClaudeCache, recognizer: any TextRecognizer,
+        now: Date = Date()
+    ) throws -> ClaudeBundle {
+        let input = try ImageInput.load(url)
+        return try write(
+            render: input.render, scale: input.edits.scale, primary: input.primary, cache: cache,
+            recognizer: recognizer, now: now)
+    }
+
+    /// `write(original:…)` with the render made by `render`, after the prune, at `scale`.
+    private static func write(
+        render makeRender: () -> RenderResult, scale: Double, primary: URL, cache: ClaudeCache,
+        recognizer: any TextRecognizer, now: Date
+    ) throws -> ClaudeBundle {
         let pruned: ClaudeCache.Pruned
         do {
             pruned = try cache.prune(now: now)
         } catch {
             throw ClaudeBundleError.cacheUnreadable(cache.root, error)
         }
-        let render = Renderer.render(original, edits: edits)
+        let render = makeRender()
         // Tiles encode across the cores while the text is read: recognition runs on the Neural
         // Engine and gains nothing from more threads, encoding does.
         let image = render.image
         let encoding = Started {
-            try parallelMap(Tiling.tiles(of: image, scale: edits.scale)) {
+            try parallelMap(Tiling.tiles(of: image, scale: scale)) {
                 try PNGCodec.encode($0, scale: 1)
             }
         }
         let text: String
         do {
             text = try CaptureText.read(
-                render.image, map: render.map, scale: edits.scale, recognizer: recognizer)
+                render.image, map: render.map, scale: scale, recognizer: recognizer)
         } catch let error as CaptureTextError {
             throw error
         } catch {
@@ -113,20 +138,6 @@ public struct ClaudeBundle: Sendable {
             folder: swapped, tiles: names.map { swapped.appendingPathComponent($0) },
             textFile: swapped.appendingPathComponent("text.md"), text: text,
             pruneFailures: pruned.failed)
-    }
-
-    /// The bundle for the image file at `url`, taken as `ImageInput.load` takes it: a primary
-    /// brings its master's edits only while it is exactly the master's render, so one changed
-    /// since it was saved exports as its own pixels. The one way a file reaches Claude, for
-    /// `excerpt read` and a thumbnail's For Claude alike.
-    public static func write(
-        contentsOf url: URL, cache: ClaudeCache, recognizer: any TextRecognizer,
-        now: Date = Date()
-    ) throws -> ClaudeBundle {
-        let input = try ImageInput.load(url)
-        return try write(
-            original: input.original, edits: input.edits, primary: input.primary, cache: cache,
-            recognizer: recognizer, now: now)
     }
 
     private static func padded(_ number: Int, _ digits: Int) -> String {

@@ -111,6 +111,19 @@ import UniformTypeIdentifiers
         }
     }
 
+    /// The render that proved a primary is its master's is the one handed on, made once: it is
+    /// the primary's pixels, placed by the edits' map.
+    @Test func aPrimaryCheckedAgainstItsMasterKeepsThatRender() throws {
+        let (primary, edits) = try Self.savedCapture(in: try Self.folder())
+        let input = try ImageInput.load(primary)
+        let render = input.render()
+        #expect(render.image === input.render().image)
+        #expect(
+            PixelBuffer(render.image)
+                == PixelBuffer(try PNGCodec.decode(Data(contentsOf: primary)).image))
+        #expect(render.map == Renderer.map(width: 100, height: 300, edits: edits))
+    }
+
     /// Review focus (privacy): a primary changed outside excerpt — here one pixel, as a redaction
     /// box would — is read as itself; the master's original, with what the user hid, never is.
     @Test func aChangedPrimaryReadsFlatNotFromItsMaster() throws {
