@@ -20,7 +20,7 @@ public struct MasterUnreadable: Error {
     public let underlying: any Error
 }
 
-public struct LoadedCapture {
+public struct LoadedCapture: Sendable {
     public let primary: URL
     public let original: CGImage
     public let edits: EditDocument
