@@ -148,201 +148,215 @@ extension EditorModel {
     }
 
     func mouseDown(_ p: Pointer, map: RenderMap, clickCount: Int = 1, option: Bool = false) {
-        cancelDrag()
-        if building != nil, clickCount >= 2 {
-            finishPath()
-            return
-        }
-        if let grab = grab(at: p, map: map, option: option) {
-            take(grab, at: p, option: option)
-            return
-        }
-        switch tool {
-        case .select, .cut:
-            selection = nil
-            if tool == .cut { setDrag(.region(start: p.original)) }
-        case .arrow, .rectangle, .highlight:
-            let before = document
-            let id = document.nextAnnotationID
-            var next = document
-            next.annotations.append(
-                Annotation(
-                    id: id, shape: shape(from: p.original, to: p.original), color: style.color,
-                    width: style.width))
-            preview(next)
-            selection = nil
-            setDrag(.shape(id: id, start: p.original, before: before))
-        case .blur, .crop:
-            selection = nil
-            setDrag(.region(start: p.original))
-        case .step:
-            let before = document
-            let id = document.nextAnnotationID
-            var next = document
-            next.annotations.append(
-                Annotation(
-                    id: id, shape: .step(center: p.original), color: style.color,
-                    width: style.width))
-            preview(next)
-            selection = .annotation(id)
-            // Placed on press; a drag before release moves it, and release records one step.
-            setDrag(.move(id: id, last: p.original, before: before))
-        case .path:
-            pathMouseDown(p)
-        case .text:
-            break
+        batch {
+            cancelDrag()
+            if building != nil, clickCount >= 2 {
+                finishPath()
+                return
+            }
+            if let grab = grab(at: p, map: map, option: option) {
+                take(grab, at: p, option: option)
+                return
+            }
+            switch tool {
+            case .select, .cut:
+                selection = nil
+                if tool == .cut { setDrag(.region(start: p.original)) }
+            case .arrow, .rectangle, .highlight:
+                let before = document
+                let id = document.nextAnnotationID
+                var next = document
+                next.annotations.append(
+                    Annotation(
+                        id: id, shape: shape(from: p.original, to: p.original), color: style.color,
+                        width: style.width))
+                preview(next)
+                selection = nil
+                setDrag(.shape(id: id, start: p.original, before: before))
+            case .blur, .crop:
+                selection = nil
+                setDrag(.region(start: p.original))
+            case .step:
+                let before = document
+                let id = document.nextAnnotationID
+                var next = document
+                next.annotations.append(
+                    Annotation(
+                        id: id, shape: .step(center: p.original), color: style.color,
+                        width: style.width))
+                preview(next)
+                selection = .annotation(id)
+                // Placed on press; a drag before release moves it, and release records one step.
+                setDrag(.move(id: id, last: p.original, before: before))
+            case .path:
+                pathMouseDown(p)
+            case .text:
+                break
+            }
         }
     }
 
     func mouseDragged(_ p: Pointer, map: RenderMap, snap: Bool) {
-        switch drag {
-        case .shape(let id, let start, _):
-            var next = document
-            if let i = next.annotations.firstIndex(where: { $0.id == id }) {
-                next.annotations[i].shape = shape(from: start, to: p.original)
-                preview(next)
+        batch {
+            switch drag {
+            case .shape(let id, let start, _):
+                var next = document
+                if let i = next.annotations.firstIndex(where: { $0.id == id }) {
+                    next.annotations[i].shape = shape(from: start, to: p.original)
+                    preview(next)
+                }
+            case .region(let start):
+                setPending(regionPending(from: start, to: p.original, snap: snap))
+            case .move(let id, let last, let before):
+                var next = document
+                if let i = next.annotations.firstIndex(where: { $0.id == id }) {
+                    next.annotations[i].shape = next.annotations[i].shape.offset(
+                        dx: Double(p.original.x - last.x), dy: Double(p.original.y - last.y))
+                    preview(next)
+                    // A moving blur isn't re-rendered until release; its rect is outlined instead.
+                    if case .blur(let rect) = next.annotations[i].shape {
+                        setPending(.region(rect))
+                    }
+                }
+                setDrag(.move(id: id, last: p.original, before: before))
+            case .edge(let seam, let edge, let start):
+                let delta =
+                    seam.axis == .horizontal ? p.rendered.y - start.y : p.rendered.x - start.x
+                let from = edge == .before ? seam.band.lowerBound : seam.band.upperBound
+                setPending(.edge(seam, edge, from + Int(Double(delta).rounded())))
+            case .freehand(let id, let from, let raw):
+                dragFreehand(id: id, from: from, raw: raw, to: p)
+            case .vertex(let id, let index, let offset, _):
+                var points = vertices(id)
+                if points.indices.contains(index) {
+                    points[index] = CGPoint(
+                        x: p.original.x + offset.x, y: p.original.y + offset.y)
+                    previewVertices(id, points)
+                }
+            case nil:
+                break
             }
-        case .region(let start):
-            setPending(regionPending(from: start, to: p.original, snap: snap))
-        case .move(let id, let last, let before):
-            var next = document
-            if let i = next.annotations.firstIndex(where: { $0.id == id }) {
-                next.annotations[i].shape = next.annotations[i].shape.offset(
-                    dx: Double(p.original.x - last.x), dy: Double(p.original.y - last.y))
-                preview(next)
-                // A moving blur isn't re-rendered until release; its rect is outlined instead.
-                if case .blur(let rect) = next.annotations[i].shape { setPending(.region(rect)) }
-            }
-            setDrag(.move(id: id, last: p.original, before: before))
-        case .edge(let seam, let edge, let start):
-            let delta = seam.axis == .horizontal ? p.rendered.y - start.y : p.rendered.x - start.x
-            let from = edge == .before ? seam.band.lowerBound : seam.band.upperBound
-            setPending(.edge(seam, edge, from + Int(Double(delta).rounded())))
-        case .freehand(let id, let from, let raw):
-            dragFreehand(id: id, from: from, raw: raw, to: p)
-        case .vertex(let id, let index, let offset, _):
-            var points = vertices(id)
-            if points.indices.contains(index) {
-                points[index] = CGPoint(
-                    x: p.original.x + offset.x, y: p.original.y + offset.y)
-                previewVertices(id, points)
-            }
-        case nil:
-            break
         }
     }
 
     func mouseUp(_ p: Pointer, map: RenderMap, snap: Bool) {
-        mouseDragged(p, map: map, snap: snap)
-        let finished = drag
-        let shown = pending
-        setDrag(nil)
-        setPending(nil)
-        switch finished {
-        case .shape(let id, _, let before):
-            guard let annotation = document.annotations.first(where: { $0.id == id }),
-                !isTooSmall(annotation.shape)
-            else {
-                preview(before)
-                return
-            }
-            commit(from: before)
-            selection = .annotation(id)
-        case .move(_, _, let before):
-            commit(from: before)
-        case .freehand(let id, let from, let raw):
-            endFreehand(id: id, from: from, raw: raw)
-        case .vertex(_, _, _, let before):
-            commit(from: before)
-        case .region(let start):
-            switch (tool, shown) {
-            case (.cut, .cut(let cut)?):
-                apply { $0.cuts.append(cut) }
-            case (.cut, nil):
-                // A click, not a drag, under the cut tool selects the annotation it lands on.
-                let reach = Double(hypot(p.original.x - start.x, p.original.y - start.y))
-                guard reach < minimumDrag else { break }
-                selection = HitTest.annotation(
-                    at: p.rendered, in: document.annotations, scale: document.scale, slop: slop,
-                    map: map
-                ).map(Selection.annotation)
-            case (.blur, .region(let rect)?):
-                let id = document.nextAnnotationID
-                apply { doc in
-                    doc.annotations.append(
-                        Annotation(
-                            id: id, shape: .blur(rect: rect),
-                            color: style.color, width: style.width))
+        batch {
+            mouseDragged(p, map: map, snap: snap)
+            let finished = drag
+            let shown = pending
+            setDrag(nil)
+            setPending(nil)
+            switch finished {
+            case .shape(let id, _, let before):
+                guard let annotation = document.annotations.first(where: { $0.id == id }),
+                    !isTooSmall(annotation.shape)
+                else {
+                    preview(before)
+                    return
                 }
+                commit(from: before)
                 selection = .annotation(id)
-            case (.crop, .region(let rect)?):
-                let crop = PixelRect(
-                    x: Int(rect.minX), y: Int(rect.minY), width: Int(rect.width),
-                    height: Int(rect.height))
-                apply { $0.setCrop(crop, width: original.width, height: original.height) }
-            default:
-                break
-            }
-        case .edge(let seam, let edge, _):
-            guard case .edge(_, _, let position)? = shown,
-                position != (edge == .before ? seam.band.lowerBound : seam.band.upperBound)
-            else { return }
-            let extent = seam.axis == .horizontal ? original.height : original.width
-            // Cuts live in original pixels: under a crop the seam shows only the part of its
-            // band inside the crop, so adjust the whole band and move its edge by the same amount.
-            let whole =
-                CutSet.normalized(document.cuts, axis: seam.axis, extent: extent)
-                .first(where: {
-                    $0.lowerBound <= seam.band.lowerBound && seam.band.upperBound <= $0.upperBound
-                })
-                ?? seam.band
-            let shownEdge = edge == .before ? seam.band.lowerBound : seam.band.upperBound
-            let wholeEdge = edge == .before ? whole.lowerBound : whole.upperBound
-            let cuts = Gestures.adjusting(
-                document.cuts, axis: seam.axis, band: whole, edge: edge,
-                to: wholeEdge + position - shownEdge,
-                extent: extent, snapping: snap ? pixels : nil, radius: snapRadius)
-            // A crop-clipped edge dragged within its off-crop overhang changes nothing visible.
-            let crop = map.crop
-            let visible =
-                seam.axis == .horizontal
-                ? crop.y..<(crop.y + crop.height) : crop.x..<(crop.x + crop.width)
-            func shownBands(_ cuts: [Cut]) -> [Range<Int>] {
-                CutSet.normalized(cuts, axis: seam.axis, extent: extent).compactMap { band in
+            case .move(_, _, let before):
+                commit(from: before)
+            case .freehand(let id, let from, let raw):
+                endFreehand(id: id, from: from, raw: raw)
+            case .vertex(_, _, _, let before):
+                commit(from: before)
+            case .region(let start):
+                switch (tool, shown) {
+                case (.cut, .cut(let cut)?):
+                    apply { $0.cuts.append(cut) }
+                case (.cut, nil):
+                    // A click, not a drag, under the cut tool selects the annotation it lands on.
+                    let reach = Double(hypot(p.original.x - start.x, p.original.y - start.y))
+                    guard reach < minimumDrag else { break }
+                    selection = HitTest.annotation(
+                        at: p.rendered, in: document.annotations, scale: document.scale, slop: slop,
+                        map: map
+                    ).map(Selection.annotation)
+                case (.blur, .region(let rect)?):
+                    let id = document.nextAnnotationID
+                    apply { doc in
+                        doc.annotations.append(
+                            Annotation(
+                                id: id, shape: .blur(rect: rect),
+                                color: style.color, width: style.width))
+                    }
+                    selection = .annotation(id)
+                case (.crop, .region(let rect)?):
+                    let crop = PixelRect(
+                        x: Int(rect.minX), y: Int(rect.minY), width: Int(rect.width),
+                        height: Int(rect.height))
+                    apply { $0.setCrop(crop, width: original.width, height: original.height) }
+                default:
+                    break
+                }
+            case .edge(let seam, let edge, _):
+                guard case .edge(_, _, let position)? = shown,
+                    position != (edge == .before ? seam.band.lowerBound : seam.band.upperBound)
+                else { return }
+                let extent = seam.axis == .horizontal ? original.height : original.width
+                // Cuts live in original pixels: under a crop the seam shows only the part of its
+                // band inside the crop, so adjust the whole band and move its edge by the same amount.
+                let whole =
+                    CutSet.normalized(document.cuts, axis: seam.axis, extent: extent)
+                    .first(where: {
+                        $0.lowerBound <= seam.band.lowerBound
+                            && seam.band.upperBound <= $0.upperBound
+                    })
+                    ?? seam.band
+                let shownEdge = edge == .before ? seam.band.lowerBound : seam.band.upperBound
+                let wholeEdge = edge == .before ? whole.lowerBound : whole.upperBound
+                let cuts = Gestures.adjusting(
+                    document.cuts, axis: seam.axis, band: whole, edge: edge,
+                    to: wholeEdge + position - shownEdge,
+                    extent: extent, snapping: snap ? pixels : nil, radius: snapRadius)
+                // A crop-clipped edge dragged within its off-crop overhang changes nothing visible.
+                let crop = map.crop
+                let visible =
+                    seam.axis == .horizontal
+                    ? crop.y..<(crop.y + crop.height) : crop.x..<(crop.x + crop.width)
+                func shownBands(_ cuts: [Cut]) -> [Range<Int>] {
+                    CutSet.normalized(cuts, axis: seam.axis, extent: extent).compactMap { band in
+                        let lower = max(band.lowerBound, visible.lowerBound)
+                        let upper = min(band.upperBound, visible.upperBound)
+                        return lower < upper ? lower..<upper : nil
+                    }
+                }
+                guard shownBands(cuts) != shownBands(document.cuts) else { return }
+                let kept = Gestures.removing(document.cuts, axis: seam.axis, band: whole)
+                apply { $0.cuts = cuts }
+                // The cut `adjusting` added is whichever one the surviving cuts don't have; the
+                // selection is the part of its band the crop shows.
+                if let moved = cuts.first(where: { !kept.contains($0) }),
+                    let band = CutSet.normalized(cuts, axis: seam.axis, extent: extent)
+                        .first(where: {
+                            $0.lowerBound <= moved.lower && moved.upper <= $0.upperBound
+                        })
+                {
                     let lower = max(band.lowerBound, visible.lowerBound)
                     let upper = min(band.upperBound, visible.upperBound)
-                    return lower < upper ? lower..<upper : nil
+                    selection = lower < upper ? .seam(seam.axis, lower..<upper) : nil
                 }
+            case nil:
+                break
             }
-            guard shownBands(cuts) != shownBands(document.cuts) else { return }
-            let kept = Gestures.removing(document.cuts, axis: seam.axis, band: whole)
-            apply { $0.cuts = cuts }
-            // The cut `adjusting` added is whichever one the surviving cuts don't have; the
-            // selection is the part of its band the crop shows.
-            if let moved = cuts.first(where: { !kept.contains($0) }),
-                let band = CutSet.normalized(cuts, axis: seam.axis, extent: extent)
-                    .first(where: { $0.lowerBound <= moved.lower && moved.upper <= $0.upperBound })
-            {
-                let lower = max(band.lowerBound, visible.lowerBound)
-                let upper = min(band.upperBound, visible.upperBound)
-                selection = lower < upper ? .seam(seam.axis, lower..<upper) : nil
-            }
-        case nil:
-            break
         }
     }
 
     /// Abandons a drag in flight: a previewed shape or move goes back to where it started.
     func cancelDrag() {
-        switch drag {
-        case .shape(_, _, let before), .move(_, _, let before), .vertex(_, _, _, let before):
-            preview(before)
-        case .freehand(let id, let from, let raw):
-            settleFreehand(id: id, from: from, raw: raw)
-        default: break
+        batch {
+            switch drag {
+            case .shape(_, _, let before), .move(_, _, let before), .vertex(_, _, _, let before):
+                preview(before)
+            case .freehand(let id, let from, let raw):
+                settleFreehand(id: id, from: from, raw: raw)
+            default: break
+            }
+            setDrag(nil)
+            setPending(nil)
         }
-        setDrag(nil)
-        setPending(nil)
     }
 
     /// The new annotation for a drag: an arrow's head is where the drag started.
