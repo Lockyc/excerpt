@@ -19,8 +19,8 @@ Each phase is a shippable slice with an acceptance gate. The design behind every
 | 1 | **Capture shell** — menu bar, default hotkeys, area (frozen) / window / fullscreen, library save, clipboard, thumbnail, settings; signed `.app` via `just bundle` | A capture lands in the library with the dated name and on the clipboard | Built — hand checks pending |
 | 2 | **Editor** — annotation model + rendering in Core, canvas over Core's renderer, the eight tools, undo, save to primary + master | Cut a spreadsheet capture, reopen it from the library, adjust the cut | Built — hand checks pending |
 | 3 | **Scrolling capture** — auto-scroll, stitcher, sticky regions, manual fallback, uncertain-stop | Stitcher fixtures (sticky header, long form, animated element) pass; a real long page captures cleanly | Built — hand checks pending |
-| 4 | **Text + Claude** — capture text (⌘⇧5), mode bar (⌘⇧6), hotkey rebinding, For Claude export, `excerpt read <image>` over the same bundle builder | A 10,000px capture pastes into Claude Code as legible tiles + `text.md` with cut markers; `excerpt read` on a foreign 2× screenshot prints its text and legible tiles | Built — hand checks pending |
-| 5 | **v1 release** — notarized build, `install.sh` + `/excerpt:install` (links `excerpt` onto `PATH`), README curation | Fresh-machine install from the curl one-liner; `excerpt read` runs from a new shell | Built — v1.0.0 held until the Phase 1–4 hand checks pass |
+| 4 | **Text + modes** — capture text (⌘⇧5), mode bar (⌘⇧6), hotkey rebinding | A selection's text pastes in reading order; a rebound hotkey holds across relaunch | Built — hand checks pending |
+| 5 | **v1 release** — notarized build, `install.sh` + `/excerpt:install`, README curation | Fresh-machine install from the curl one-liner | Built — v1.0.0 held until the Phase 1–4 hand checks pass |
 
 ## After v1
 
@@ -36,7 +36,7 @@ Each phase is a shippable slice with an acceptance gate. The design behind every
 | Smart redaction | On-device OCR finds emails, tokens, IPs, names; one-click destructive redaction, toggleable per region before save | Design the detector set and the review UI |
 | Live-text editing | Click text in a capture and retype it, matching font and background | Spike Vision text bounds + font matching on a UI screenshot |
 | Horizontal scrolling capture | The stitcher along the x axis, for wide sheets | Generalise the stitcher's axis once vertical is proven |
-| Tiling wide captures | Tiles split on height only, so a capture over 2000pt wide arrives downscaled and its text shrinks | Split tiles on width too and teach `text.md` the tile grid |
+| Panes on one background | Capture Text reads side-by-side panes that share a background (a card grid, two terminals) row by row, interleaving them; layout alone can't tell them from a table, whose rows line up the same way | Find a signal beyond the text's geometry, such as the capture's window and pane frames |
 | Multi-core PNG encoding | ImageIO encodes a PNG on one core: about 2s for a stitch at `Stitcher.defaultMaximumHeight` (3000 px wide) before its thumbnail shows, and a quarter of a second for a full Retina screen | Spike row-band deflate across cores (zlib's sync flush lets the bands join into one IDAT stream) against `PNGCodec.encode` |
 
 ## Sequencing

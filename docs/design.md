@@ -11,8 +11,7 @@ links:
 A macOS menu-bar screenshot tool: area / window / fullscreen / scrolling / text capture, a
 floating preview, an annotation editor, and the **cut tool** — removing a band from the middle
 of a screenshot and marking the join with a torn seam, so a long sheet or page shows its header
-and footer without its body. Captures are routinely read by Claude, so tall output is exported
-in a shape Claude can read. It also **records** an area or window as a GIF or MP4 for pasting
+and footer without its body. It also **records** an area or window as a GIF or MP4 for pasting
 into GitHub, Slack and Google Chat, with shortcuts and clicks shown in the clip.
 
 ## Modules
@@ -27,8 +26,8 @@ build in Swift 6 language mode; the AppKit / ScreenCaptureKit targets build in S
 | `ExcerptCapture` | ScreenCaptureKit capture, the multi-display selection overlay, the auto-scroll driver that feeds frames to Core's stitcher, the recorder that feeds the stream to Recording's master writer and its key and click log, the hotkey bindings and the rules that judge a rebinding | Core, Recording |
 | `ExcerptRecording` | The recording's master file (writing, pause retiming, its log and edits), frame reading, the GIF / MP4 export and its budget fallback | Core, AVFoundation |
 | `ExcerptEditor` | Canvas, tools, undo; edits Core's document; the recording editor | Core, Recording |
-| `ExcerptExport` | Vision OCR, the For Claude bundle (tiles + `text.md`) and the `excerpt read` command, with no UI | Core, Vision |
-| `Excerpt` (app) | Menu bar, hotkey registration, preview thumbnail, settings, export UI, file I/O; runs `excerpt read` before AppKit starts | all |
+| `ExcerptExport` | Vision OCR and Capture Text's reading order, with no UI | Core, Vision |
+| `Excerpt` (app) | Menu bar, hotkey registration, preview thumbnail, settings, export UI, file I/O | all |
 
 The hard logic lives in Core as pure functions over values, so it is tested without UI or
 permissions. **One renderer:** the editor canvas draws through Core's renderer, so what the
@@ -57,10 +56,6 @@ Captures land in the **library** — `~/Documents/Screenshots/` by default (a se
   date), so the folder opens on recent captures and Recent Captures, which reads only the top
   level, always has them. `LibraryFiler` does the filing (rules in its docblock) at launch,
   daily, and when switched on; it is a setting, on by default.
-- "For Claude" output is scratch, not library content: `~/Library/Caches/excerpt/claude/<capture
-  name>-<hash>/` (spaces become `-`, so `@` references hold; the hash is of the primary's path,
-  so same-named captures in different folders keep separate bundles), replaced on each export
-  and pruned once `ClaudeCache.maximumAge` (7 days) old: on every export, at launch and daily.
 
 ## The cut tool
 
@@ -108,8 +103,8 @@ holding one.
   menu hanging past its edge widens the shot). Placed on a padded backdrop, its display's
   wallpaper with a soft shadow under the window, or a colour (all settings).
 - **Fullscreen:** the display under the cursor.
-- **Text:** select an area on the frozen screen; its text is copied in reading order and no file
-  is saved. A note gives the line count, or says no text was found and leaves the clipboard
+- **Text:** select an area on the frozen screen; its text is copied in reading order, panes on
+  different backgrounds one after the other (`ReadingOrder.blocks`), and no file is saved. A note gives the line count, or says no text was found and leaves the clipboard
   alone.
 - **Mode bar:** the frozen screen opens with the area last picked from the bar (this launch)
   already selected, and a bar of the six modes, each showing its hotkey, centred in it (below
@@ -123,7 +118,7 @@ holding one.
   mode on the same stills.
 - Stills exclude desktop icons and excerpt's own windows through the `SCContentFilter`.
 - **After every capture that makes a file** it is saved, copied to the clipboard, and shown as
-  a large thumbnail (Edit · For Claude · Close, draggable; while two or more captures have
+  a large thumbnail (Edit · Close, draggable; while two or more captures have
   landed since the stack was last empty, the newest also carries **Edit All**, opening all of
   them as a series, including any whose thumbnail has already gone) that closes after 15s (paused
   while the pointer is over it), or on drag-out. Shutter sound on. With *Show thumbnail at the
@@ -298,8 +293,7 @@ during the recording, so the screen stays clean and either can be turned off aft
 
 Saved, copied and shown as a thumbnail, as a screenshot is. The clipboard gets the primary as a
 file and as GIF data; drag from the thumbnail is the path that works everywhere. The thumbnail
-plays a GIF (an MP4 shows its first frame with a play glyph). **For Claude is disabled on a
-recording with its reason**, and Edit All gathers screenshots only.
+plays a GIF (an MP4 shows its first frame with a play glyph). Edit All gathers screenshots only.
 
 ### The recording editor
 
@@ -375,8 +369,7 @@ them, and the window refits to each. Tool, colour and size carry across; undo is
 the capture before it, unless its filmstrip cell's **Restart at 1** is on, so adding, deleting or
 reordering a step renumbers every later capture. Each cell shows its step range ("Steps 3–4") and
 the Restart switch, disabled on the first capture and on one with no steps; a capture with no
-steps keeps first step 1, so renumbering never changes it. For Claude exports the capture in
-view. A capture already open in its own editor is left out of a series and its window brought
+steps keeps first step 1, so renumbering never changes it. A capture already open in its own editor is left out of a series and its window brought
 forward.
 
 **Paths** (`P`) are polylines and polygons — routes, boundaries, bent pointers — drawn opaque in
@@ -405,8 +398,8 @@ drag can end, so there is always room to place something past the current edge; 
 the margin grows. While a drag or a path is in progress the canvas's layout holds still and the
 margin is drawn in place around the image; it lays out again on release. The margin is part of
 the render map: its placement is offset by the margin's
-leading sides and its rendered size includes them, so hit testing, seams, the For Claude tiles
-and `text.md` all see the same picture. The margin colour is the window backdrop colour from
+leading sides and its rendered size includes them, so hit testing and seams see the same
+picture. The margin colour is the window backdrop colour from
 Settings, stored in the document when an editor opens it unless that would change its render
 (`EditDocument.adoptMarginColor`); a document without one keeps clipping annotations at its
 edge, so its primary still reproduces. Setting or changing a crop drops the annotations it
@@ -439,45 +432,15 @@ change re-renders the cache. Undo is a stack of document values.
 
 `⌘S` (Save) re-renders the primary, writes or updates the master, copies the render and closes
 the editor; with nothing unsaved it only copies and closes. In a series it saves every capture
-whose document changed, renumbering included, and copies every render, in order. For Claude saves the same way before
-it exports, then closes. **Discard** closes at once, dropping unsaved edits; closing the window
+whose document changed, renumbering included, and copies every render, in order. **Discard** closes at once, dropping unsaved edits; closing the window
 any other way with unsaved edits asks.
 
 ## Export
 
 - **Copy** — every capture is copied as it lands, and the editor's Save copies its render.
   **Drag** from the thumbnail or the editor's title bar.
-- **For Claude** (`⌘⇧C`), shaped so Claude reads every tile unscaled:
-  - tiles render at **1× (points)** — Retina doubles pixels without adding legible text;
-  - a capture that fits is one image; taller ones split into tiles overlapping `Tiling.overlap` (100px), so every
-    line appears whole in some tile, each as tall as `Tiling.tileLength(width:)` allows: within
-    the 2000px side limit Claude enforces once a conversation holds over 20 images, and within
-    its visual-token budget;
-  - `text.md` holds Vision OCR in reading order, panes on different backgrounds one after the
-    other (`ReadingOrder.blocks`), each cut written in as `[⋯ 1,240 px hidden]`;
-  - the clipboard receives `@<path>` references to every tile and `text.md`, then a space, so
-    Claude Code's file picker closes on paste, with Capture Text's chime;
-  - both come from the render, never the original, so a cut band never reaches Claude and a
-    blurred area reaches it only as the blur's noised blocks, from which no text is read;
-  - the editor exports the render of the edits it saves; the thumbnail exports the
-    primary file as `excerpt read` takes it, so a primary changed since it was saved exports as
-    its own pixels.
-- **`excerpt read <image>`** — the same bundle for any image file, not only a capture, so a
-  Claude session handed a large screenshot can read it. It runs headless in the app's binary,
-  before any `NSApplication` starts; see [Install and release](#install-and-release) for when
-  that binary is the command and when it is the app. It prints `text.md` to stdout and the tile
-  paths to stderr, and needs no Screen Recording permission. A master gets its cut markers, and
-  so does a primary while it is exactly its master's render; a primary changed elsewhere reads
-  as its own pixels, so a redaction drawn over it holds. Any other file is treated as uncut,
-  upright, with Retina scale read from its DPI metadata (anything outside 1×–3× reads as 1×). A
-  file it can't use exits non-zero with the reason. Input limits derive from the largest capture
-  Excerpt makes. Edits with over `EditDocument.maximumCutsPerAxis` cuts on one axis or
-  `EditDocument.maximumAnnotations` annotations read as damaged, and a capture cut into over
-  `CaptureText.maximumRegions` regions is refused before any is read.
-
-  Known limits: `text.md` reads columns that share a background row by row; `@path` references
-  assume a home folder without spaces; Vision can miss text on busy synthetic backgrounds. Tiles
-  split on height only, so a capture over 2000pt wide reaches Claude downscaled.
+- The editor opens images up to `EditLimits` — the largest capture Excerpt makes, with room —
+  checked from the header and the edits' map before any pixel is decoded or drawn.
 
 ## Install and release
 
@@ -486,9 +449,5 @@ cut by the maintainer's release tooling from a clean, pushed `dev` at `VERSION`.
 `install.sh` downloads the latest one and refuses it, before anything in the install
 directories changes, unless its signature verifies, its Team ID is `G9V8U6ZU5E` and Gatekeeper
 accepts it as notarized. It then quits the user's running Excerpt, replaces
-`/Applications/Excerpt.app`, links `/usr/local/bin/excerpt` to the app's binary and relaunches.
-The binary reads its invoked path: only from inside an app bundle (`.app/Contents/MacOS/`), with
-no arguments or a first argument starting `-` (AppKit's `-NS…`), is it the menu-bar app.
-Anywhere else — the `excerpt` link under any spelling, `swift run` — it is always a command, so
-a bare or mistyped call prints usage and exits 64. Only the menu-bar app starts Sparkle's
-updater (`Updater.make`), and only from a bundle whose plist names a feed.
+`/Applications/Excerpt.app` and relaunches. Sparkle's updater (`Updater.make`) starts only from
+a bundle whose plist names a feed.

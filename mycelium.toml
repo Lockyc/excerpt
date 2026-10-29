@@ -6,8 +6,8 @@ tags    = ["screenshot", "scrolling-capture", "annotation", "ocr", "macos"]
 stack   = ["swift", "swiftui", "screencapturekit"]
 
 [github]
-topics_extra = ["screenshot-tool", "scrolling-screenshot", "menu-bar-app", "claude"]
+topics_extra = ["screenshot-tool", "scrolling-screenshot", "menu-bar-app"]
 
 [[provides]]
 name    = "screenshot-capture"
-summary = "Screenshot capture with scrolling capture, annotation, cut-out-the-middle editing, and a Claude-readable tiled export"
+summary = "Screenshot capture with scrolling capture, annotation and cut-out-the-middle editing"

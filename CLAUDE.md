@@ -9,8 +9,7 @@ A macOS menu-bar screenshot tool in Swift (SwiftPM, macOS 15+). The architecture
 [docs/design.md](docs/design.md); what's next, and each phase's status in its Lane column, is
 [docs/roadmap.md](docs/roadmap.md) — start there before planning work.
 
-`just gate` per change; `just run` launches a signed build; `swift run Excerpt read <image>`
-runs the command without the app.
+`just gate` per change; `just run` launches a signed build.
 
 ## Conventions
 
@@ -22,10 +21,6 @@ runs the command without the app.
 - **The primary file is clean.** Nothing the user removed — cut bands, blurred pixels, the
   original — may be embedded in the dated primary PNG. The original and the edits live only in
   `… original.png`.
-- **Claude sees only the render.** For Claude's tiles and `text.md` are read from the render
-  through its `RenderMap`'s kept segments, never from the original, so cut content can't reach
-  them and blurred content reaches them only as `BlurRenderer`'s blocks, sized from each group
-  of nearby blurs so no text can be read from them.
 - **Golden images** pin the renderer; a deliberate visual change regenerates them in the same
   commit. `EXCERPT_RECORD_GOLDENS=1 swift test` re-records goldens; inspect every recorded PNG
   before committing it.
