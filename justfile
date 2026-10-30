@@ -75,6 +75,8 @@ run: bundle quit
 install: bundle quit
     rm -rf /Applications/Excerpt.app
     ditto {{app}} /Applications/Excerpt.app
+    @# the commit this build came from: lets a later release (lockstep.sh) tell whether it is newer before replacing it
+    xattr -w com.lockyc.build-commit "$(git rev-parse HEAD)$(git status --porcelain | grep -q . && echo -dirty)" /Applications/Excerpt.app
     @just launch /Applications/Excerpt.app
 
 # Quits any running Excerpt, force-killing one still alive after 3s.
