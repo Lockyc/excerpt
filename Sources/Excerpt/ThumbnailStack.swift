@@ -283,6 +283,8 @@ final class ThumbnailPanel: NSPanel {
 final class DragImageView: NSImageView, NSDraggingSource {
     private let url: URL
     private let onDragged: () -> Void
+    /// A press released without a drag, with the modifiers held at the release.
+    var onClick: ((NSEvent.ModifierFlags) -> Void)?
 
     init(url: URL, image: NSImage, onDragged: @escaping () -> Void) {
         self.url = url
@@ -297,6 +299,9 @@ final class DragImageView: NSImageView, NSDraggingSource {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     override func mouseDown(with event: NSEvent) {}  // keep NSImageView from eating the drag
+
+    /// A drag's session swallows the release, so this is only ever a click.
+    override func mouseUp(with event: NSEvent) { onClick?(event.modifierFlags) }
 
     override func mouseDragged(with event: NSEvent) {
         let item = NSDraggingItem(pasteboardWriter: url as NSURL)
