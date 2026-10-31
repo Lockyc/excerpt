@@ -3,7 +3,7 @@ import ExcerptCore
 import Sparkle
 
 @MainActor
-final class StatusMenu: NSObject, NSMenuDelegate {
+final class StatusMenu: NSObject, NSMenuDelegate, NSMenuItemValidation {
     private let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
     private let updater: SPUStandardUpdaterController?
     private let perform: (HotKeyAction) -> Void
@@ -11,12 +11,15 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     private let openLibrary: () -> Void
     private let openSettings: () -> Void
     private let hotKeyStates: () -> [HotKeyAction: HotKeyState]
+    /// Whether a capture is under way, during which Recent Captures can't open.
+    private let isRunning: () -> Bool
 
     init(
         perform: @escaping (HotKeyAction) -> Void,
         chooseCapture: @escaping () -> Void, openLibrary: @escaping () -> Void,
         openSettings: @escaping () -> Void,
         hotKeyStates: @escaping () -> [HotKeyAction: HotKeyState],
+        isRunning: @escaping () -> Bool,
         updater: SPUStandardUpdaterController?
     ) {
         self.updater = updater
@@ -25,6 +28,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         self.openLibrary = openLibrary
         self.openSettings = openSettings
         self.hotKeyStates = hotKeyStates
+        self.isRunning = isRunning
         super.init()
         item.button?.image = Self.icon
         menu.delegate = self
@@ -115,6 +119,9 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             title: action.title, action: #selector(capture(_:)), keyEquivalent: "")
         entry.target = self
         entry.tag = Int(action.id)
+        if action == .recent && isRunning() {
+            entry.toolTip = "Unavailable while a capture is in progress"
+        }
         menu.addItem(entry)
         guard let state = states[action] else { return }
         state.binding.show(on: entry)
@@ -124,6 +131,13 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             note.indentationLevel = 1
             menu.addItem(note)
         }
+    }
+
+    /// The menu enables its own items, so Recent Captures is disabled here rather than when it
+    /// is built.
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        menuItem.action != #selector(capture(_:))
+            || HotKeyAction(rawValue: UInt32(menuItem.tag)) != .recent || !isRunning()
     }
 
     @objc private func choose() { chooseCapture() }

@@ -324,8 +324,10 @@ Render order per frame: blur → clicks → shortcuts → scale to the output si
 
 A square floating panel of the library's newest captures, for getting a recent one back without
 the Finder. The Recent Captures hotkey (⌥4) or the menu bar's Recent Captures opens it centred on
-the display under the pointer; the hotkey again, `Esc`, or a click elsewhere (another Excerpt window included) closes it; the hotkey does nothing while a capture runs. It is a
-non-activating `NSPanel` like the thumbnail's, so the app in front keeps focus for the paste.
+the display under the pointer; the hotkey again, `Esc`, or a click elsewhere (another Excerpt
+window included) closes it. While a capture runs, the hotkey does nothing and the menu entry is
+unavailable. It is a non-activating `NSPanel` like the thumbnail's, so the app in front keeps
+focus for the paste.
 
 - **Layout:** the newest capture across the top half, the next six in a 3×2 grid below — the
   library's newest by creation date, masters left out (`LibraryStore.recentCaptures`), so the

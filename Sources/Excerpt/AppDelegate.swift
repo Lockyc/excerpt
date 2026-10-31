@@ -38,6 +38,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             openLibrary: { [weak self] in self?.openLibrary() },
             openSettings: { [weak self] in self?.openSettings() },
             hotKeyStates: { [weak self] in self?.hotKeyStates() ?? [:] },
+            isRunning: { [weak self] in self?.coordinator.isRunning ?? false },
             updater: Updater.make())
         statusMenu?.onStopRecording = { [weak self] in self?.coordinator.stopRecording() }
         filing.start()
@@ -114,7 +115,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         onOpenLibrary: { [weak self] in self?.openLibrary() })
 
     /// Recent Captures opens beside a capture, never during one: the selection overlay owns the
-    /// screen and the keyboard until it ends.
+    /// screen and the keyboard until it ends. The menu disables its entry then; the hotkey lands
+    /// here.
     func perform(_ action: HotKeyAction) {
         if action == .recent {
             if !coordinator.isRunning { recentPanel.toggle() }
