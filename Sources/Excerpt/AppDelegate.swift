@@ -110,7 +110,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         recentCaptures: { [weak self] in
             try self?.preferences.store.recentCaptures(limit: RecentLayout.tileCount) ?? []
         },
-        libraryFolder: { [weak self] in self?.preferences.libraryFolder ?? URL(filePath: "/") },
+        libraryFolder: { [preferences] in preferences.libraryFolder },
         onEdit: { [weak self] urls in self?.openEditors(urls) },
         onOpenLibrary: { [weak self] in self?.openLibrary() })
 
