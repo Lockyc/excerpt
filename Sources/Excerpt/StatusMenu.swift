@@ -1,6 +1,5 @@
 import AppKit
 import ExcerptCore
-import QuickLookThumbnailing
 import Sparkle
 
 @MainActor
@@ -143,8 +142,9 @@ final class StatusMenu: NSObject, NSMenuDelegate {
                 entry.target = self
                 entry.representedObject = url
                 entry.toolTip = url.path
+                // An empty box of the thumbnail's size until it loads, so titles line up.
                 entry.image = NSImage(size: Self.thumbnailSize)
-                loadThumbnail(url, into: entry)
+                CaptureThumbnail.load(url, size: Self.thumbnailSize) { entry.image = $0 }
                 menu.addItem(entry)
             }
         } catch {
@@ -160,52 +160,6 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         let item = NSMenuItem(title: text, action: nil, keyEquivalent: "")
         item.isEnabled = false
         return item
-    }
-
-    /// Fills in the entry's thumbnail once there is one: a recording's poster frame, as its
-    /// floating thumbnail shows it, else Quick Look's; the entry shows an empty box of the same
-    /// size until then.
-    private func loadThumbnail(_ url: URL, into entry: NSMenuItem) {
-        let size = Self.thumbnailSize
-        let scale = NSScreen.main?.backingScaleFactor ?? 2
-        if LibraryNaming.recordingExtensions.contains(url.pathExtension.lowercased()) {
-            let longest = Int((max(size.width, size.height) * scale).rounded(.up))
-            Task { @MainActor in
-                guard
-                    let poster = await RecordingPoster.firstFrame(
-                        of: url, maximumPixelSize: longest)
-                else { return }
-                entry.image = Self.fit(poster, in: size)
-            }
-            return
-        }
-        let request = QLThumbnailGenerator.Request(
-            fileAt: url, size: size, scale: scale,
-            representationTypes: .thumbnail)
-        QLThumbnailGenerator.shared.generateBestRepresentation(for: request) {
-            representation, _ in
-            guard let cgImage = representation?.cgImage else { return }
-            DispatchQueue.main.async {
-                let fitted = Self.fit(cgImage, in: size)
-                MainActor.assumeIsolated { entry.image = fitted }
-            }
-        }
-    }
-
-    /// The image scaled to fit, centred in a box of `size`.
-    nonisolated private static func fit(_ cgImage: CGImage, in size: NSSize) -> NSImage {
-        let scale = min(
-            size.width / CGFloat(cgImage.width), size.height / CGFloat(cgImage.height))
-        let drawn = NSSize(
-            width: CGFloat(cgImage.width) * scale, height: CGFloat(cgImage.height) * scale)
-        let source = NSImage(cgImage: cgImage, size: drawn)
-        return NSImage(size: size, flipped: false) { _ in
-            source.draw(
-                in: NSRect(
-                    x: (size.width - drawn.width) / 2, y: (size.height - drawn.height) / 2,
-                    width: drawn.width, height: drawn.height))
-            return true
-        }
     }
 
     @objc private func open(_ sender: NSMenuItem) {
