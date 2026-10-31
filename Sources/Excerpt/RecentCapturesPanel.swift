@@ -90,10 +90,10 @@ final class RecentCapturesPanel: NSPanel {
     func toggle() { if isVisible { close() } else { show() } }
 
     /// A capture landed: re-read the library so it joins at the top.
-    func reloadIfShown() { if isVisible { reload() } }
+    func reloadIfShown() { if isVisible { reload(scale: screen?.backingScaleFactor ?? 2) } }
 
+    /// Thumbnails load for the screen the panel lands on, so it moves there before they do.
     private func show() {
-        reload()
         let pointer = NSEvent.mouseLocation
         let screen =
             NSScreen.screens.first { NSMouseInRect(pointer, $0.frame, false) } ?? NSScreen.main
@@ -101,6 +101,7 @@ final class RecentCapturesPanel: NSPanel {
             setFrameOrigin(
                 CGPoint(x: visible.midX - frame.width / 2, y: visible.midY - frame.height / 2))
         }
+        reload(scale: screen?.backingScaleFactor ?? 2)
         makeKeyAndOrderFront(nil)
         // The window itself takes keys, never a footer button under full keyboard access.
         makeFirstResponder(nil)
@@ -109,8 +110,9 @@ final class RecentCapturesPanel: NSPanel {
         watchClicks()
     }
 
-    /// Re-reads the library into the tiles and resets the selection.
-    private func reload() {
+    /// Re-reads the library into the tiles, thumbnails rendered for a display of `scale`, and
+    /// resets the selection.
+    private func reload(scale: CGFloat) {
         var note: String?
         do {
             captures = Array(try recentCaptures().prefix(RecentLayout.tileCount))
@@ -125,7 +127,7 @@ final class RecentCapturesPanel: NSPanel {
                 let url = captures[index]
                 let created = try? url.resourceValues(forKeys: [.creationDateKey]).creationDate
                 tile.show(
-                    url, isRecording: Self.isRecording(url),
+                    url, isRecording: Self.isRecording(url), scale: scale,
                     age: created.map {
                         CaptureAge.label(created: $0, now: now, calendar: .current)
                     })
@@ -317,14 +319,16 @@ private final class RecentTile: NSView {
     /// Edit shows only on a capture, while the pointer is over it.
     private func showEdit() { editButton.isHidden = !hovering || url == nil }
 
-    /// Shows a capture, its thumbnail loaded at this tile's size.
-    func show(_ url: URL, isRecording: Bool, age label: String?) {
+    /// Shows a capture, its thumbnail loaded at this tile's size for a display of `scale`.
+    func show(_ url: URL, isRecording: Bool, scale: CGFloat, age label: String?) {
         self.url = url
         let view = DragImageView(url: url, image: NSImage(size: bounds.size)) {}
         view.frame = bounds
         view.onClick = { [weak self] flags in self?.onClick(flags) }
         replaceImage(with: view)
-        CaptureThumbnail.load(url, size: bounds.size) { [weak view] in view?.image = $0 }
+        CaptureThumbnail.load(url, size: bounds.size, scale: scale) { [weak view] in
+            view?.image = $0
+        }
         play.isHidden = !isRecording
         note.isHidden = true
         age.text = label ?? ""

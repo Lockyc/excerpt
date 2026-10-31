@@ -2,14 +2,17 @@ import AppKit
 import ExcerptCore
 import QuickLookThumbnailing
 
-/// A capture's small preview, for the menu's Recent Captures and the Recent Captures panel.
+/// A capture's small preview, for the Recent Captures panel.
 enum CaptureThumbnail {
     /// A recording's poster frame, as its floating thumbnail shows it, else Quick Look's
-    /// thumbnail, fitted and centred in `size`; `deliver` runs on the main actor once there is
+    /// thumbnail, fitted and centred in `size`, rendered for a display of `scale` (the backing
+    /// scale factor of the screen it shows on); `deliver` runs on the main actor once there is
     /// one, and never when there is none.
     @MainActor
-    static func load(_ url: URL, size: NSSize, deliver: @escaping @MainActor (NSImage) -> Void) {
-        let scale = NSScreen.main?.backingScaleFactor ?? 2
+    static func load(
+        _ url: URL, size: NSSize, scale: CGFloat,
+        deliver: @escaping @MainActor (NSImage) -> Void
+    ) {
         if LibraryNaming.recordingExtensions.contains(url.pathExtension.lowercased()) {
             let longest = Int((max(size.width, size.height) * scale).rounded(.up))
             Task { @MainActor in
