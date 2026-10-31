@@ -35,6 +35,28 @@ public enum RecentLayout {
         return frames
     }
 
+    /// How many times taller than the tile's shape an image must be to fill the tile's width
+    /// rather than fit inside it: fitted, a stitched page would be a sliver.
+    public static let tallRatio: CGFloat = 2.5
+
+    /// Where an image of `pixels` draws in a tile of `tile` points on a display of `scale`:
+    /// fitted and centred, or, when it is more than `tallRatio` times the tile's shape tall,
+    /// across the tile's width from the top, the rest falling below the tile to be cropped.
+    /// Never more than one display pixel per image pixel, so a tiny capture stays sharp.
+    public static func thumbnailFrame(pixels: CGSize, tile: CGSize, scale: CGFloat) -> CGRect {
+        let isTall = pixels.height / pixels.width > tallRatio * tile.height / tile.width
+        let fill =
+            isTall
+            ? tile.width / pixels.width
+            : min(tile.width / pixels.width, tile.height / pixels.height)
+        let factor = min(fill, 1 / scale)
+        let size = CGSize(width: pixels.width * factor, height: pixels.height * factor)
+        return CGRect(
+            x: (tile.width - size.width) / 2,
+            y: isTall ? tile.height - size.height : (tile.height - size.height) / 2,
+            width: size.width, height: size.height)
+    }
+
     /// The footer's frame, along the bottom inside the padding.
     public static func footer(side: CGFloat = side) -> CGRect {
         CGRect(x: padding, y: padding, width: side - 2 * padding, height: footerHeight)

@@ -92,6 +92,41 @@ import Testing
             for other in tiles[(index + 1)...] { #expect(!tile.intersects(other)) }
         }
     }
+
+    let tile = CGSize(width: 100, height: 50)
+
+    @Test func aWideImageFitsCentred() {
+        #expect(
+            RecentLayout.thumbnailFrame(
+                pixels: CGSize(width: 400, height: 100), tile: tile, scale: 2)
+                == CGRect(x: 0, y: 12.5, width: 100, height: 25))
+    }
+
+    @Test func aSomewhatTallImageStillFits() {
+        let frame = RecentLayout.thumbnailFrame(
+            pixels: CGSize(width: 200, height: 240), tile: tile, scale: 2)
+        #expect(frame.height == 50)
+        #expect(frame.minY == 0)
+        #expect(abs(frame.midX - 50) < 0.001)
+    }
+
+    @Test func aVeryTallImageFillsTheWidthFromTheTop() {
+        #expect(
+            RecentLayout.thumbnailFrame(
+                pixels: CGSize(width: 200, height: 1000), tile: tile, scale: 2)
+                == CGRect(x: 0, y: -450, width: 100, height: 500))
+    }
+
+    @Test func aTinyImageIsNeverScaledUp() {
+        #expect(
+            RecentLayout.thumbnailFrame(
+                pixels: CGSize(width: 20, height: 10), tile: tile, scale: 2)
+                == CGRect(x: 45, y: 22.5, width: 10, height: 5))
+        #expect(
+            RecentLayout.thumbnailFrame(
+                pixels: CGSize(width: 20, height: 10), tile: tile, scale: 1)
+                == CGRect(x: 40, y: 20, width: 20, height: 10))
+    }
 }
 
 @Suite struct RecentSelectionTests {
