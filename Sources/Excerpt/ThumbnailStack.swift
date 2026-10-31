@@ -303,8 +303,11 @@ final class PlayGlyph: NSImageView {
 final class DragImageView: NSImageView, NSDraggingSource {
     private let url: URL
     private let onDragged: () -> Void
-    /// A press released without a drag, with the modifiers held at the release.
+    /// A press released without a drag, with the modifiers held at the press, so letting go of
+    /// ⌘ before the button doesn't turn a ⌘-click into a plain one.
     var onClick: ((NSEvent.ModifierFlags) -> Void)?
+    /// The current press, until it is released or becomes a drag.
+    private var press: (location: CGPoint, flags: NSEvent.ModifierFlags)?
 
     init(url: URL, image: NSImage, onDragged: @escaping () -> Void) {
         self.url = url
@@ -318,12 +321,23 @@ final class DragImageView: NSImageView, NSDraggingSource {
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
-    override func mouseDown(with event: NSEvent) {}  // keep NSImageView from eating the drag
+    /// Not NSImageView's, which would eat the drag.
+    override func mouseDown(with event: NSEvent) {
+        press = (event.locationInWindow, event.modifierFlags)
+    }
 
     /// A drag's session swallows the release, so this is only ever a click.
-    override func mouseUp(with event: NSEvent) { onClick?(event.modifierFlags) }
+    override func mouseUp(with event: NSEvent) {
+        guard let press else { return }
+        self.press = nil
+        onClick?(press.flags)
+    }
 
+    /// The drag starts once the pointer leaves `DragThreshold` of the press.
     override func mouseDragged(with event: NSEvent) {
+        guard let press, DragThreshold.isDrag(from: press.location, to: event.locationInWindow)
+        else { return }
+        self.press = nil
         let item = NSDraggingItem(pasteboardWriter: url as NSURL)
         item.setDraggingFrame(bounds, contents: image)
         beginDraggingSession(with: [item], event: event, source: self)
