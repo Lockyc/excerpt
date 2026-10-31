@@ -51,3 +51,45 @@ import Testing
         #expect(label(date(2025, 10, 12)) == "12 Oct 2025")
     }
 }
+
+@Suite struct RecentLayoutTests {
+    @Test func sevenTiles() {
+        #expect(RecentLayout.tiles().count == RecentLayout.tileCount)
+    }
+
+    @Test func heroSpansTheWidthAndTheTopHalf() {
+        let tiles = RecentLayout.tiles()
+        let hero = tiles[0]
+        #expect(hero.minX == RecentLayout.padding)
+        #expect(hero.width == RecentLayout.side - 2 * RecentLayout.padding)
+        #expect(hero.maxY == RecentLayout.side - RecentLayout.padding)
+        #expect(tiles.dropFirst().allSatisfy { $0.maxY <= hero.minY })
+        let rowHeight = tiles[1].height
+        let twoRows = 2 * rowHeight + RecentLayout.gap
+        #expect(abs(hero.height - twoRows) < 0.5)
+    }
+
+    @Test func smallTilesReadLeftToRightThenDown() {
+        let tiles = RecentLayout.tiles()
+        let upper = Array(tiles[1...3])
+        let lower = Array(tiles[4...6])
+        #expect(Set(upper.map(\.minY)).count == 1)
+        #expect(Set(lower.map(\.minY)).count == 1)
+        #expect(upper[0].minY > lower[0].minY)
+        for row in [upper, lower] {
+            #expect(row[0].minX < row[1].minX && row[1].minX < row[2].minX)
+        }
+    }
+
+    @Test func nothingOverlapsAndAllInsideAboveTheFooter() {
+        let side = RecentLayout.side
+        let tiles = RecentLayout.tiles()
+        let footer = RecentLayout.footer()
+        let panel = CGRect(x: 0, y: 0, width: side, height: side)
+        for (index, tile) in tiles.enumerated() {
+            #expect(panel.contains(tile))
+            #expect(!tile.intersects(footer))
+            for other in tiles[(index + 1)...] { #expect(!tile.intersects(other)) }
+        }
+    }
+}
