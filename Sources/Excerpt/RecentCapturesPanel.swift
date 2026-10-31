@@ -127,7 +127,7 @@ final class RecentCapturesPanel: NSPanel {
                 let url = captures[index]
                 let created = try? url.resourceValues(forKeys: [.creationDateKey]).creationDate
                 tile.show(
-                    url, isRecording: Self.isRecording(url), scale: scale,
+                    url, isRecording: LibraryNaming.isRecording(url), scale: scale,
                     age: created.map {
                         CaptureAge.label(created: $0, now: now, calendar: .current)
                     })
@@ -142,12 +142,8 @@ final class RecentCapturesPanel: NSPanel {
         selectionChanged()
     }
 
-    private static func isRecording(_ url: URL) -> Bool {
-        LibraryNaming.recordingExtensions.contains(url.pathExtension.lowercased())
-    }
-
     private var recordingIndices: Set<Int> {
-        Set(captures.indices.filter { Self.isRecording(captures[$0]) })
+        Set(captures.indices.filter { LibraryNaming.isRecording(captures[$0]) })
     }
 
     private func selectionChanged() {
@@ -177,7 +173,7 @@ final class RecentCapturesPanel: NSPanel {
         guard captures.indices.contains(index) else { return }
         let url = captures[index]
         do {
-            if Self.isRecording(url) {
+            if LibraryNaming.isRecording(url) {
                 try Pasteboard.copyRecording(at: url)
             } else {
                 try Pasteboard.copyPNG(at: url)

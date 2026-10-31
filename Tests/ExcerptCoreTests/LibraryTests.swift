@@ -394,6 +394,16 @@ extension LibraryTests {
         #expect(LibraryNaming.recordingExtensions == ["gif", "mp4"])
     }
 
+    @Test func recordingsAreKnownByTheirPrimaryExtensionInAnyCase() {
+        func isRecording(_ name: String) -> Bool {
+            LibraryNaming.isRecording(URL(filePath: "/library/\(name)"))
+        }
+        #expect(isRecording("Excerpt 2026-10-10 at 09.43.29.gif"))
+        #expect(isRecording("Excerpt 2026-10-10 at 09.43.29.MP4"))
+        #expect(!isRecording("Excerpt 2026-10-10 at 09.43.29.png"))
+        #expect(!isRecording("Excerpt 2026-10-10 at 09.43.29 original.mov"))
+    }
+
     @Test func reserveRecordingSkipsTakenNames() throws {
         let folder = tempFolder()
         let store = LibraryStore(folder: folder, naming: LibraryNaming(timeZone: utc))

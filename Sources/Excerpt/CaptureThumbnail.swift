@@ -13,7 +13,7 @@ enum CaptureThumbnail {
         _ url: URL, size: NSSize, scale: CGFloat,
         deliver: @escaping @MainActor (NSImage) -> Void
     ) {
-        if LibraryNaming.recordingExtensions.contains(url.pathExtension.lowercased()) {
+        if LibraryNaming.isRecording(url) {
             let longest = Int((max(size.width, size.height) * scale).rounded(.up))
             Task { @MainActor in
                 guard

@@ -45,6 +45,11 @@ extension LibraryNaming {
     /// The primary formats of a recording, as file extensions.
     public static let recordingExtensions = ["gif", "mp4"]
 
+    /// Whether `url` is a recording's primary, by its extension in any case.
+    public static func isRecording(_ url: URL) -> Bool {
+        recordingExtensions.contains(url.pathExtension.lowercased())
+    }
+
     /// The master's name for a recording whose primary is `<base>.gif` or `<base>.mp4`.
     public static func recordingMasterName(forBase base: String) -> String {
         base + recordingMasterSuffix

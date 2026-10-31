@@ -83,9 +83,7 @@ public struct LibraryStore: Sendable {
             return RecordingPaths(
                 base: url.deletingLastPathComponent().appendingPathComponent(base))
         }
-        guard LibraryNaming.recordingExtensions.contains(url.pathExtension.lowercased()) else {
-            return nil
-        }
+        guard LibraryNaming.isRecording(url) else { return nil }
         return RecordingPaths(base: url.deletingPathExtension())
     }
 
@@ -129,8 +127,7 @@ public struct LibraryStore: Sendable {
         let dated = try contents.compactMap { url -> (URL, Date)? in
             let name = url.lastPathComponent
             guard
-                (["png"] + LibraryNaming.recordingExtensions).contains(
-                    url.pathExtension.lowercased()),
+                url.pathExtension.lowercased() == "png" || LibraryNaming.isRecording(url),
                 LibraryNaming.primaryName(forOriginal: name) == nil
             else { return nil }
             let values = try url.resourceValues(forKeys: Set(keys))
