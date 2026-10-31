@@ -4,7 +4,9 @@ import CoreGraphics
 /// across the top, two rows of three small tiles beneath it, and the footer along the bottom.
 /// The hero is as tall as two small rows plus the gap between them, so every row edge lines up.
 public enum RecentLayout {
-    public static let tileCount = 7
+    /// Small tiles per row: the grid's shape, which the selection's arrow keys follow too.
+    public static let columns = 3
+    public static let tileCount = 1 + 2 * columns
     /// The panel is `side` × `side` points.
     public static let side: CGFloat = 440
     public static let padding: CGFloat = 10
@@ -17,7 +19,7 @@ public enum RecentLayout {
         let gridHeight = side - padding - gridBottom
         let rowHeight = (gridHeight - 3 * gap) / 4
         let width = side - 2 * padding
-        let smallWidth = (width - 2 * gap) / 3
+        let smallWidth = (width - CGFloat(columns - 1) * gap) / CGFloat(columns)
 
         let lowerY = gridBottom
         let upperY = lowerY + rowHeight + gap
@@ -25,7 +27,7 @@ public enum RecentLayout {
 
         var frames = [CGRect(x: padding, y: heroY, width: width, height: 2 * rowHeight + gap)]
         for y in [upperY, lowerY] {
-            for column in 0..<3 {
+            for column in 0..<columns {
                 frames.append(
                     CGRect(
                         x: padding + CGFloat(column) * (smallWidth + gap), y: y,

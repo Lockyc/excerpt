@@ -46,12 +46,13 @@ public struct RecentSelection: Equatable, Sendable {
     /// A move off the grid or onto an empty tile stays put.
     public mutating func move(_ direction: Direction) {
         guard let focus else { return }
+        let columns = RecentLayout.columns
         let target: Int
         switch direction {
         case .left: target = focus - 1
         case .right: target = focus + 1
-        case .down: target = focus == 0 ? 1 : (focus <= 3 ? focus + 3 : focus)
-        case .up: target = focus <= 3 ? 0 : focus - 3
+        case .down: target = focus == 0 ? 1 : (focus <= columns ? focus + columns : focus)
+        case .up: target = focus <= columns ? 0 : focus - columns
         }
         click(valid(target) ? target : focus)
     }
