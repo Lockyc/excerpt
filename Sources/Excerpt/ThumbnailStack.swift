@@ -179,16 +179,8 @@ final class ThumbnailPanel: NSPanel {
         preview.frame = CGRect(x: 0, y: below, width: width, height: imageHeight)
         container.addSubview(preview)
         if isRecording && !isGIF {
-            let play = NSImageView(
-                image: NSImage(systemSymbolName: "play.fill", accessibilityDescription: "Video")
-                    ?? NSImage())
-            play.symbolConfiguration = .init(pointSize: 36, weight: .regular)
-            play.contentTintColor = .white
-            play.shadow = NSShadow()
-            play.shadow?.shadowBlurRadius = 4
-            play.shadow?.shadowColor = .black.withAlphaComponent(0.6)
-            play.frame = CGRect(
-                x: (width - 56) / 2, y: (imageHeight - 56) / 2, width: 56, height: 56)
+            let play = PlayGlyph(pointSize: 36)
+            play.centre(in: preview.frame.size)
             preview.addSubview(play)
         }
 
@@ -276,6 +268,34 @@ final class ThumbnailPanel: NSPanel {
         orderOut(nil)
         onClose(self)
     }
+}
+
+/// A recording's play glyph over its poster frame. It takes no clicks, so a press on it reaches
+/// the poster beneath, to copy or drag the file.
+@MainActor
+final class PlayGlyph: NSImageView {
+    /// `pointSize` is the symbol's; the view is a square with room for its shadow.
+    init(pointSize: CGFloat) {
+        super.init(frame: .zero)
+        image = NSImage(systemSymbolName: "play.fill", accessibilityDescription: "Video")
+        symbolConfiguration = .init(pointSize: pointSize, weight: .regular)
+        contentTintColor = .white
+        shadow = NSShadow()
+        shadow?.shadowBlurRadius = 4
+        shadow?.shadowColor = .black.withAlphaComponent(0.6)
+        let side = (pointSize * 14 / 9).rounded()
+        setFrameSize(NSSize(width: side, height: side))
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    /// Centres the glyph in a superview of `size`.
+    func centre(in size: NSSize) {
+        setFrameOrigin(
+            CGPoint(x: (size.width - frame.width) / 2, y: (size.height - frame.height) / 2))
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
 /// The preview image; dragging it hands the file to the drop target.

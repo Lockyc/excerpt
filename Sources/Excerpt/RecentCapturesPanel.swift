@@ -270,7 +270,7 @@ private final class RecentTile: NSView {
     private var image: DragImageView?
     private let age = Pill()
     private let copied = Pill()
-    private let play = NSImageView()
+    private let play: PlayGlyph
     private let note = NSTextField(labelWithString: "")
     private let editButton = FirstMouseButton(title: "Edit", target: nil, action: nil)
     /// Which flash is current, so an older one's timer doesn't hide a newer "Copied".
@@ -278,21 +278,13 @@ private final class RecentTile: NSView {
 
     init(frame: CGRect, isHero: Bool) {
         self.isHero = isHero
+        play = PlayGlyph(pointSize: isHero ? 36 : 22)
         super.init(frame: frame)
         wantsLayer = true
         layer?.cornerRadius = 6
         layer?.masksToBounds = true
 
-        play.image = NSImage(systemSymbolName: "play.fill", accessibilityDescription: "Video")
-        play.symbolConfiguration = .init(pointSize: isHero ? 36 : 22, weight: .regular)
-        play.contentTintColor = .white
-        play.shadow = NSShadow()
-        play.shadow?.shadowBlurRadius = 4
-        play.shadow?.shadowColor = .black.withAlphaComponent(0.6)
-        let glyph: CGFloat = isHero ? 56 : 34
-        play.frame = CGRect(
-            x: (bounds.width - glyph) / 2, y: (bounds.height - glyph) / 2,
-            width: glyph, height: glyph)
+        play.centre(in: bounds.size)
 
         note.alignment = .center
         note.textColor = .secondaryLabelColor
@@ -396,7 +388,8 @@ private final class RecentTile: NSView {
     }
 }
 
-/// A short white label on a dark rounded backing, legible over any thumbnail.
+/// A short white label on a dark rounded backing, legible over any thumbnail. It takes no
+/// clicks, so a press on it reaches the thumbnail beneath, to copy or drag the file.
 @MainActor
 private final class Pill: NSView {
     private let label = NSTextField(labelWithString: "")
@@ -422,4 +415,6 @@ private final class Pill: NSView {
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
