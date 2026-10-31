@@ -63,6 +63,9 @@ final class CaptureCoordinator {
     /// Stops the recording in progress, if any, keeping it.
     func stopRecording() { recording?.stop() }
 
+    /// Whether a capture is under way, selecting or delivering.
+    var isRunning: Bool { running }
+
     /// Whether a recording is in progress or a stopped one is still saving.
     var isRecordingOrSaving: Bool { recording != nil || !saves.isEmpty }
 
@@ -253,6 +256,9 @@ final class CaptureCoordinator {
             default:
                 break
             }
+        case .recent:
+            // The app opens the panel itself; the coordinator never receives it.
+            break
         }
     }
 
@@ -273,7 +279,7 @@ final class CaptureCoordinator {
         case .record:
             guard !promptedForInputMonitoring(overlay: overlay) else { return }
             await record(still: still, pixelRect: rect, window: nil, overlay: overlay)
-        case .window, .fullscreen, .selector: break
+        case .window, .fullscreen, .selector, .recent: break
         }
     }
 

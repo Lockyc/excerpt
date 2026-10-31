@@ -34,10 +34,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         applyHotKeys()
         statusMenu = StatusMenu(
             perform: { [weak self] in self?.perform($0) },
-            recentCaptures: { [weak self] in
-                try self?.preferences.store.recentCaptures(limit: StatusMenu.recentLimit) ?? []
-            },
-            openCapture: { [weak self] in self?.openEditor($0) },
             chooseCapture: { [weak self] in self?.chooseCapture() },
             openLibrary: { [weak self] in self?.openLibrary() },
             openSettings: { [weak self] in self?.openSettings() },
@@ -99,13 +95,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var openingCaptures: Set<URL> = []
     private lazy var coordinator = CaptureCoordinator(
         preferences: preferences,
-        onDelivered: { [weak self] url, image in self?.thumbnails.show(url: url, image: image) },
+        onDelivered: { [weak self] url, image in
+            self?.thumbnails.show(url: url, image: image)
+            self?.recentPanel.reloadIfShown()
+        },
         onRecorded: { [weak self] url, poster, note in
             self?.thumbnails.show(url: url, image: poster, isRecording: true, note: note)
+            self?.recentPanel.reloadIfShown()
         },
         onRecordingTime: { [weak self] in self?.statusMenu?.showRecording($0) })
 
+    private lazy var recentPanel = RecentCapturesPanel(
+        recentCaptures: { [weak self] in
+            try self?.preferences.store.recentCaptures(limit: RecentLayout.tileCount) ?? []
+        },
+        libraryFolder: { [weak self] in self?.preferences.libraryFolder ?? URL(filePath: "/") },
+        onEdit: { [weak self] urls in self?.openEditors(urls) },
+        onOpenLibrary: { [weak self] in self?.openLibrary() })
+
+    /// Recent Captures opens beside a capture, never during one: the selection overlay owns the
+    /// screen and the keyboard until it ends.
     func perform(_ action: HotKeyAction) {
+        if action == .recent {
+            if !coordinator.isRunning { recentPanel.toggle() }
+            return
+        }
         Task { @MainActor in await coordinator.run(action) }
     }
 

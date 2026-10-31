@@ -10,8 +10,12 @@ enum HotKeyAction: UInt32, CaseIterable {
     case text = 5
     case record = 7
     case selector = 6
+    case recent = 8
 
     var id: UInt32 { rawValue }
+
+    /// Whether the action starts a capture: everything but opening Recent Captures.
+    var isCapture: Bool { self != .recent }
 
     var title: String {
         switch self {
@@ -22,6 +26,7 @@ enum HotKeyAction: UInt32, CaseIterable {
         case .text: "Capture Text"
         case .record: "Record Screen"
         case .selector: "Choose Capture Mode…"
+        case .recent: "Recent Captures"
         }
     }
 
@@ -37,6 +42,8 @@ enum HotKeyAction: UInt32, CaseIterable {
             HotKeyBinding(keyCode: UInt32(kVK_ANSI_6), modifiers: HotKeyBinding.commandShift)
         case .record:
             HotKeyBinding(keyCode: UInt32(kVK_ANSI_7), modifiers: HotKeyBinding.commandShift)
+        case .recent:
+            HotKeyBinding(keyCode: UInt32(kVK_ANSI_4), modifiers: UInt32(optionKey))
         case .fullscreen, .scrolling: nil
         }
     }
@@ -60,6 +67,7 @@ enum HotKeyAction: UInt32, CaseIterable {
         case .fullscreen: "display"
         case .record: "record.circle"
         case .selector: "rectangle.3.group"
+        case .recent: "clock.arrow.circlepath"
         }
     }
 
@@ -67,7 +75,7 @@ enum HotKeyAction: UInt32, CaseIterable {
     var usesArea: Bool {
         switch self {
         case .area, .scrolling, .text, .record: true
-        case .window, .fullscreen, .selector: false
+        case .window, .fullscreen, .selector, .recent: false
         }
     }
 }
@@ -92,7 +100,7 @@ extension HotKeyAction {
     var selects: Bool {
         switch self {
         case .area, .window, .scrolling, .text, .record, .selector: true
-        case .fullscreen: false
+        case .fullscreen, .recent: false
         }
     }
 }
