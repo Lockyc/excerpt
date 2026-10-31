@@ -327,7 +327,7 @@ the Finder. The Recent Captures hotkey (⌥4) or the menu bar's Recent Captures 
 the display under the pointer; the hotkey again, `Esc`, or a click elsewhere closes it. It is a
 non-activating `NSPanel` like the thumbnail's, so the app in front keeps focus for the paste.
 
-- **Layout:** the newest capture across the top third, the next six in a 3×2 grid below — the
+- **Layout:** the newest capture across the top half, the next six in a 3×2 grid below — the
   library's newest by creation date, masters left out (`LibraryStore.recentCaptures`), so the
   panel always agrees with the library. Each tile shows its age (`now`, `4m`, `Yest.`, `Thu`); a
   recording shows its first frame with a play glyph. Fewer captures leave tiles empty; an empty
