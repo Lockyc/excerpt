@@ -117,6 +117,33 @@ import Testing
                 == CGRect(x: 0, y: -450, width: 100, height: 500))
     }
 
+    @Test func aVeryTallImageShowsOnlyItsTopRows() {
+        let shown = RecentLayout.thumbnailRows(
+            pixels: CGSize(width: 200, height: 1000), tile: tile, scale: 2)
+        #expect(shown.rows == 100)
+        #expect(shown.frame == CGRect(x: 0, y: 0, width: 100, height: 50))
+    }
+
+    @Test func aTallImageKeepsTheRowThatReachesTheTileBottom() {
+        // 3 points per 7 pixels: 50 points of tile are 116.67 rows, so 117 are decoded.
+        let shown = RecentLayout.thumbnailRows(
+            pixels: CGSize(width: 700, height: 7000), tile: CGSize(width: 300, height: 50),
+            scale: 2)
+        #expect(shown.rows == 117)
+        #expect(abs(shown.frame.maxY - 50) < 0.001)
+        #expect(shown.frame.minY <= 0)
+    }
+
+    @Test func anImageThatFitsShowsEveryRow() {
+        for pixels in [CGSize(width: 400, height: 100), CGSize(width: 200, height: 240)] {
+            let shown = RecentLayout.thumbnailRows(pixels: pixels, tile: tile, scale: 2)
+            let whole = RecentLayout.thumbnailFrame(pixels: pixels, tile: tile, scale: 2)
+            #expect(shown.rows == Int(pixels.height))
+            #expect(abs(shown.frame.minY - whole.minY) < 0.001)
+            #expect(abs(shown.frame.height - whole.height) < 0.001)
+        }
+    }
+
     @Test func aTinyImageIsNeverScaledUp() {
         #expect(
             RecentLayout.thumbnailFrame(

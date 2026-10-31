@@ -138,6 +138,25 @@ public enum PNGChunks {
         return out
     }
 
+    /// The length of a PNG's signature and its `IHDR` chunk, which always comes first.
+    static let headerLength = 33
+
+    /// `png`'s signature and `IHDR` with the image `rows` tall, to stand in for its first
+    /// `headerLength` bytes. A decoder then stops after the top `rows` and ignores the image data
+    /// past them, so the top of a tall PNG decodes for the cost of the top alone. Nil when `png`
+    /// doesn't open with an `IHDR` taller than `rows` and non-interlaced: an interlaced image's
+    /// rows arrive in passes over the whole image, so its top is not a prefix of its data.
+    public static func header(of png: Data, rows: Int) -> Data? {
+        let head = Array(png.prefix(headerLength))
+        func word(_ at: Int) -> UInt32 { head[at..<(at + 4)].reduce(0) { $0 << 8 | UInt32($1) } }
+        guard head.count == headerLength, head.prefix(8).elementsEqual(signature),
+            word(8) == 13, ChunkType(word(12)) == ChunkType("IHDR"),
+            rows > 0, UInt32(rows) < word(20), head[28] == 0
+        else { return nil }
+        let data = Array(head[16..<20]) + bigEndian(UInt32(rows)) + Array(head[24..<29])
+        return Data(Array(head[0..<16]) + data + bigEndian(crc32(Array(head[12..<16]) + data)))
+    }
+
     public static func text(keyword: String, in png: Data) throws -> String? {
         try scan(png, keyword: keyword).text
     }

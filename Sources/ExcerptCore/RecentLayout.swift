@@ -59,6 +59,25 @@ public enum RecentLayout {
             width: size.width, height: size.height)
     }
 
+    /// The rows of an image of `pixels`, counted from its top, that show in a tile of `tile`
+    /// points on a display of `scale`, and where those rows draw in the tile: every row of an
+    /// image that fits, and of a tall one only those `thumbnailFrame` leaves inside the tile, so a
+    /// stitched page's thumbnail is decoded and held at the tile's pixels rather than the page's.
+    public static func thumbnailRows(pixels: CGSize, tile: CGSize, scale: CGFloat) -> (
+        rows: Int, frame: CGRect
+    ) {
+        let whole = thumbnailFrame(pixels: pixels, tile: tile, scale: scale)
+        let factor = whole.width / pixels.width
+        let shown = whole.maxY - max(whole.minY, 0)
+        // The epsilon keeps a float's last bit from adding a whole row.
+        let rows = min(Int(pixels.height), Int((shown / factor - 1e-6).rounded(.up)))
+        let height = CGFloat(rows) * factor
+        return (
+            rows,
+            CGRect(x: whole.minX, y: whole.maxY - height, width: whole.width, height: height)
+        )
+    }
+
     /// The footer's frame, along the bottom inside the padding.
     public static func footer(side: CGFloat = side) -> CGRect {
         CGRect(x: padding, y: padding, width: side - 2 * padding, height: footerHeight)

@@ -90,4 +90,57 @@ import UniformTypeIdentifiers
         #expect(try MasterFile.decode(png).edits == nil)
         #expect(try PNGChunks.text(keyword: PNGChunks.editsKeyword, in: png) == nil)
     }
+
+    /// Whether `image` holds `Fixtures.rowStripes`' top rows, one per row.
+    func showsTopStripes(_ image: CGImage) -> Bool {
+        let pixels = PixelBuffer(image)
+        return (0..<image.height).allSatisfy { y in
+            (0..<image.width).allSatisfy { x in pixels[x: x, y: y] == Fixtures.rowColor(y) }
+        }
+    }
+
+    @Test func aShortenedHeaderDecodesOnlyTheTopRows() throws {
+        let png = try PNGCodec.encode(Fixtures.rowStripes(width: 40, height: 400), scale: 1)
+        let head = try #require(PNGChunks.header(of: png, rows: 30))
+        #expect(head.count == PNGChunks.headerLength)
+        let source = try #require(
+            CGImageSourceCreateWithData((head + png.dropFirst(head.count)) as CFData, nil))
+        let top = try #require(CGImageSourceCreateImageAtIndex(source, 0, nil))
+        #expect(top.width == 40 && top.height == 30)
+        #expect(showsTopStripes(top))
+    }
+
+    @Test func aHeaderIsShortenedOnlyForAPlainPNGTallerThanAsked() throws {
+        let png = try PNGCodec.encode(Fixtures.rowStripes(width: 40, height: 400), scale: 1)
+        #expect(PNGChunks.header(of: png, rows: 400) == nil)
+        #expect(PNGChunks.header(of: png, rows: 0) == nil)
+        #expect(PNGChunks.header(of: Data(count: 64), rows: 30) == nil)
+        var interlaced = png
+        interlaced[28] = 1
+        #expect(PNGChunks.header(of: interlaced, rows: 30) == nil)
+    }
+
+    @Test func thumbnailDecoderReadsTheTopRowsAtTheWidthAsked() throws {
+        let png = try PNGCodec.encode(Fixtures.rowStripes(width: 40, height: 400), scale: 1)
+        #expect(ThumbnailDecoder.pixelSize(of: png) == CGSize(width: 40, height: 400))
+        let top = try #require(ThumbnailDecoder.topRows(of: png, rows: 30, width: 40))
+        #expect(top.width == 40 && top.height == 30)
+        #expect(showsTopStripes(top))
+        let half = try #require(ThumbnailDecoder.topRows(of: png, rows: 30, width: 20))
+        #expect(half.width == 20 && half.height == 15)
+        let whole = try #require(ThumbnailDecoder.topRows(of: png, rows: 400, width: 80))
+        #expect(whole.width == 40 && whole.height == 400)
+    }
+
+    @Test func thumbnailDecoderCopiesTheTopRowsOfAnImageThatIsNotAPNG() throws {
+        let data = NSMutableData()
+        let destination = try #require(
+            CGImageDestinationCreateWithData(data, UTType.tiff.identifier as CFString, 1, nil))
+        CGImageDestinationAddImage(destination, Fixtures.rowStripes(width: 40, height: 400), nil)
+        #expect(CGImageDestinationFinalize(destination))
+        let top = try #require(ThumbnailDecoder.topRows(of: data as Data, rows: 30, width: 40))
+        #expect(top.width == 40 && top.height == 30)
+        #expect(showsTopStripes(top))
+        #expect(ThumbnailDecoder.topRows(of: Data(count: 64), rows: 30, width: 40) == nil)
+    }
 }
