@@ -93,3 +93,84 @@ import Testing
         }
     }
 }
+
+@Suite struct RecentSelectionTests {
+    @Test func opensOnTheNewest() {
+        let selection = RecentSelection(count: 7)
+        #expect(selection.focus == 0)
+        #expect(selection.selected == [0])
+    }
+
+    @Test func emptyHasNoFocus() {
+        let empty = RecentSelection(count: 0)
+        #expect(empty.focus == nil)
+        #expect(empty.selected.isEmpty)
+        for direction in [RecentSelection.Direction.left, .right, .up, .down] {
+            var moved = empty
+            moved.move(direction)
+            #expect(moved == empty)
+        }
+    }
+
+    @Test func clickReplaces() {
+        var selection = RecentSelection(count: 7)
+        selection.click(3)
+        #expect(selection.selected == [3])
+        #expect(selection.focus == 3)
+    }
+
+    @Test func toggleAddsAndRemoves() {
+        var selection = RecentSelection(count: 7)
+        selection.click(1)
+        selection.toggle(4)
+        #expect(selection.selected == [1, 4])
+        selection.toggle(1)
+        #expect(selection.selected == [4])
+        #expect(selection.focus == 1)
+    }
+
+    @Test func extendFillsFromAnchor() {
+        var selection = RecentSelection(count: 7)
+        selection.click(2)
+        selection.extend(to: 5)
+        #expect(selection.selected == [2, 3, 4, 5])
+        #expect(selection.focus == 5)
+        selection.extend(to: 1)
+        #expect(selection.selected == [1, 2])
+    }
+
+    @Test func arrowsFollowTheGrid() {
+        func moved(from start: Int, _ direction: RecentSelection.Direction) -> Int? {
+            var selection = RecentSelection(count: 7)
+            selection.click(start)
+            selection.move(direction)
+            return selection.focus
+        }
+        #expect(moved(from: 0, .right) == 1)
+        #expect(moved(from: 0, .down) == 1)
+        #expect(moved(from: 2, .down) == 5)
+        #expect(moved(from: 5, .up) == 2)
+        #expect(moved(from: 2, .up) == 0)
+        #expect(moved(from: 1, .left) == 0)
+        #expect(moved(from: 6, .right) == 6)
+        #expect(moved(from: 0, .left) == 0)
+    }
+
+    @Test func moveStaysOnFilledTiles() {
+        var selection = RecentSelection(count: 3)
+        selection.click(2)
+        selection.move(.down)
+        #expect(selection.focus == 2)
+        selection.move(.right)
+        #expect(selection.focus == 2)
+    }
+
+    @Test func seriesLeavesOutRecordings() {
+        var selection = RecentSelection(count: 7)
+        selection.click(0)
+        selection.toggle(2)
+        selection.toggle(5)
+        #expect(selection.series(recordings: [2]) == [0, 5])
+        #expect(selection.series(recordings: [0, 2]) == [5])
+    }
+}
