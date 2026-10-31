@@ -87,6 +87,7 @@ The tear's shape is seeded from the cut's position, so identical edits render id
 | ⌘⇧5 | Capture text (OCR → clipboard, no file; a chime when the read is done) |
 | ⌘⇧6 | Mode bar (area / scrolling / text / record / window / fullscreen) |
 | ⌘⇧7 | Record (see [Recording](#recording)) |
+| ⌥4 | Recent Captures (see [Recent Captures](#recent-captures)) |
 
 Hotkeys use Carbon `RegisterEventHotKey` (no permission, no dependency) and are all rebindable
 in Settings, which refuses a combination another action holds, one of the editor's shortcuts or
@@ -267,7 +268,7 @@ during the recording, so the screen stays clean and either can be turned off aft
   recording's edit document in the movie's metadata, so the edits travel inside the master as
   they do in a screenshot's. It is written in fragments (`MasterWriter.fragmentInterval`), so a
   crash mid-recording leaves a master that opens.
-- The library treats a recording pair as it does a PNG pair: Recent Captures lists recordings
+- The library treats a recording pair as it does a PNG pair: Recent Captures shows recordings
   (opening the recording editor, each shown by the primary's first frame), filing moves the
   master with its primary.
 
@@ -319,11 +320,39 @@ The recording's edit document (`RecordingEdits`, Core, versioned) holds the trim
 master pixels, each with an optional time span), the two toggles, the format and the blur salt.
 Render order per frame: blur → clicks → shortcuts → scale to the output size.
 
+## Recent Captures
+
+A square floating panel of the library's newest captures, for getting a recent one back without
+the Finder. The Recent Captures hotkey (⌥4) or the menu bar's Recent Captures opens it centred on
+the display under the pointer; the hotkey again, `Esc`, or a click elsewhere closes it. It is a
+non-activating `NSPanel` like the thumbnail's, so the app in front keeps focus for the paste.
+
+- **Layout:** the newest capture across the top third, the next six in a 3×2 grid below — the
+  library's newest by creation date, masters left out (`LibraryStore.recentCaptures`), so the
+  panel always agrees with the library. Each tile shows its age (`now`, `4m`, `Yest.`, `Thu`); a
+  recording shows its first frame with a play glyph. Fewer captures leave tiles empty; an empty
+  or unreadable library says so in the top tile, the layout unchanged. A capture landing while
+  the panel is open joins it at the top.
+- **Click** copies the capture as a capture's clipboard is filled after it is taken (a recording
+  as the file and GIF data), the tile confirms "Copied", and the panel stays open.
+- **Drag** takes the file out through the thumbnail's drag (`DragImageView`), so it lands
+  wherever the thumbnail's drag does; the panel stays open.
+- **Hover** shows Edit on the tile: the image editor, or the recording editor for a recording.
+  Opening an editor closes the panel.
+- **⌘-click / ⇧-click** select several without copying; **Edit All** in the footer opens the
+  selected screenshots as a series, disabled with its reason under two (recordings are left out,
+  as in the thumbnails' Edit All).
+- **Keys:** arrows move the selection, `Return` copies it.
+- **Footer:** Edit All · Open Library Folder · **Show All in glance**, which opens glance
+  (`com.lockyc.glance`) on the library folder — disabled, saying glance isn't installed, when it
+  isn't.
+
+The menu bar keeps Open Library Folder and Open Capture… as top-level items.
+
 ## Editor
 
-Opens from the thumbnail's Edit, from the menu bar's Recent Captures (the library's newest
-`StatusMenu.recentLimit` captures by creation date, masters left out, then Open Capture… for any
-other), or by opening a capture (registered as an Open With handler for PNG, not the default). Fits to width; tall captures scroll. Floats above other windows; no
+Opens from the thumbnail's Edit, from [Recent Captures](#recent-captures), from Open Capture…
+in the menu bar, or by opening a capture (registered as an Open With handler for PNG, not the default). Fits to width; tall captures scroll. Floats above other windows; no
 Dock icon. Several captures opened together — the thumbnails' Edit All, a multiple choice in Open
 Capture…, several files handed over at once by Finder or another app — open as one **series**.
 
