@@ -49,6 +49,7 @@ where they were saved.
 | ⌘⇧5 | Text — OCR straight to the clipboard, no file |
 | ⌘⇧6 | Select an area, adjust it, then pick area, scrolling, text, window, fullscreen or record from a bar over it |
 | ⌘⇧7 | Record — select an area, click a window or press F for the display, then Return; ⌘⇧7 again stops |
+| ⌥4 | Recent Captures — your last seven captures in a floating panel: click copies, drag it out, hover to edit |
 
 macOS's own screenshot shortcuts hold ⌘⇧3 to ⌘⇧5 until they are turned off in System Settings →
 Keyboard → Keyboard Shortcuts → Screenshots, or Excerpt's are rebound in its Settings. Excerpt's
@@ -74,7 +75,7 @@ on a background of its colour), numbered steps, highlight, blur,
 crop and **cut** (`C`); a selected item's colour, size and options float beside it. To cut,
 drag across the rows or columns to remove; the join becomes a torn seam. Cut and blurred
 content never reaches the saved file. The original and your edits are kept in a separate
-`… original.png`, so you can reopen a capture from the menu bar's **Recent Captures** and
+`… original.png`, so you can reopen a capture from **Recent Captures** (⌥4) and
 adjust them. **Border** frames the image in a solid line of your colour and width, added
 around it rather than over its edge, so a
 screenshot pasted into an email stands apart from the text around it. Drawing or dragging

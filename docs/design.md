@@ -324,7 +324,7 @@ Render order per frame: blur → clicks → shortcuts → scale to the output si
 
 A square floating panel of the library's newest captures, for getting a recent one back without
 the Finder. The Recent Captures hotkey (⌥4) or the menu bar's Recent Captures opens it centred on
-the display under the pointer; the hotkey again, `Esc`, or a click elsewhere closes it. It is a
+the display under the pointer; the hotkey again, `Esc`, or a click elsewhere (another Excerpt window included) closes it; the hotkey does nothing while a capture runs. It is a
 non-activating `NSPanel` like the thumbnail's, so the app in front keeps focus for the paste.
 
 - **Layout:** the newest capture across the top half, the next six in a 3×2 grid below — the
@@ -332,7 +332,7 @@ non-activating `NSPanel` like the thumbnail's, so the app in front keeps focus f
   panel always agrees with the library. Each tile shows its age (`now`, `4m`, `Yest.`, `Thu`); a
   recording shows its first frame with a play glyph. Fewer captures leave tiles empty; an empty
   or unreadable library says so in the top tile, the layout unchanged. A capture landing while
-  the panel is open joins it at the top.
+  the panel is open joins it at the top and resets the selection.
 - **Click** copies the capture as a capture's clipboard is filled after it is taken (a recording
   as the file and GIF data), the tile confirms "Copied", and the panel stays open.
 - **Drag** takes the file out through the thumbnail's drag (`DragImageView`), so it lands
@@ -342,7 +342,7 @@ non-activating `NSPanel` like the thumbnail's, so the app in front keeps focus f
 - **⌘-click / ⇧-click** select several without copying; **Edit All** in the footer opens the
   selected screenshots as a series, disabled with its reason under two (recordings are left out,
   as in the thumbnails' Edit All).
-- **Keys:** arrows move the selection, `Return` copies it.
+- **Keys:** arrows move the selection, `Return` copies the focused tile while it is selected.
 - **Footer:** Edit All · Open Library Folder · **Show All in glance**, which opens glance
   (`com.lockyc.glance`) on the library folder — disabled, saying glance isn't installed, when it
   isn't.
