@@ -58,6 +58,9 @@ final class RecentCapturesPanel: NSPanel {
             let tile = RecentTile(frame: rect, isHero: index == 0)
             tile.onClick = { [weak self] flags in self?.clicked(index, flags) }
             tile.onEdit = { [weak self] url in self?.finish { self?.onEdit([url]) } }
+            tile.onOpen = { [weak self] url in
+                self?.finish { _ = NSWorkspace.shared.open(url) }
+            }
             tiles.append(tile)
             container.addSubview(tile)
         }
@@ -253,15 +256,18 @@ final class RecentCapturesPanel: NSPanel {
     }
 }
 
-/// One capture's tile: its thumbnail to click or drag, its age, a play glyph for a recording,
-/// Edit while hovered, the selection border, and "Copied" after a copy. Empty, it is a plain
-/// fill, the hero carrying a note when the whole library is empty or unreadable.
+/// One capture's tile: its thumbnail to click, double-click open or drag, its age, a play glyph
+/// for a recording, Open and Edit while hovered, the selection border, and "Copied" after a
+/// copy. Empty, it is a plain fill, the hero carrying a note when the whole library is empty or
+/// unreadable.
 @MainActor
 private final class RecentTile: NSView {
     var onClick: (NSEvent.ModifierFlags) -> Void = { _ in }
     var onEdit: (URL) -> Void = { _ in }
+    /// Opens the capture in its default app.
+    var onOpen: (URL) -> Void = { _ in }
     var isSelected = false { didSet { needsDisplay = true } }
-    var hovering = false { didSet { showEdit() } }
+    var hovering = false { didSet { showActions() } }
 
     private let isHero: Bool
     private var url: URL?
@@ -271,6 +277,7 @@ private final class RecentTile: NSView {
     private let play: PlayGlyph
     private let note = NSTextField(labelWithString: "")
     private let editButton = FirstMouseButton(title: "Edit", target: nil, action: nil)
+    private let openButton = FirstMouseButton(title: "Open", target: nil, action: nil)
     /// Which flash is current, so an older one's timer doesn't hide a newer "Copied".
     private var flash = 0
 
@@ -288,18 +295,27 @@ private final class RecentTile: NSView {
         note.textColor = .secondaryLabelColor
         note.frame = CGRect(x: 8, y: bounds.midY - 10, width: bounds.width - 16, height: 20)
 
-        editButton.target = self
-        editButton.action = #selector(editTapped)
-        editButton.bezelStyle = .push
-        editButton.controlSize = isHero ? .regular : .small
-        editButton.sizeToFit()
-        editButton.setFrameOrigin(
-            CGPoint(x: bounds.width - editButton.frame.width - 4, y: 2))
-        editButton.isHidden = true
+        // Open and Edit sit together at the bottom right, Edit at the edge.
+        var right = bounds.width - 4
+        for (button, action) in [
+            (editButton, #selector(editTapped)), (openButton, #selector(openTapped)),
+        ] {
+            button.target = self
+            button.action = action
+            button.bezelStyle = .push
+            button.controlSize = isHero ? .regular : .small
+            button.sizeToFit()
+            right -= button.frame.width
+            button.setFrameOrigin(CGPoint(x: right, y: 2))
+            right -= 4
+            button.isHidden = true
+        }
 
         copied.text = "Copied"
         copied.isHidden = true
-        for view in [play, note, age, copied, editButton] as [NSView] { addSubview(view) }
+        for view in [play, note, age, copied, openButton, editButton] as [NSView] {
+            addSubview(view)
+        }
 
         addTrackingArea(
             NSTrackingArea(
@@ -312,8 +328,11 @@ private final class RecentTile: NSView {
     override func mouseEntered(with event: NSEvent) { hovering = true }
     override func mouseExited(with event: NSEvent) { hovering = false }
 
-    /// Edit shows only on a capture, while the pointer is over it.
-    private func showEdit() { editButton.isHidden = !hovering || url == nil }
+    /// Open and Edit show only on a capture, while the pointer is over it.
+    private func showActions() {
+        editButton.isHidden = !hovering || url == nil
+        openButton.isHidden = editButton.isHidden
+    }
 
     /// Shows a capture, its thumbnail loaded at this tile's size for a display of `scale`.
     func show(_ url: URL, isRecording: Bool, scale: CGFloat, age label: String?) {
@@ -321,6 +340,7 @@ private final class RecentTile: NSView {
         let view = DragImageView(url: url, image: NSImage(size: bounds.size)) {}
         view.frame = bounds
         view.onClick = { [weak self] flags in self?.onClick(flags) }
+        view.onDoubleClick = { [weak self] in self?.onOpen(url) }
         replaceImage(with: view)
         CaptureThumbnail.load(url, size: bounds.size, scale: scale) { [weak view] in
             view?.image = $0
@@ -331,7 +351,7 @@ private final class RecentTile: NSView {
         age.isHidden = label == nil
         age.setFrameOrigin(CGPoint(x: 6, y: 6))
         endFlash()
-        showEdit()
+        showActions()
         needsDisplay = true
     }
 
@@ -344,7 +364,7 @@ private final class RecentTile: NSView {
         note.stringValue = text ?? ""
         note.isHidden = text == nil
         endFlash()
-        showEdit()
+        showActions()
         needsDisplay = true
     }
 
@@ -376,6 +396,7 @@ private final class RecentTile: NSView {
     }
 
     @objc private func editTapped() { if let url { onEdit(url) } }
+    @objc private func openTapped() { if let url { onOpen(url) } }
 
     override var wantsUpdateLayer: Bool { true }
 

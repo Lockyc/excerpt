@@ -8,7 +8,7 @@ public enum RecentLayout {
     public static let columns = 3
     public static let tileCount = 1 + 2 * columns
     /// The panel is `side` × `side` points.
-    public static let side: CGFloat = 440
+    public static let side: CGFloat = 640
     public static let padding: CGFloat = 10
     public static let gap: CGFloat = 6
     public static let footerHeight: CGFloat = 32

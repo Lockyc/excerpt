@@ -306,8 +306,11 @@ final class DragImageView: NSImageView, NSDraggingSource {
     /// A press released without a drag, with the modifiers held at the press, so letting go of
     /// ⌘ before the button doesn't turn a ⌘-click into a plain one.
     var onClick: ((NSEvent.ModifierFlags) -> Void)?
+    /// The second press of a double-click released without a drag; the first one has already
+    /// been reported to `onClick`.
+    var onDoubleClick: (() -> Void)?
     /// The current press, until it is released or becomes a drag.
-    private var press: (location: CGPoint, flags: NSEvent.ModifierFlags)?
+    private var press: (location: CGPoint, flags: NSEvent.ModifierFlags, clicks: Int)?
 
     init(url: URL, image: NSImage, onDragged: @escaping () -> Void) {
         self.url = url
@@ -323,14 +326,18 @@ final class DragImageView: NSImageView, NSDraggingSource {
 
     /// Not NSImageView's, which would eat the drag.
     override func mouseDown(with event: NSEvent) {
-        press = (event.locationInWindow, event.modifierFlags)
+        press = (event.locationInWindow, event.modifierFlags, event.clickCount)
     }
 
     /// A drag's session swallows the release, so this is only ever a click.
     override func mouseUp(with event: NSEvent) {
         guard let press else { return }
         self.press = nil
-        onClick?(press.flags)
+        if press.clicks == 2, let onDoubleClick {
+            onDoubleClick()
+        } else {
+            onClick?(press.flags)
+        }
     }
 
     /// The drag starts once the pointer leaves `DragThreshold` of the press.

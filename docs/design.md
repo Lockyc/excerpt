@@ -339,8 +339,9 @@ focus for the paste.
   as the file and GIF data), the tile confirms "Copied", and the panel stays open.
 - **Drag** takes the file out through the thumbnail's drag (`DragImageView`), so it lands
   wherever the thumbnail's drag does; the panel stays open.
-- **Hover** shows Edit on the tile: the image editor, or the recording editor for a recording.
-  Opening an editor closes the panel.
+- **Hover** shows Open and Edit on the tile. Open (or a double-click) opens the capture in its
+  default app; Edit opens the image editor, or the recording editor for a recording. Either
+  closes the panel.
 - **⌘-click / ⇧-click** select several without copying; **Edit All** in the footer opens the
   selected screenshots as a series, disabled with its reason under two (recordings are left out,
   as in the thumbnails' Edit All).
