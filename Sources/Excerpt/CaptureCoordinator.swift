@@ -132,7 +132,10 @@ final class CaptureCoordinator {
                 action = next
             }
         } catch {
-            Alerts.show("Capture failed", error.localizedDescription)
+            // The deferred close runs only once this catch returns, and the clear overlay sits
+            // above the alert taking every click on every display.
+            overlay.close()
+            Alerts.captureFailed(error)
         }
     }
 

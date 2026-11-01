@@ -2,6 +2,7 @@ import AppKit
 import ExcerptCapture
 import ExcerptCore
 import ExcerptExport
+import ScreenCaptureKit
 
 @MainActor
 enum Alerts {
@@ -11,6 +12,42 @@ enum Alerts {
         alert.informativeText = message
         NSApp.activate()
         alert.runModal()
+    }
+
+    /// A capture couldn't take its stills. ScreenCaptureKit declines a process whose app bundle
+    /// was replaced on disk while it ran, though Screen Recording still reads as granted; only a
+    /// fresh launch of the new bundle is recognised again, so that case offers the relaunch.
+    static func captureFailed(_ error: Error) {
+        let nsError = error as NSError
+        guard nsError.domain == SCStreamErrorDomain,
+            nsError.code == SCStreamError.Code.userDeclined.rawValue,
+            ScreenCapturer.hasPermission()
+        else { return show("Capture failed", sentence(error.localizedDescription)) }
+        let alert = NSAlert()
+        alert.messageText = "Excerpt needs to reopen to capture"
+        alert.informativeText =
+            "Excerpt was updated while it was running, so macOS won't let this copy record the screen."
+        alert.addButton(withTitle: "Reopen Excerpt")
+        alert.addButton(withTitle: "Cancel")
+        NSApp.activate()
+        if alert.runModal() == .alertFirstButtonReturn { relaunch() }
+    }
+
+    /// Opens a new instance of the bundle on disk, then quits this one.
+    private static func relaunch() {
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.createsNewApplicationInstance = true
+        NSWorkspace.shared.openApplication(
+            at: Bundle.main.bundleURL, configuration: configuration
+        ) { _, error in
+            DispatchQueue.main.async {
+                if let error {
+                    show("Couldn't reopen Excerpt", sentence(error.localizedDescription))
+                } else {
+                    NSApp.terminate(nil)
+                }
+            }
+        }
     }
 
     /// `text` closed with a full stop, unless it already ends in punctuation: error
