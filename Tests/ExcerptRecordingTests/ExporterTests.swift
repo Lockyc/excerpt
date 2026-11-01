@@ -83,6 +83,18 @@ import Testing
         #expect(!Self.exists(paths.primary(.gif)))
     }
 
+    @Test func aFormatSwitchKeepsTheRecordingsCreationDate() async throws {
+        let (master, paths) = try await SyntheticMaster.master(Self.moving(3))
+        let gif = try await RecordingExporter.export(
+            master, edits: .fresh(duration: master.duration, format: .gif), to: paths)
+        let weeksAgo = Date(timeIntervalSinceNow: -21 * 24 * 60 * 60)
+        try FileManager.default.setAttributes([.creationDate: weeksAgo], ofItemAtPath: gif.url.path)
+        let mp4 = try await RecordingExporter.export(
+            master, edits: .fresh(duration: master.duration, format: .mp4), to: paths)
+        let created = try #require(LibraryStore.creationDate(of: mp4.url))
+        #expect(abs(created.timeIntervalSince(weeksAgo)) < 1)
+    }
+
     @Test func exportsOddSizedAreaAtBothScales() async throws {
         let (master, paths) = try await SyntheticMaster.master(
             Self.moving(3, width: 667, height: 402))

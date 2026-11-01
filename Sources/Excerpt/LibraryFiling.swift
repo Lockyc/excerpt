@@ -13,9 +13,12 @@ final class LibraryFiling {
     private var watched: (enabled: Bool, folder: URL)
     private var reported: Set<[String]> = []
     private var running = false
+    /// The file names open in an editor (or being opened), which filing leaves in place.
+    private let openFiles: () -> Set<String>
 
-    init(preferences: Preferences) {
+    init(preferences: Preferences, openFiles: @escaping () -> Set<String>) {
         self.preferences = preferences
+        self.openFiles = openFiles
         watched = (preferences.fileOldCaptures, preferences.libraryFolder)
     }
 
@@ -45,9 +48,10 @@ final class LibraryFiling {
         guard preferences.fileOldCaptures, !running else { return }
         running = true
         let filer = LibraryFiler(folder: preferences.libraryFolder)
+        let keeping = openFiles()
         Task {
             let result = await Task.detached(priority: .utility) {
-                Result { try filer.file(now: Date()) }
+                Result { try filer.file(now: Date(), keeping: keeping) }
             }.value
             running = false
             switch result {

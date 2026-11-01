@@ -41,8 +41,11 @@ public struct LibraryFiler: Sendable {
 
     /// Moves every top-level file older than `flatAge` at `now` into its month folder. A missing
     /// library has nothing to file; one that can't be listed throws.
+    ///
+    /// A pair with any name in `keeping` stays put: those are files open in an editor, which
+    /// saves back to the path it opened, so moving one would split the capture in two.
     @discardableResult
-    public func file(now: Date) throws -> Filed {
+    public func file(now: Date, keeping: Set<String> = []) throws -> Filed {
         let keys: [URLResourceKey] = [.creationDateKey, .isRegularFileKey]
         let contents: [URL]
         do {
@@ -69,6 +72,7 @@ public struct LibraryFiler: Sendable {
             }
             let names =
                 [name] + [master(ofPrimary: name)].compactMap { $0 }.filter { created[$0] != nil }
+            if names.contains(where: keeping.contains) { continue }
             move(names, into: folder.appendingPathComponent(monthFolder(for: date)), &filed)
         }
         return filed

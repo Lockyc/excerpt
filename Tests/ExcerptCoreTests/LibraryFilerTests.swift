@@ -75,6 +75,21 @@ import Testing
         #expect(!exists(folder, "Excerpt 2026-09-05 at 10.00.00 original.png"))
     }
 
+    @Test func anOpenPairStaysWhileOthersAreFiled() throws {
+        let folder = try tempFolder()
+        let old = now - 40 * day
+        try make("Excerpt 2026-09-05 at 10.00.00.png", in: folder, created: old)
+        try make("Excerpt 2026-09-05 at 10.00.00 original.png", in: folder, created: old)
+        try make("Excerpt 2026-09-06 at 10.00.00.png", in: folder, created: old)
+        // Open by its master alone, as a recording editor is keyed.
+        try LibraryFiler(folder: folder, timeZone: utc).file(
+            now: now, keeping: ["Excerpt 2026-09-05 at 10.00.00 original.png"])
+
+        #expect(exists(folder, "Excerpt 2026-09-05 at 10.00.00.png"))
+        #expect(exists(folder, "Excerpt 2026-09-05 at 10.00.00 original.png"))
+        #expect(exists(folder, "2026/09-September/Excerpt 2026-09-06 at 10.00.00.png"))
+    }
+
     @Test func aMasterStaysWhileItsPrimaryIsRecent() throws {
         let folder = try tempFolder()
         try make("Excerpt 2026-10-10 at 10.00.00.png", in: folder, created: now - 5 * day)

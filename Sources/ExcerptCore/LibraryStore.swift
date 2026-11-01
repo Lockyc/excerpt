@@ -183,12 +183,21 @@ public struct LibraryStore: Sendable {
     /// Captures, the library's filing clock and series order all read the creation date, so a save
     /// carries the file's existing one across.
     private static func writeKeepingCreationDate(_ data: Data, to url: URL) throws {
-        let created =
-            try? FileManager.default.attributesOfItem(atPath: url.path)[.creationDate] as? Date
+        let created = creationDate(of: url)
         try data.write(to: url, options: .atomic)
-        if let created {
-            try FileManager.default.setAttributes([.creationDate: created], ofItemAtPath: url.path)
-        }
+        try setCreationDate(created, on: url)
+    }
+
+    /// `url`'s creation date, or nil when it has none to read (missing file).
+    public static func creationDate(of url: URL) -> Date? {
+        try? FileManager.default.attributesOfItem(atPath: url.path)[.creationDate] as? Date
+    }
+
+    /// Sets `url`'s creation date to `date`, carrying a capture's date across a write that gave it
+    /// a new birth time (see `writeKeepingCreationDate`). A nil `date` leaves it alone.
+    public static func setCreationDate(_ date: Date?, on url: URL) throws {
+        guard let date else { return }
+        try FileManager.default.setAttributes([.creationDate: date], ofItemAtPath: url.path)
     }
 
     /// True when the PNG carries the edits chunk; a file that isn't a PNG doesn't.

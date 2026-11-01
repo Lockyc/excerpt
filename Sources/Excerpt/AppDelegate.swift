@@ -83,7 +83,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var thumbnails = ThumbnailStack(
         preferences: preferences, onEdit: { [weak self] url in self?.openEditor(url) },
         onEditAll: { [weak self] urls in self?.openEditors(urls) })
-    private lazy var filing = LibraryFiling(preferences: preferences)
+    private lazy var filing = LibraryFiling(preferences: preferences) { [weak self] in
+        guard let self else { return [] }
+        let open =
+            Array(editors.keys) + Array(recordingEditors.keys) + openingRecordings
+            + openingCaptures
+        return Set(open.map(\.lastPathComponent))
+    }
     /// Open editors by primary, so opening a capture again (or its master) brings its window
     /// forward.
     private var editors: [URL: EditorWindowController] = [:]

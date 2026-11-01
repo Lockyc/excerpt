@@ -59,25 +59,31 @@ public enum RecordingExporter {
     }
 
     /// Writes through a file beside the primary, moved into place once whole, then deletes the
-    /// other format's primary: the library files a recording by whichever one it finds.
+    /// other format's primary: the library files a recording by whichever one it finds. A format
+    /// switch carries the other primary's creation date (else the master's) onto the new one, as
+    /// a same-format replace does: Recent Captures and the filing clock read it.
     private static func place(
         _ format: RecordingFormat, in paths: RecordingPaths,
         write: (URL) async throws -> Void
     ) async throws {
         let destination = paths.primary(format)
+        let other: RecordingFormat = format == .gif ? .mp4 : .gif
         let temporary = temporaryURL(beside: destination)
         do {
             try await write(temporary)
             if FileManager.default.fileExists(atPath: destination.path) {
                 _ = try FileManager.default.replaceItemAt(destination, withItemAt: temporary)
             } else {
+                let created =
+                    LibraryStore.creationDate(of: paths.primary(other))
+                    ?? LibraryStore.creationDate(of: paths.master)
                 try FileManager.default.moveItem(at: temporary, to: destination)
+                try LibraryStore.setCreationDate(created, on: destination)
             }
         } catch {
             try? FileManager.default.removeItem(at: temporary)
             throw error
         }
-        let other: RecordingFormat = format == .gif ? .mp4 : .gif
         try? FileManager.default.removeItem(at: paths.primary(other))
     }
 
