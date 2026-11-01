@@ -278,6 +278,10 @@ private final class RecentTile: NSView {
     private let note = NSTextField(labelWithString: "")
     private let editButton = FirstMouseButton(title: "Edit", target: nil, action: nil)
     private let openButton = FirstMouseButton(title: "Open", target: nil, action: nil)
+    /// Open and Edit's own backing. The panel's controls are vibrant, drawn against whatever
+    /// lies under them, so straight over a capture they wash out on light content; over this
+    /// material they read the same on any capture.
+    private let actions = NSVisualEffectView()
     /// Which flash is current, so an older one's timer doesn't hide a newer "Copied".
     private var flash = 0
 
@@ -295,27 +299,35 @@ private final class RecentTile: NSView {
         note.textColor = .secondaryLabelColor
         note.frame = CGRect(x: 8, y: bounds.midY - 10, width: bounds.width - 16, height: 20)
 
-        // Open and Edit sit together at the bottom right, Edit at the edge.
-        var right = bounds.width - 4
+        // Open then Edit, left to right, on their bar at the bottom right.
+        let inset: CGFloat = 4
+        var x = inset
         for (button, action) in [
-            (editButton, #selector(editTapped)), (openButton, #selector(openTapped)),
+            (openButton, #selector(openTapped)), (editButton, #selector(editTapped)),
         ] {
             button.target = self
             button.action = action
             button.bezelStyle = .push
             button.controlSize = isHero ? .regular : .small
             button.sizeToFit()
-            right -= button.frame.width
-            button.setFrameOrigin(CGPoint(x: right, y: 2))
-            right -= 4
-            button.isHidden = true
+            button.setFrameOrigin(CGPoint(x: x, y: inset))
+            x += button.frame.width + inset
+            actions.addSubview(button)
         }
+        let barSize = CGSize(width: x, height: editButton.frame.height + 2 * inset)
+        actions.frame = CGRect(
+            origin: CGPoint(x: bounds.width - barSize.width - 6, y: 6), size: barSize)
+        actions.material = .hudWindow
+        actions.blendingMode = .withinWindow
+        actions.state = .active
+        actions.wantsLayer = true
+        actions.layer?.cornerRadius = 8
+        actions.layer?.masksToBounds = true
+        actions.isHidden = true
 
         copied.text = "Copied"
         copied.isHidden = true
-        for view in [play, note, age, copied, openButton, editButton] as [NSView] {
-            addSubview(view)
-        }
+        for view in [play, note, age, copied, actions] as [NSView] { addSubview(view) }
 
         addTrackingArea(
             NSTrackingArea(
@@ -329,10 +341,7 @@ private final class RecentTile: NSView {
     override func mouseExited(with event: NSEvent) { hovering = false }
 
     /// Open and Edit show only on a capture, while the pointer is over it.
-    private func showActions() {
-        editButton.isHidden = !hovering || url == nil
-        openButton.isHidden = editButton.isHidden
-    }
+    private func showActions() { actions.isHidden = !hovering || url == nil }
 
     /// Shows a capture, its thumbnail loaded at this tile's size for a display of `scale`.
     func show(_ url: URL, isRecording: Bool, scale: CGFloat, age label: String?) {
