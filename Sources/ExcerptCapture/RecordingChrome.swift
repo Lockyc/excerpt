@@ -27,7 +27,7 @@ public final class RecordingChrome {
 
         static var screen: Stage {
             Stage(
-                activate: { NSApp.activate(ignoringOtherApps: true) },
+                activate: { NSApp.activate() },
                 show: { window, key in
                     key ? window.makeKeyAndOrderFront(nil) : window.orderFrontRegardless()
                 },

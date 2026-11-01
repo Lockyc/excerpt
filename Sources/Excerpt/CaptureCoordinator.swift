@@ -625,7 +625,7 @@ final class CaptureCoordinator {
             "Turn on Excerpt under Privacy & Security → Screen & System Audio Recording, then capture again."
         alert.addButton(withTitle: "Open System Settings")
         alert.addButton(withTitle: "Cancel")
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         if alert.runModal() == .alertFirstButtonReturn { Self.open(.screenRecording) }
         return false
     }

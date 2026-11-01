@@ -156,7 +156,7 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
     required init?(coder: NSCoder) { fatalError("not used") }
 
     public func show() {
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         window?.makeKeyAndOrderFront(nil)
         window?.makeFirstResponder(canvas)
     }

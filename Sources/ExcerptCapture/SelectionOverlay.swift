@@ -165,7 +165,7 @@ public final class SelectionOverlay {
     private func activate(keying settled: OverlayWindow?) async {
         await activatesAfter?()
         guard continuation != nil else { return }
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         let mouse = NSEvent.mouseLocation
         (settled ?? windows.first { $0.frame.contains(mouse) } ?? windows.first)?.makeKey()
         showPointer()

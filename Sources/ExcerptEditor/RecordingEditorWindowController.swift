@@ -93,7 +93,7 @@ public final class RecordingEditorWindowController: NSWindowController, NSWindow
     required init?(coder: NSCoder) { fatalError("not used") }
 
     public func show() {
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         window?.makeKeyAndOrderFront(nil)
         window?.makeFirstResponder(frameView)
     }

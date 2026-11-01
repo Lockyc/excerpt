@@ -9,7 +9,7 @@ enum Alerts {
         let alert = NSAlert()
         alert.messageText = title
         alert.informativeText = message
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         alert.runModal()
     }
 
@@ -59,7 +59,7 @@ enum Alerts {
         alert.addButton(withTitle: "Open Accessibility Settings")
         alert.addButton(withTitle: "Scroll It Myself")
         alert.addButton(withTitle: "Cancel")
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         switch alert.runModal() {
         case .alertFirstButtonReturn: return .openSettings
         case .alertSecondButtonReturn: return .scrollYourself

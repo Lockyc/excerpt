@@ -51,7 +51,7 @@ final class SettingsWindowController {
                 MainActor.assumeIsolated { self?.hotKeys.refresh() }
             }
         }
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         window?.center()
         window?.makeKeyAndOrderFront(nil)
         // Nothing starts focused, so keys pressed as the window opens can't edit the prefix.
