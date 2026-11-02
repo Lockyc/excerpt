@@ -46,7 +46,7 @@ where they were saved.
 |---|---|
 | ⌘⇧3 | Window |
 | ⌘⇧4 | Area (the screen freezes while you select) |
-| ⌘⇧5 | Text — OCR straight to the clipboard, no file |
+| ⌘⇧5 | Text — OCR and QR codes straight to the clipboard, no file |
 | ⌘⇧6 | Select an area, adjust it, then pick area, scrolling, text, window, fullscreen or record from a bar over it |
 | ⌘⇧7 | Record — select an area, click a window or press F for the display, then Return; ⌘⇧7 again stops |
 | ⌥4 | Recent Captures — your last seven captures in a floating panel: click copies, double-click opens, drag it out, hover to edit |

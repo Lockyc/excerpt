@@ -1,4 +1,5 @@
 import CoreGraphics
+import CoreImage
 import CoreText
 import ExcerptCore
 import ExcerptTestSupport
@@ -205,5 +206,37 @@ import Testing
             ], width: 480, height: 112)
         let lines = try Self.read(image)
         #expect(lines.filter { !$0.isEmpty } == zip(numbers, cells).map { "\($0) \($1)" })
+    }
+}
+
+/// A QR code read by real Vision: its payload is copied in reading order, between the text
+/// above and below it.
+@Suite struct QRCodeReadingTests {
+    static func qr(_ payload: String, side: Int) -> CGImage {
+        let filter = CIFilter(name: "CIQRCodeGenerator")!
+        filter.setValue(Data(payload.utf8), forKey: "inputMessage")
+        let code = filter.outputImage!
+        let scaled = code.transformed(
+            by: CGAffineTransform(
+                scaleX: CGFloat(side) / code.extent.width, y: CGFloat(side) / code.extent.height))
+        return CIContext().createCGImage(scaled, from: scaled.extent)!
+    }
+
+    @Test(.timeLimit(.minutes(3))) func aQRCodesPayloadReadsInPlace() throws {
+        let payload = "https://example.com/join?code=4821"
+        let page = TextFixtures.page(
+            ["Scan to join the club", "", "", "", "", "", "", "Totals carried forward"],
+            width: 420)
+        let context = PixelBuffer.makeContext(width: page.width, height: page.height)
+        context.draw(page, in: CGRect(x: 0, y: 0, width: page.width, height: page.height))
+        // Rows 1–6 are blank: 168pt, 336px. The code sits in the middle of them.
+        context.interpolationQuality = .none
+        context.draw(
+            Self.qr(payload, side: 280),
+            in: CGRect(x: 60, y: page.height - 56 - 308, width: 280, height: 280))
+        let text = try CaptureText.read(
+            context.makeImage()!, scale: 2, recognizer: VisionTextRecognizer())
+        let lines = text.split(separator: "\n").map(String.init)
+        #expect(lines == ["Scan to join the club", payload, "Totals carried forward"])
     }
 }

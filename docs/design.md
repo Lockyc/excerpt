@@ -26,7 +26,7 @@ build in Swift 6 language mode; the AppKit / ScreenCaptureKit targets build in S
 | `ExcerptCapture` | ScreenCaptureKit capture, the multi-display selection overlay, the auto-scroll driver that feeds frames to Core's stitcher, the recorder that feeds the stream to Recording's master writer and its key and click log, the hotkey bindings and the rules that judge a rebinding | Core, Recording |
 | `ExcerptRecording` | The recording's master file (writing, pause retiming, its log and edits), frame reading, the GIF / MP4 export and its budget fallback | Core, AVFoundation |
 | `ExcerptEditor` | Canvas, tools, undo; edits Core's document; the recording editor | Core, Recording |
-| `ExcerptExport` | Vision OCR and Capture Text's reading order, with no UI | Core, Vision |
+| `ExcerptExport` | Vision OCR, QR decoding and Capture Text's reading order, with no UI | Core, Vision |
 | `Excerpt` (app) | Menu bar, hotkey registration, preview thumbnail, settings, export UI, file I/O | all |
 
 The hard logic lives in Core as pure functions over values, so it is tested without UI or
@@ -104,7 +104,8 @@ holding one.
   menu hanging past its edge widens the shot). Placed on a padded backdrop, its display's
   wallpaper with a soft shadow under the window, or a colour (all settings).
 - **Fullscreen:** the display under the cursor.
-- **Text:** select an area on the frozen screen; its text is copied in reading order, panes on
+- **Text:** select an area on the frozen screen; its text, and each QR code's payload in the
+  code's place, is copied in reading order, panes on
   different backgrounds one after the other (`ReadingOrder.blocks`), and no file is saved. A note gives the line count, or says no text was found and leaves the clipboard
   alone.
 - **Mode bar:** the frozen screen opens with the area last picked from the bar (this launch)

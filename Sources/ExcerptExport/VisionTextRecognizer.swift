@@ -1,27 +1,38 @@
 import CoreGraphics
 import Vision
 
-/// Vision's accurate text recognition, on device. Language correction is off: screenshots are
-/// full of identifiers, numbers and paths that correction would "fix". A Vision failure throws;
-/// it is never an empty result.
+/// Vision's accurate text recognition, on device, plus QR codes: a code's payload is a run at
+/// the code's bounds, so it reads in place among the text. Language correction is off:
+/// screenshots are full of identifiers, numbers and paths that correction would "fix". A Vision
+/// failure throws; it is never an empty result.
 public struct VisionTextRecognizer: TextRecognizer {
     public init() {}
 
     public func recognize(_ image: CGImage) throws -> [RecognizedText] {
-        // The request revision is the OS default on purpose: current accuracy.
-        let request = VNRecognizeTextRequest()
-        request.recognitionLevel = .accurate
-        request.usesLanguageCorrection = false
-        request.automaticallyDetectsLanguage = true
-        try VNImageRequestHandler(cgImage: image).perform([request])
-        return (request.results ?? []).compactMap { observation in
+        // The request revisions are the OS default on purpose: current accuracy.
+        let text = VNRecognizeTextRequest()
+        text.recognitionLevel = .accurate
+        text.usesLanguageCorrection = false
+        text.automaticallyDetectsLanguage = true
+        let codes = VNDetectBarcodesRequest()
+        codes.symbologies = [.qr]
+        try VNImageRequestHandler(cgImage: image).perform([text, codes])
+        let lines: [RecognizedText] = (text.results ?? []).compactMap { observation in
             guard let candidate = observation.topCandidates(1).first else { return nil }
-            return RecognizedText(
-                candidate.string,
-                Self.pixelRect(
-                    normalized: observation.boundingBox, width: image.width, height: image.height
-                ))
+            return RecognizedText(candidate.string, pixelRect(observation.boundingBox, image))
         }
+        // A code with no string payload (binary data) has nothing to copy.
+        let payloads: [RecognizedText] = (codes.results ?? []).compactMap { observation in
+            guard let payload = observation.payloadStringValue, !payload.isEmpty else {
+                return nil
+            }
+            return RecognizedText(payload, pixelRect(observation.boundingBox, image))
+        }
+        return lines + payloads
+    }
+
+    private func pixelRect(_ box: CGRect, _ image: CGImage) -> CGRect {
+        Self.pixelRect(normalized: box, width: image.width, height: image.height)
     }
 
     /// A Vision bounding box (normalised, bottom-left origin) in the image's pixels, top-left
