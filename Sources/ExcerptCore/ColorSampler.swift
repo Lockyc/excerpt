@@ -21,10 +21,15 @@ public enum ColorSampler {
     ) -> RGBA? {
         guard rect.minX.isFinite, rect.minY.isFinite, rect.maxX.isFinite, rect.maxY.isFinite
         else { return nil }
-        let minX = Int(rect.minX.rounded(.down))
-        let minY = Int(rect.minY.rounded(.down))
-        let maxX = Int(rect.maxX.rounded(.up))
-        let maxY = Int(rect.maxY.rounded(.up))
+        // Far past the buffer a coordinate means the same as 1e9 (nothing in range), and keeps
+        // the Int conversion from trapping.
+        func whole(_ v: CGFloat, _ rule: FloatingPointRoundingRule) -> Int {
+            Int(min(max(Double(v.rounded(rule)), -1e9), 1e9))
+        }
+        let minX = whole(rect.minX, .down)
+        let minY = whole(rect.minY, .down)
+        let maxX = whole(rect.maxX, .up)
+        let maxY = whole(rect.maxY, .up)
 
         var buckets: [(color: RGBA, count: Int)] = []
         func take(_ x: Int, _ y: Int) {
@@ -37,10 +42,18 @@ public enum ColorSampler {
             }
         }
 
-        for x in (minX - 1)...maxX { take(x, minY - 1) }
-        if maxY > minY { for y in minY..<maxY { take(maxX, y) } }
-        for x in (minX - 1)...maxX { take(x, maxY) }
-        if maxY > minY { for y in minY..<maxY { take(minX - 1, y) } }
+        // The ring's ranges are clipped to the buffer, so a rect far outside walks nothing.
+        func clipped(_ lower: Int, _ upper: Int, to limit: Int) -> Range<Int> {
+            let low = max(lower, 0)
+            let high = min(upper, limit)
+            return low < high ? low..<high : 0..<0
+        }
+        let xs = clipped(minX - 1, maxX + 1, to: buffer.width)
+        let ys = clipped(minY, maxY, to: buffer.height)
+        for x in xs { take(x, minY - 1) }
+        for y in ys { take(maxX, y) }
+        for x in xs { take(x, maxY) }
+        for y in ys { take(minX - 1, y) }
         return buckets.reduce(nil as (color: RGBA, count: Int)?) { best, b in
             guard let best else { return b }
             return b.count > best.count ? b : best

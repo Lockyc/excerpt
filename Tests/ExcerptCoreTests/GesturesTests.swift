@@ -315,3 +315,37 @@ import Testing
         #expect(GapSnapper.radius(scale: 1.25) == 15)
     }
 }
+
+@Suite struct PatchGestureTests {
+    let sheet = PixelBuffer(Fixtures.sheet(width: 360, height: 200))
+
+    @Test func patchOverTableRowKeepsGridlines() {
+        // Across the full width only the gridlines (rows 40, 60, 80) are uniform: the drag from
+        // 45 to 75 snaps to the lines at 40 and 80, and the patch keeps both, covering 41..<80.
+        let rect = Gestures.patch(
+            from: CGPoint(x: 0, y: 45), to: CGPoint(x: 360, y: 75), width: 360, height: 200,
+            minimum: 4, snapping: sheet, radius: 12)
+        #expect(rect == PixelRect(x: 0, y: 41, width: 360, height: 39))
+    }
+
+    @Test func withoutSnappingTheDragIsKept() {
+        let rect = Gestures.patch(
+            from: CGPoint(x: 10, y: 45), to: CGPoint(x: 100, y: 75), width: 360, height: 200,
+            minimum: 4, snapping: nil, radius: 12)
+        #expect(rect == PixelRect(x: 10, y: 45, width: 90, height: 30))
+    }
+
+    @Test func aPatchMayLieOutsideTheImage() {
+        let rect = Gestures.patch(
+            from: CGPoint(x: -40, y: -30), to: CGPoint(x: -10, y: 20), width: 360, height: 200,
+            minimum: 4, snapping: sheet, radius: 12)
+        #expect(rect == PixelRect(x: -40, y: -30, width: 30, height: 50))
+    }
+
+    @Test func tooSmallADragMakesNothing() {
+        #expect(
+            Gestures.patch(
+                from: CGPoint(x: 10, y: 10), to: CGPoint(x: 12, y: 40), width: 360, height: 200,
+                minimum: 4, snapping: nil, radius: 12) == nil)
+    }
+}

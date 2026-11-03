@@ -34,3 +34,20 @@ import Testing
         #expect(GapSnapper.snap(500, axis: .horizontal, in: sheet, radius: 3) == 199)
     }
 }
+
+@Suite struct SpanLimitedSnapTests {
+    let sheet = PixelBuffer(Fixtures.sheet(width: 360, height: 200))
+
+    @Test func spanLimitedSnapFindsCellGridline() {
+        // Inside the second cell column (x 61..<119) rows 16..19 are plain white, though no row is
+        // uniform across the image: the cell-wide test finds 16, the full-width one the gridline.
+        #expect(
+            GapSnapper.snap(10, axis: .horizontal, in: sheet, radius: 12, span: 61..<119) == 16)
+        #expect(GapSnapper.snap(10, axis: .horizontal, in: sheet, radius: 12) == 0)
+    }
+
+    @Test func spanOutsideTheBufferKeepsThePosition() {
+        #expect(
+            GapSnapper.snap(10, axis: .horizontal, in: sheet, radius: 12, span: 500..<600) == 10)
+    }
+}

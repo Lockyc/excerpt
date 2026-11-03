@@ -262,4 +262,45 @@ public enum Gestures {
         guard Double(right - left) >= minimum, Double(bottom - top) >= minimum else { return nil }
         return PixelRect(x: left, y: top, width: right - left, height: bottom - top)
     }
+
+    /// The patch a drag makes: the dragged rect, which may reach past the `width` x `height`
+    /// image into its margin. Each edge inside the image snaps to a line uniform across the
+    /// dragged rect's other axis only (a row within one table cell), and stops at the line: the
+    /// left and top edges start one past it, the right and bottom edges end on it, so the
+    /// gridline stays. nil when either side ends up shorter than `minimum`.
+    public static func patch(
+        from start: CGPoint, to end: CGPoint, width: Int, height: Int, minimum: Double,
+        snapping buffer: PixelBuffer?, radius: Int
+    ) -> PixelRect? {
+        func whole(_ v: CGFloat) -> Int { Int(min(max(Double(v.rounded()), -1e9), 1e9)) }
+        var left = whole(min(start.x, end.x))
+        var right = whole(max(start.x, end.x))
+        var top = whole(min(start.y, end.y))
+        var bottom = whole(max(start.y, end.y))
+        if let buffer {
+            func line(_ v: Int, _ axis: Axis, _ extent: Int, _ span: Range<Int>) -> Int? {
+                guard v > 0, v < extent else { return nil }
+                let snapped = GapSnapper.snap(v, axis: axis, in: buffer, radius: radius, span: span)
+                return GapSnapper.isUniform(
+                    line: snapped, axis: axis, in: buffer, span: span, tolerance: 6)
+                    ? snapped : nil
+            }
+            let across = left..<right
+            let down = top..<bottom
+            let l = line(left, .vertical, width, down).map { $0 + 1 }
+            let r = line(right, .vertical, width, down)
+            let t = line(top, .horizontal, height, across).map { $0 + 1 }
+            let b = line(bottom, .horizontal, height, across)
+            if l ?? left < r ?? right {
+                left = l ?? left
+                right = r ?? right
+            }
+            if t ?? top < b ?? bottom {
+                top = t ?? top
+                bottom = b ?? bottom
+            }
+        }
+        guard Double(right - left) >= minimum, Double(bottom - top) >= minimum else { return nil }
+        return PixelRect(x: left, y: top, width: right - left, height: bottom - top)
+    }
 }

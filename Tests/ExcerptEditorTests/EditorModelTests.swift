@@ -7,7 +7,8 @@ import Testing
 
 @Suite struct ToolTests {
     @Test func everyToolHasItsKey() {
-        #expect(Tool.allCases.map(\.key) == ["v", "a", "r", "p", "t", "n", "h", "b", "k", "c"])
+        #expect(
+            Tool.allCases.map(\.key) == ["v", "a", "r", "p", "t", "n", "h", "b", "e", "k", "c"])
         #expect(Tool(key: "K") == .crop)
         #expect(Tool(key: "P") == .path)
         #expect(Tool(key: "x") == nil)

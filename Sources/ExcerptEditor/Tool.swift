@@ -10,6 +10,7 @@ public enum Tool: CaseIterable {
     case step
     case highlight
     case blur
+    case patch
     case crop
     case cut
 
@@ -23,6 +24,7 @@ public enum Tool: CaseIterable {
         case .step: "n"
         case .highlight: "h"
         case .blur: "b"
+        case .patch: "e"
         case .crop: "k"
         case .cut: "c"
         }
@@ -38,6 +40,7 @@ public enum Tool: CaseIterable {
         case .step: "Step"
         case .highlight: "Highlight"
         case .blur: "Blur"
+        case .patch: "Patch"
         case .crop: "Crop"
         case .cut: "Cut"
         }
@@ -55,6 +58,7 @@ public enum Tool: CaseIterable {
         case .step: "1.circle"
         case .highlight: nil
         case .blur: "square.grid.3x3.fill"
+        case .patch: "square.fill"
         case .crop: "crop"
         case .cut: "scissors"
         }
@@ -74,7 +78,7 @@ extension Tool {
         switch (self, shape) {
         case (.arrow, .arrow), (.rectangle, .rectangle), (.path, .path), (.text, .text),
             (.highlight, .highlight),
-            (.blur, .blur), (.step, .step):
+            (.blur, .blur), (.patch, .patch), (.step, .step):
             true
         default: false
         }

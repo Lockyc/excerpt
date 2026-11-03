@@ -88,3 +88,23 @@ import Testing
         #expect(ColorSampler.pixel(at: CGPoint(x: 1, y: 4), in: image) == nil)
     }
 }
+
+@Suite struct ColorSamplerFarRectTests {
+    @Test func aRectFarOutsideTheImageIsNilWithoutWalkingItsRing() {
+        let image = ColorSamplerTests.buffer(10, 10, fill: ColorSamplerTests.white)
+        #expect(
+            ColorSampler.edgeColor(
+                around: CGRect(x: 1e30, y: -1e30, width: 1e30, height: 1e12), in: image) == nil)
+        #expect(
+            ColorSampler.edgeColor(
+                around: CGRect(x: -5e9, y: -5e9, width: 1e9, height: 1e9), in: image) == nil)
+    }
+
+    @Test func aHugeRectStillSamplesTheRingPixelsThatLieInTheImage() {
+        let image = ColorSamplerTests.buffer(10, 10, fill: ColorSamplerTests.white)
+        #expect(
+            ColorSampler.edgeColor(
+                around: CGRect(x: -1e9, y: -1e9, width: 2e9, height: 1e9 + 5), in: image)
+                == ColorSamplerTests.white)
+    }
+}

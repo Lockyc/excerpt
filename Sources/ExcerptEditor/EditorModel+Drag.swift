@@ -94,7 +94,7 @@ extension EditorModel {
             ).map(Grab.annotation)
         case .path, .arrow:
             return vertexHandle(at: p, map: map, option: option) ?? ownAnnotation(at: p, map: map)
-        case .rectangle, .highlight, .step, .blur:
+        case .rectangle, .highlight, .step, .blur, .patch:
             return ownAnnotation(at: p, map: map)
         case .crop, .text:
             return nil
@@ -177,7 +177,7 @@ extension EditorModel {
                 preview(next)
                 selection = nil
                 setDrag(.shape(id: id, start: p.original, before: before))
-            case .blur, .crop:
+            case .blur, .crop, .patch:
                 selection = nil
                 setDrag(.region(start: p.original))
             case .step:
@@ -260,7 +260,8 @@ extension EditorModel {
                 }
                 commit(from: before)
                 selection = .annotation(id)
-            case .move(_, _, let before):
+            case .move(let id, _, let before):
+                resampleAutoPatch(id)
                 commit(from: before)
             case .freehand(let id, let from, let raw):
                 endFreehand(id: id, from: from, raw: raw)
@@ -285,6 +286,16 @@ extension EditorModel {
                             Annotation(
                                 id: id, shape: .blur(rect: rect),
                                 color: style.color, width: style.width))
+                    }
+                    selection = .annotation(id)
+                case (.patch, .region(let rect)?):
+                    let id = document.nextAnnotationID
+                    apply { doc in
+                        doc.annotations.append(
+                            Annotation(
+                                id: id, shape: .patch(rect: rect, autoColor: true),
+                                color: .sampled(groundColor(around: rect) ?? style.color.rgba),
+                                width: style.width))
                     }
                     selection = .annotation(id)
                 case (.crop, .region(let rect)?):
@@ -385,6 +396,11 @@ extension EditorModel {
                 from: start, to: end, width: original.width, height: original.height,
                 minimum: minimumDrag, snapping: snap ? pixels : nil, radius: snapRadius
             ).map { .region($0.cgRect) }
+        case .patch:
+            return Gestures.patch(
+                from: start, to: end, width: original.width, height: original.height,
+                minimum: minimumDrag, snapping: snap ? pixels : nil, radius: snapRadius
+            ).map { .region($0.cgRect) }
         default:
             var rect = Gestures.rect(from: start, to: end).integral
             // A blur acts on the image's pixels, so one dragged into the gutter keeps to them.
@@ -397,6 +413,24 @@ extension EditorModel {
             else { return nil }
             return .region(rect)
         }
+    }
+
+    /// The colour of the ground around `rect`: the capture's pixels just outside it, else the
+    /// margin colour where the rect lies wholly outside the capture; nil when there is neither.
+    func groundColor(around rect: CGRect) -> RGBA? {
+        ColorSampler.edgeColor(around: rect, in: pixels) ?? document.marginColor
+    }
+
+    /// A moved patch still following its ground takes the colour around where it now lies; one
+    /// with no ground to sample keeps its colour.
+    private func resampleAutoPatch(_ id: Int) {
+        guard let i = document.annotations.firstIndex(where: { $0.id == id }),
+            case .patch(let rect, true) = document.annotations[i].shape,
+            let ground = groundColor(around: rect)
+        else { return }
+        var next = document
+        next.annotations[i].color = .sampled(ground)
+        preview(next)
     }
 
     func isTooSmall(_ shape: Shape) -> Bool {

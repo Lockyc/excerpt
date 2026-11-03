@@ -361,7 +361,8 @@ Dock icon. Several captures opened together — the thumbnails' Edit All, a mult
 Capture…, several files handed over at once by Finder or another app — open as one **series**.
 
 Tools: `V` select · `A` arrow · `R` rectangle · `P` path · `T` text · `N` step · `H` highlight ·
-`B` blur · `K` crop · `C` cut, each key shown on its toolbar button. The toolbar is one row: tools
+`B` blur · `E` patch (a solid fill in the colour around its edge, edges snapped to gridlines
+within the patch's own span) · `K` crop · `C` cut, each key shown on its toolbar button. The toolbar is one row: tools
 and Border centred while there is room, the actions at the right; the editor's notes (snapping,
 the cut limit, annotations hidden by cuts) are the window's subtitle. A new editor starts on the
 arrow. Over the canvas the pointer is
