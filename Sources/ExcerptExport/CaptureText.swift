@@ -90,6 +90,19 @@ public enum CaptureText {
     public static func read(
         _ image: CGImage, scale: Double, recognizer: any TextRecognizer
     ) throws -> String {
+        let runs = try runs(of: image, using: recognizer, scale: scale)
+        return compose(runs) { gutter, rows in
+            backgroundChanges(image, gutter: gutter, rows: rows)
+        }
+    }
+
+    /// Every run of text in `image`, bounds in the image's pixels, top-left origin: each region
+    /// read on its `Canvas`, a run reported only by the region owning its middle row, and runs
+    /// whose bounds aren't `usable` dropped. `scale` is the image's pixels per point, which sizes
+    /// the slices.
+    public static func runs(
+        of image: CGImage, using recognizer: any TextRecognizer, scale: Double = 1
+    ) throws -> [RecognizedText] {
         var runs: [RecognizedText] = []
         for region in regions(width: image.width, height: image.height, scale: scale) {
             let piece = image.cropping(to: region.rect.cgRect)!
@@ -103,9 +116,7 @@ public enum CaptureText {
                 }
             }
         }
-        return compose(runs) { gutter, rows in
-            backgroundChanges(image, gutter: gutter, rows: rows)
-        }
+        return runs
     }
 
     /// Two pixels differ in background when a channel differs by more than this.

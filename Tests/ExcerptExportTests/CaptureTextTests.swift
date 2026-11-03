@@ -148,3 +148,20 @@ import Testing
         }
     }
 }
+
+@Suite struct CaptureTextRunsTests {
+    /// Over a 3,400-row image read in three slices, a run in rows two slices share is reported
+    /// once, at its place in the whole image.
+    @Test func runsAreInImagePixelsAndDeduplicated() throws {
+        let image = ColourWords.page(
+            width: 200, height: 3_400,
+            words: ["alpha": (20, 1_440), "beta": (20, 1_495), "omega": (30, 3_000)])
+        let runs = try CaptureText.runs(of: image, using: ColourWords())
+        #expect(
+            runs == [
+                ExcerptCore.RecognizedText("alpha", CGRect(x: 20, y: 1_440, width: 60, height: 10)),
+                ExcerptCore.RecognizedText("beta", CGRect(x: 20, y: 1_495, width: 60, height: 10)),
+                ExcerptCore.RecognizedText("omega", CGRect(x: 30, y: 3_000, width: 60, height: 10)),
+            ])
+    }
+}
