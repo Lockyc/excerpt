@@ -494,12 +494,14 @@ final class CanvasView: NSView, NSTextViewDelegate {
     private func snap(_ event: NSEvent) -> Bool { !event.modifierFlags.contains(.option) }
 
     override func mouseDown(with event: NSEvent) {
-        window?.makeFirstResponder(self)
         let p = pointer(event)
+        // A pick leaves focus where it is: taking it would commit the text being typed before
+        // the colour could reach it.
         if model.pickingColor {
             model.mouseDown(p, map: map)
             return
         }
+        window?.makeFirstResponder(self)
         if model.tool == .text {
             beginText(at: p)
             return

@@ -285,6 +285,28 @@ import Testing
         #expect(window.firstResponder === canvas)
     }
 
+    @Test func aPickClickWhileTypingRecoloursTheTextAndKeepsTypingOpen() throws {
+        let (window, _, canvas) = editor(EditDocument(scale: 1, salt: 7))
+        canvas.model.tool = .text
+        let map = canvas.map
+        canvas.beginText(at: Pointer(rendered: CGPoint(x: 40, y: 60), map: map))
+        (window.firstResponder as? NSTextView)?.insertText(
+            "abc", replacementRange: NSRange(location: NSNotFound, length: 0))
+        canvas.model.beginPickingColor()
+        let g = CanvasView.gutter * canvas.zoom
+        let inView = CGPoint(x: 100 * canvas.zoom + g, y: 100 * canvas.zoom + g)
+        let click = try #require(
+            NSEvent.mouseEvent(
+                with: .leftMouseDown, location: canvas.convert(inView, to: nil),
+                modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber, context: nil,
+                eventNumber: 0, clickCount: 1, pressure: 1))
+        canvas.mouseDown(with: click)
+        let expected = try #require(
+            ColorSampler.pixel(at: CGPoint(x: 100, y: 100), in: canvas.model.pixels))
+        #expect(canvas.model.typing?.color == .sampled(expected))
+        #expect(window.firstResponder is NSTextView)
+    }
+
     @Test func typingLeavesNothingOnTheWindowsUndo() {
         let (window, _, canvas) = editor(EditDocument(scale: 1, salt: 7))
         canvas.model.tool = .text

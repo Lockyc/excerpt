@@ -102,7 +102,10 @@ import Testing
         }
         m.selection = .annotation(1)
         m.setColor(.palette(.green))
-        guard case .patch(_, let auto) = m.document.annotations[0].shape else { return }
+        guard case .patch(_, let auto) = m.document.annotations[0].shape else {
+            Issue.record("the annotation is no longer a patch")
+            return
+        }
         #expect(!auto)
         #expect(m.document.annotations[0].color == .palette(.green))
     }
@@ -121,9 +124,40 @@ import Testing
     }
 
     @Test func aSavedStyleWithoutASampleDecodes() throws {
+        let json = Data(#"{"color":"red","width":"medium","background":true}"#.utf8)
+        #expect(try JSONDecoder().decode(AnnotationStyle.self, from: json).lastSampled == nil)
         let style = AnnotationStyle(lastSampled: Self.blue)
         let data = try JSONEncoder().encode(style)
         #expect(try JSONDecoder().decode(AnnotationStyle.self, from: data) == style)
+    }
+
+    @Test func pickRecoloursTheTextBeingTyped() {
+        let m = model()
+        m.tool = .text
+        m.beginTyping(at: pointer(m, 10, 10), map: map(m))
+        m.updateTyping("hi")
+        m.beginPickingColor()
+        m.pick(at: pointer(m, 50, 50))
+        #expect(m.typing?.color == .sampled(Self.blue))
+        m.endTyping()
+        #expect(m.document.annotations.last?.color == .sampled(Self.blue))
+    }
+
+    @Test func pickRecoloursThePathBeingBuilt() {
+        let m = model()
+        m.tool = .path
+        for (x, y) in [(10.0, 10.0), (60.0, 10.0)] {
+            let map = map(m)
+            let p = Pointer(rendered: CGPoint(x: x, y: y), map: map)
+            m.mouseDown(p, map: map)
+            m.mouseUp(p, map: map, snap: false)
+        }
+        #expect(m.building != nil)
+        m.beginPickingColor()
+        m.pick(at: pointer(m, 50, 50))
+        #expect(m.building != nil)
+        m.finishPath()
+        #expect(m.document.annotations.last?.color == .sampled(Self.blue))
     }
 }
 
