@@ -76,7 +76,7 @@ import Testing
     @Test func aBackgroundIsAPillInTheColourWithContrastingInk() {
         let text = Annotation(
             id: 1, shape: .text(origin: CGPoint(x: 100, y: 100), string: "Wide", background: true),
-            color: .blue)
+            color: .palette(.blue))
         let out = PixelBuffer(
             Renderer.render(sheet, edits: EditDocument(scale: 2, annotations: [text])).image)
         let rect = AnnotationGeometry.textRect(of: text, scale: 2)!
@@ -90,7 +90,8 @@ import Testing
 
     @Test func aStepIsAFilledCircleInsideAWhiteRing() {
         let step = Annotation(
-            id: 1, shape: .step(center: CGPoint(x: 300, y: 400)), color: .green, width: .medium)
+            id: 1, shape: .step(center: CGPoint(x: 300, y: 400)), color: .palette(.green),
+            width: .medium)
         let out = PixelBuffer(
             Renderer.render(sheet, edits: EditDocument(scale: 2, annotations: [step])).image)
         let d = AnnotationGeometry.stepDiameter(step, scale: 2)
@@ -102,7 +103,7 @@ import Testing
         // Twelve steps; the last reads "12", and nothing it draws reaches past its circle.
         let steps = (1...12).map {
             Annotation(
-                id: $0, shape: .step(center: CGPoint(x: 45 * $0, y: 400)), color: .black,
+                id: $0, shape: .step(center: CGPoint(x: 45 * $0, y: 400)), color: .palette(.black),
                 width: .thin)
         }
         let out = PixelBuffer(
@@ -122,12 +123,12 @@ import Testing
                 shape: .text(
                     origin: CGPoint(x: 30 + 190 * (i % 3), y: 40 + 110 * (i / 3)),
                     string: color.rawValue.capitalized, background: true),
-                color: color, width: .thin)
+                color: .palette(color), width: .thin)
         }
         let twoLines = Annotation(
             id: 7,
             shape: .text(origin: CGPoint(x: 30, y: 270), string: "Totals\nQ3", background: true),
-            color: .red, width: .thin)
+            color: .palette(.red), width: .thin)
         try Golden.check(
             Renderer.render(image, edits: EditDocument(scale: 2, annotations: notes + [twoLines]))
                 .image,
@@ -140,13 +141,13 @@ import Testing
         var steps = widths.enumerated().map { i, width in
             Annotation(
                 id: i + 1, shape: .step(center: CGPoint(x: 80 + 150 * i, y: 100)),
-                color: Palette.allCases[i], width: width)
+                color: .palette(Palette.allCases[i]), width: width)
         }
         // Steps 4 to 11 fill the row below, so the last reads "11".
         steps += (4...11).map {
             Annotation(
                 id: $0, shape: .step(center: CGPoint(x: 60 * ($0 - 3), y: 230)),
-                color: $0 == 11 ? .black : .yellow, width: .thin)
+                color: .palette($0 == 11 ? .black : .yellow), width: .thin)
         }
         try Golden.check(
             Renderer.render(image, edits: EditDocument(scale: 2, annotations: steps)).image,

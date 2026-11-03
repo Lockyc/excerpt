@@ -272,7 +272,7 @@ final class EditorModel {
     }
 
     /// Sets the colour new annotations get, and recolours the selected annotation.
-    func setColor(_ color: Palette) {
+    func setColor(_ color: AnnotationColor) {
         style.color = color
         restyleSelection { $0.color = color }
     }

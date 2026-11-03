@@ -149,9 +149,9 @@ import Testing
         m.apply { $0.annotations.append(note(1, CGRect(x: 0, y: 0, width: 10, height: 10))) }
         m.selection = .annotation(1)
         #expect(m.selectionTakesStyle)
-        m.setColor(.blue)
+        m.setColor(.palette(.blue))
         m.setWidth(.thick)
-        #expect(m.document.annotations[0].color == .blue)
+        #expect(m.document.annotations[0].color == .palette(.blue))
         #expect(m.document.annotations[0].width == .thick)
         m.undo()
         #expect(m.document.annotations[0].width == .medium)
@@ -166,13 +166,14 @@ import Testing
         m.selection = .annotation(1)
         #expect(!m.selectionTakesStyle)
         let before = m.document
-        m.setColor(.blue)
+        m.setColor(.palette(.blue))
         m.setWidth(.thick)
         #expect(m.document == before)
         m.undo()
         #expect(m.document.annotations.isEmpty)  // the only step is the blur's own
         #expect(!m.canUndo)
-        #expect(m.style.color == .blue && m.style.width == .thick)  // new annotations get it
+        // New annotations get the style.
+        #expect(m.style.color == .palette(.blue) && m.style.width == .thick)
     }
 
     @Test func aSeamSelectionIsNotABlurSelection() {
@@ -180,8 +181,8 @@ import Testing
         m.apply { $0.cuts = [Cut(axis: .horizontal, lower: 100, upper: 200)] }
         m.selection = .seam(.horizontal, 100..<200)
         #expect(!m.selectionTakesStyle)
-        m.setColor(.blue)
-        #expect(m.style.color == .blue)
+        m.setColor(.palette(.blue))
+        #expect(m.style.color == .palette(.blue))
     }
 
     @Test func newAnnotationsStartWithTheGivenStyle() {
@@ -189,18 +190,19 @@ import Testing
         let m = EditorModel(
             original: Fixtures.sheet(width: 360, height: 400),
             document: EditDocument(scale: 2, salt: 7),
-            style: AnnotationStyle(color: .blue, width: .thick, background: false))
-        #expect(m.style == AnnotationStyle(color: .blue, width: .thick, background: false))
+            style: AnnotationStyle(color: .palette(.blue), width: .thick, background: false))
+        #expect(
+            m.style == AnnotationStyle(color: .palette(.blue), width: .thick, background: false))
     }
 
     @Test func choosingAStyleIsRemembered() {
         let m = model()
         var told: [AnnotationStyle] = []
         m.onStyleChange = { told.append($0) }
-        m.setColor(.green)
+        m.setColor(.palette(.green))
         m.setBackground(false)
         m.setBackground(false)  // unchanged: not told again
-        #expect(told.map(\.color) == [.green, .green])
+        #expect(told.map(\.color) == [.palette(.green), .palette(.green)])
         #expect(told.last?.background == false)
     }
 

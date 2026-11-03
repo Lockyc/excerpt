@@ -24,7 +24,7 @@ import Testing
                 Annotation(
                     id: 1,
                     shape: .arrow(tail: CGPoint(x: 100, y: 400), head: CGPoint(x: 400, y: 400)),
-                    color: .blue)
+                    color: .palette(.blue))
             ])
         let out = PixelBuffer(Renderer.render(sheet, edits: edits).image)
         #expect(out[x: 390, y: 400] == Palette.blue.rgba)  // inside the head
@@ -46,7 +46,7 @@ import Testing
         let cut = Cut(axis: .horizontal, lower: 200, upper: 500)
         let rect = Annotation(
             id: 1, shape: .rectangle(rect: CGRect(x: 100, y: 300, width: 200, height: 300)),
-            color: .green, width: .thin)
+            color: .palette(.green), width: .thin)
         let result = Renderer.render(
             sheet, edits: EditDocument(scale: 1, cuts: [cut], annotations: [rect]))
         let out = PixelBuffer(result.image)
@@ -63,7 +63,7 @@ import Testing
             annotations: [
                 Annotation(
                     id: 1, shape: .highlight(rect: CGRect(x: 0, y: 0, width: 600, height: 20)),
-                    color: .yellow)
+                    color: .palette(.yellow))
             ])
         let out = PixelBuffer(Renderer.render(sheet, edits: edits).image)
         let white = out[x: 30, y: 10]
@@ -82,7 +82,7 @@ import Testing
                     shape: .arrow(tail: CGPoint(x: 20, y: 9_000), head: CGPoint(x: 150, y: 26_000))),
                 Annotation(
                     id: 2, shape: .text(origin: CGPoint(x: 10, y: 9_950), string: "Totals"),
-                    color: .black),
+                    color: .palette(.black)),
             ])
         let full = Renderer.render(tall, edits: edits).image
         let base = Renderer.renderBase(tall, edits: edits)
@@ -111,17 +111,17 @@ import Testing
             annotations: [
                 Annotation(
                     id: 1, shape: .highlight(rect: CGRect(x: 61, y: 41, width: 240, height: 38)),
-                    color: .yellow),
+                    color: .palette(.yellow)),
                 Annotation(
                     id: 2, shape: .rectangle(rect: CGRect(x: 360, y: 60, width: 180, height: 120)),
-                    color: .red, width: .thin),
+                    color: .palette(.red), width: .thin),
                 Annotation(
                     id: 3,
                     shape: .arrow(tail: CGPoint(x: 120, y: 330), head: CGPoint(x: 350, y: 200)),
-                    color: .blue),
+                    color: .palette(.blue)),
                 Annotation(
                     id: 4, shape: .text(origin: CGPoint(x: 380, y: 250), string: "Totals\nQ3"),
-                    color: .green, width: .thin),
+                    color: .palette(.green), width: .thin),
             ])
         try Golden.check(Renderer.render(image, edits: edits).image, named: "render-annotations")
     }
@@ -140,13 +140,13 @@ import Testing
                 Annotation(
                     id: 2,
                     shape: .arrow(tail: CGPoint(x: 450, y: 150), head: CGPoint(x: 330, y: 600)),
-                    color: .red),
+                    color: .palette(.red)),
                 Annotation(
                     id: 3, shape: .rectangle(rect: CGRect(x: 300, y: 400, width: 200, height: 200)),
-                    color: .orange, width: .thin),
+                    color: .palette(.orange), width: .thin),
                 Annotation(
                     id: 4, shape: .text(origin: CGPoint(x: 300, y: 350), string: "gone"),
-                    color: .black),
+                    color: .palette(.black)),
             ],
             salt: 7)
         try Golden.check(Renderer.render(image, edits: edits).image, named: "render-order")
@@ -166,7 +166,7 @@ extension AnnotationRendererTests {
         // renderer and the count must agree on whether it shows.
         let poking = Annotation(
             id: 1, shape: .rectangle(rect: CGRect(x: 10, y: 102, width: 100, height: 96)),
-            color: .red, width: .thick)
+            color: .palette(.red), width: .thick)
         let placed = map(bands: [100..<200])
         #expect(!placed.isHidden(AnnotationGeometry.bounds(of: poking, scale: 1)))
         #expect(placed.rect(CGRect(x: 10, y: 102, width: 100, height: 96)) == nil)

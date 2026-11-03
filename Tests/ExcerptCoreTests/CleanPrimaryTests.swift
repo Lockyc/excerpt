@@ -19,7 +19,7 @@ import Testing
                 Annotation(id: 1, shape: .blur(rect: blurRect)),
                 Annotation(
                     id: 2, shape: .text(origin: CGPoint(x: 10, y: 320), string: "note"),
-                    color: .black),
+                    color: .palette(.black)),
             ])
         try store.saveEdits(primary: primary, original: original, edits: edits)
         let data = try Data(contentsOf: primary)

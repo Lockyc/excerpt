@@ -14,7 +14,7 @@ import Testing
 
     func options(_ shape: Shape) -> [ItemOption] {
         EditorModel.options(
-            for: Annotation(id: 1, shape: shape, color: .blue, width: .thick),
+            for: Annotation(id: 1, shape: shape, color: .palette(.blue), width: .thick),
             canMoveEarlier: true, canMoveLater: false)
     }
 
@@ -22,41 +22,41 @@ import Testing
         let r = CGRect(x: 0, y: 0, width: 10, height: 10)
         #expect(
             options(.arrow(tail: .zero, head: CGPoint(x: 9, y: 9)))
-                == [.color(.blue), .size(.thick), .delete])
-        #expect(options(.rectangle(rect: r)) == [.color(.blue), .size(.thick), .delete])
-        #expect(options(.highlight(rect: r)) == [.color(.blue), .delete])
+                == [.color(.palette(.blue)), .size(.thick), .delete])
+        #expect(options(.rectangle(rect: r)) == [.color(.palette(.blue)), .size(.thick), .delete])
+        #expect(options(.highlight(rect: r)) == [.color(.palette(.blue)), .delete])
         #expect(options(.blur(rect: r)) == [.delete])
         #expect(
             options(.text(origin: .zero, string: "a", background: true))
-                == [.color(.blue), .size(.thick), .background(true), .delete])
+                == [.color(.palette(.blue)), .size(.thick), .background(true), .delete])
         #expect(
             options(.text(origin: .zero, string: "a"))
-                == [.color(.blue), .size(.thick), .background(false), .delete])
+                == [.color(.palette(.blue)), .size(.thick), .background(false), .delete])
         #expect(
             options(.step(center: .zero))
                 == [
-                    .color(.blue), .size(.thick), .moveEarlier(enabled: true),
+                    .color(.palette(.blue)), .size(.thick), .moveEarlier(enabled: true),
                     .moveLater(enabled: false), .delete,
                 ])
         let two = [CGPoint(x: 0, y: 0), CGPoint(x: 9, y: 9)]
         #expect(
             options(.path(points: two, closed: false, fill: true))
                 == [
-                    .color(.blue), .size(.thick), .closed(false, enabled: false),
+                    .color(.palette(.blue)), .size(.thick), .closed(false, enabled: false),
                     .fill(true, enabled: false),
                     .delete,
                 ])
         #expect(
             options(.path(points: two, closed: true, fill: false))
                 == [
-                    .color(.blue), .size(.thick), .closed(true, enabled: true),
+                    .color(.palette(.blue)), .size(.thick), .closed(true, enabled: true),
                     .fill(false, enabled: true), .delete,
                 ])
         let three = two + [CGPoint(x: 0, y: 9)]
         #expect(
             options(.path(points: three, closed: false, fill: false))
                 == [
-                    .color(.blue), .size(.thick), .closed(false, enabled: true),
+                    .color(.palette(.blue)), .size(.thick), .closed(false, enabled: true),
                     .fill(false, enabled: false), .delete,
                 ])
     }

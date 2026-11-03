@@ -32,14 +32,14 @@ import Testing
     @Test func theArrowDragStartsAtTheHead() {
         let m = model()
         m.tool = .arrow
-        m.setColor(.green)
+        m.setColor(.palette(.green))
         drag(m, CGPoint(x: 200, y: 100), CGPoint(x: 50, y: 300))
         #expect(
             m.document.annotations == [
                 Annotation(
                     id: 1,
                     shape: .arrow(tail: CGPoint(x: 50, y: 300), head: CGPoint(x: 200, y: 100)),
-                    color: .green)
+                    color: .palette(.green))
             ])
         #expect(m.selection == .annotation(1))
         m.undo()
@@ -219,13 +219,15 @@ import Testing
     @Test func theStepToolPlacesTheNextNumberAndDragsIt() {
         let m = model()
         m.tool = .step
-        m.setColor(.blue)
+        m.setColor(.palette(.blue))
         drag(m, CGPoint(x: 50, y: 50), CGPoint(x: 50, y: 50))
         drag(m, CGPoint(x: 150, y: 150), CGPoint(x: 170, y: 160))
         #expect(
             m.document.annotations == [
-                Annotation(id: 1, shape: .step(center: CGPoint(x: 50, y: 50)), color: .blue),
-                Annotation(id: 2, shape: .step(center: CGPoint(x: 170, y: 160)), color: .blue),
+                Annotation(
+                    id: 1, shape: .step(center: CGPoint(x: 50, y: 50)), color: .palette(.blue)),
+                Annotation(
+                    id: 2, shape: .step(center: CGPoint(x: 170, y: 160)), color: .palette(.blue)),
             ])
         #expect(m.selection == .annotation(2))
         m.undo()  // placing and dragging step 2 was one step
@@ -305,7 +307,7 @@ import Testing
         m.tool = .text
         m.beginTyping(at: pointer(m, 40, 60), map: map(m))
         m.updateTyping("Note")
-        m.setColor(.yellow)
+        m.setColor(.palette(.yellow))
         m.setBackground(false)
         #expect(!m.canUndo)  // nothing recorded until the text commits
         m.endTyping()
@@ -315,7 +317,7 @@ import Testing
                     id: 1,
                     shape: .text(
                         origin: CGPoint(x: 40, y: 60), string: "Note", background: false),
-                    color: .yellow)
+                    color: .palette(.yellow))
             ])
         m.undo()
         #expect(m.document.annotations.isEmpty)
@@ -392,7 +394,7 @@ import Testing
         let m = model()
         m.apply { $0.annotations = [note(1, CGRect(x: 20, y: 20, width: 60, height: 40))] }
         m.selection = .annotation(1)
-        m.setColor(.blue)
+        m.setColor(.palette(.blue))
         m.undo()
         #expect(m.selection == .annotation(1))
         m.redo()

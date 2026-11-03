@@ -33,7 +33,7 @@ extension StrokeWidth {
 /// Every control refuses first responder, so clicking one leaves typed text in its field.
 @MainActor
 final class ItemBar: NSVisualEffectView {
-    var onColor: (Palette) -> Void = { _ in }
+    var onColor: (AnnotationColor) -> Void = { _ in }
     var onSize: (StrokeWidth) -> Void = { _ in }
     var onBackground: (Bool) -> Void = { _ in }
     var onClosed: (Bool) -> Void = { _ in }
@@ -89,12 +89,18 @@ final class ItemBar: NSVisualEffectView {
     private func control(for option: ItemOption) -> NSView {
         switch option {
         case .color(let selected):
-            let control = segments(Palette.allCases, selected: selected) { control, i, color in
+            let chosen: Palette? =
+                if case .palette(let palette) = selected { palette } else { nil }
+            let control = segments(Palette.allCases, selected: chosen ?? .initial) {
+                control, i, color in
                 control.setImage(color.swatch, forSegment: i)
                 control.setToolTip(color.rawValue.capitalized, forSegment: i)
             }
+            // A sampled colour matches no palette segment.
+            if chosen == nil { control.selectedSegment = -1 }
             return wire(control) { [weak self] in
-                self?.onColor(Palette.allCases[($0 as! NSSegmentedControl).selectedSegment])
+                self?.onColor(
+                    .palette(Palette.allCases[($0 as! NSSegmentedControl).selectedSegment]))
             }
         case .size(let selected):
             let control = segments(StrokeWidth.allCases, selected: selected) { control, i, width in

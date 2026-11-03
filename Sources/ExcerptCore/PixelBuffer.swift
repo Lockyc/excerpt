@@ -1,7 +1,7 @@
 import CoreGraphics
 import Foundation
 
-public struct RGBA: Codable, Equatable, Sendable {
+public struct RGBA: Codable, Equatable, Hashable, Sendable {
     public var r: UInt8
     public var g: UInt8
     public var b: UInt8

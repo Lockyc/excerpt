@@ -139,10 +139,12 @@ public struct Annotation: Codable, Equatable, Sendable, Identifiable {
     /// Unique within its document (`EditDocument.nextAnnotationID`).
     public var id: Int
     public var shape: Shape
-    public var color: Palette
+    public var color: AnnotationColor
     public var width: StrokeWidth
 
-    public init(id: Int, shape: Shape, color: Palette = .initial, width: StrokeWidth = .initial) {
+    public init(
+        id: Int, shape: Shape, color: AnnotationColor = .initial, width: StrokeWidth = .initial
+    ) {
         self.id = id
         self.shape = shape
         self.color = color

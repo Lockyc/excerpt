@@ -115,7 +115,7 @@ import Testing
                             CGPoint(x: 40, y: 60), CGPoint(x: 200, y: 120),
                             CGPoint(x: 260, y: 560), CGPoint(x: 120, y: 700),
                         ], closed: false, fill: false),
-                    color: .orange, width: .thick),
+                    color: .palette(.orange), width: .thick),
                 Annotation(
                     id: 2,
                     shape: .path(
@@ -123,7 +123,7 @@ import Testing
                             CGPoint(x: 340, y: 60), CGPoint(x: 560, y: 80),
                             CGPoint(x: 520, y: 300), CGPoint(x: 360, y: 260),
                         ], closed: true, fill: false),
-                    color: .blue, width: .thin),
+                    color: .palette(.blue), width: .thin),
                 Annotation(
                     id: 3,
                     shape: .path(
@@ -131,13 +131,13 @@ import Testing
                             CGPoint(x: 340, y: 560), CGPoint(x: 560, y: 600),
                             CGPoint(x: 450, y: 760),
                         ], closed: true, fill: true),
-                    color: .green, width: .medium),
+                    color: .palette(.green), width: .medium),
                 Annotation(
                     id: 4,
                     shape: .path(
                         points: [CGPoint(x: 60, y: 300), CGPoint(x: 160, y: 340)], closed: false,
                         fill: true),
-                    color: .red, width: .medium),
+                    color: .palette(.red), width: .medium),
             ],
             salt: 7)
         try Golden.check(Renderer.render(image, edits: edits).image, named: "render-paths")

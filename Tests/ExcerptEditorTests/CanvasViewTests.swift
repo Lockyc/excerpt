@@ -34,10 +34,10 @@ import Testing
                 Annotation(
                     id: 1,
                     shape: .arrow(tail: CGPoint(x: 40, y: 60), head: CGPoint(x: 300, y: 300)),
-                    color: .blue),
+                    color: .palette(.blue)),
                 Annotation(
                     id: 2, shape: .text(origin: CGPoint(x: 20, y: 320), string: "Total"),
-                    color: .black, width: .thick),
+                    color: .palette(.black), width: .thick),
                 Annotation(
                     id: 3, shape: .blur(rect: CGRect(x: 200, y: 20, width: 100, height: 60))),
             ])
@@ -125,12 +125,12 @@ import Testing
                     id: 1,
                     shape: .rectangle(
                         rect: CGRect(x: 40 + shift, y: 250, width: 200, height: 80)),
-                    color: .red, width: .thick),
+                    color: .palette(.red), width: .thick),
                 Annotation(
                     id: 2,
                     shape: .arrow(
                         tail: CGPoint(x: 40, y: 60 + shift), head: CGPoint(x: 300, y: 300)),
-                    color: .blue, width: .thick),
+                    color: .palette(.blue), width: .thick),
             ])
     }
 
@@ -415,7 +415,7 @@ import Testing
     @Test func withAMarginTheCanvasMatchesTheRender() throws {
         let past = Annotation(
             id: 1, shape: .text(origin: CGPoint(x: 20, y: -30), string: "Pin to dashboard"),
-            color: .red, width: .thick)
+            color: .palette(.red), width: .thick)
         let c = canvas([past])
         let exported = Renderer.render(c.model.original, edits: c.model.document).image
         #expect(Int(c.renderedSize.width) == exported.width + 2 * Int(CanvasView.gutter))

@@ -26,12 +26,16 @@ import Testing
         let doc = EditDocument(scale: 2, cuts: [Cut(axis: .vertical, lower: 1, upper: 2)])
         #expect(try doc.encoded() == doc.encoded())
         let json = String(decoding: try doc.encoded(), as: UTF8.self)
-        #expect(json.contains("\"version\":8") && !json.contains("border"))
+        #expect(json.contains("\"version\":9") && !json.contains("border"))
+    }
+
+    @Test func currentVersionIsNine() {
+        #expect(EditDocument.currentVersion == 9)
     }
 
     @Test func rejectsANewerVersion() {
-        let json = Data(#"{"version":9,"scale":2,"cuts":[]}"#.utf8)
-        #expect(throws: EditDocumentError.unsupportedVersion(9)) { try EditDocument.decode(json) }
+        let json = Data(#"{"version":10,"scale":2,"cuts":[]}"#.utf8)
+        #expect(throws: EditDocumentError.unsupportedVersion(10)) { try EditDocument.decode(json) }
     }
 
     @Test func firstStepAndRestartRoundTrip() throws {
@@ -60,19 +64,20 @@ import Testing
                     id: 1, shape: .arrow(tail: CGPoint(x: 1, y: 2), head: CGPoint(x: 30, y: 40))),
                 Annotation(
                     id: 2, shape: .rectangle(rect: CGRect(x: 1, y: 2, width: 3, height: 4)),
-                    color: .blue, width: .thick),
+                    color: .palette(.blue), width: .thick),
                 Annotation(
                     id: 3, shape: .text(origin: CGPoint(x: 5, y: 6), string: "Total ⋯\nline 2"),
-                    color: .black, width: .thin),
+                    color: .palette(.black), width: .thin),
                 Annotation(
                     id: 4, shape: .highlight(rect: CGRect(x: 0, y: 0, width: 50, height: 10)),
-                    color: .yellow),
+                    color: .palette(.yellow)),
                 Annotation(id: 5, shape: .blur(rect: CGRect(x: 10, y: 10, width: 24, height: 24))),
                 Annotation(
                     id: 6,
                     shape: .text(origin: CGPoint(x: 7, y: 8), string: "On", background: true),
-                    color: .yellow),
-                Annotation(id: 7, shape: .step(center: CGPoint(x: 40, y: 50)), color: .blue),
+                    color: .palette(.yellow)),
+                Annotation(
+                    id: 7, shape: .step(center: CGPoint(x: 40, y: 50)), color: .palette(.blue)),
             ])
         #expect(try EditDocument.decode(doc.encoded()) == doc)
     }
@@ -113,7 +118,7 @@ import Testing
         // A missing salt is random, not a public seed, and persists once saved.
         #expect(try EditDocument.decode(json).salt != doc.salt)
         #expect(try EditDocument.decode(doc.encoded()).salt == doc.salt)
-        #expect(String(decoding: try doc.encoded(), as: UTF8.self).contains("\"version\":8"))
+        #expect(String(decoding: try doc.encoded(), as: UTF8.self).contains("\"version\":9"))
     }
 
     @Test func borderRoundTripsAndReadsOffWhenAbsent() throws {

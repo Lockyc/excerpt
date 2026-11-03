@@ -2,7 +2,7 @@ import ExcerptCore
 
 /// One control on the item bar, carrying its current value.
 enum ItemOption: Equatable {
-    case color(Palette)
+    case color(AnnotationColor)
     case size(StrokeWidth)
     case background(Bool)
     /// Whether a path is closed; disabled on an open path of two points, which has no shape to
