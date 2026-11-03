@@ -72,7 +72,9 @@ shown as a thumbnail with **Edit** and **Close**. Files in that folder older
 than 30 days move into `YYYY/MM-Month/` folders, names unchanged (also a setting). The editor has
 arrow, rectangle, path (click or freehand lines and outlines, optionally filled), text (plain or
 on a background of its colour), numbered steps, highlight, blur,
-crop and **cut** (`C`); a selected item's colour, size and options float beside it. To cut,
+crop and **cut** (`C`); a selected item's colour, size and options float beside it. To conceal
+text, **patch** (`E`) it with the colour around it; to change it, **Replace** (`X`) patches a
+line and lets you retype it in the same size, weight and colour. To cut,
 drag across the rows or columns to remove; the join becomes a torn seam. Cut and blurred
 content never reaches the saved file. The original and your edits are kept in a separate
 `… original.png`, so you can reopen a capture from **Recent Captures** (⌥4) and

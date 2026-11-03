@@ -361,11 +361,10 @@ Dock icon. Several captures opened together — the thumbnails' Edit All, a mult
 Capture…, several files handed over at once by Finder or another app — open as one **series**.
 
 Tools: `V` select · `A` arrow · `R` rectangle · `P` path · `T` text · `N` step · `H` highlight ·
-`B` blur · `E` patch (a solid fill in the colour around its edge, edges snapped to gridlines
-within the patch's own span) · `X` replace · `K` crop · `C` cut, each key shown on its toolbar button. The toolbar is one row: tools
-and Border centred while there is room, the actions at the right; the editor's notes (snapping,
-the cut limit, a Replace that found no text, annotations hidden by cuts) are the window's subtitle. A new editor starts on the
-arrow. Over the canvas the pointer is
+`B` blur · `E` patch · `X` replace · `K` crop · `C` cut, each key shown on its toolbar
+button. The toolbar is one row: tools and Border centred while there is room, the actions at the
+right; the editor's notes (snapping, the cut limit, a Replace that found no text, annotations
+hidden by cuts) are the window's subtitle. A new editor starts on the arrow. Over the canvas the pointer is
 the arrow under select, the I-beam under text, and otherwise a crosshair badged with the tool's
 toolbar glyph (`ToolGlyph`); where a press would take hold of something instead (`Grab`, the one
 hit-test the press follows), it shows that: an open hand on what would move, closed while it
@@ -378,7 +377,8 @@ own. Crop snaps using the same gap detection as cuts.
 
 **The item bar** floats above whatever is selected (below it when there is no room, kept on the
 canvas, hidden during a drag) and carries that item's options and nothing else: delete for every
-item, and colour (six), size (three; one control sets stroke, text and step size) and the
+item, and colour (six, a seventh swatch holding the last sampled colour, and an eyedropper that
+samples any pixel of the capture), size (three; one control sets stroke, text and step size) and the
 kind's own options where they apply — text adds a free size (`TextStyle.pointsRange`), bold,
 font (sans, mono, serif), alignment (left, centred) and its background, a step adds Move earlier / Move
 later (disabled at either end of the sequence), a path adds Closed (disabled under three points) and Fill (disabled while open). The options per kind are one pure mapping. The
@@ -393,6 +393,10 @@ is what saves. Return commits; ⌥Return adds a line. New text started on a run 
 capture's own text (`CaptureText.runs`, read once as the editor opens) takes that text's look
 from `TextMatcher` — size, weight, font, alignment and colour, background off; anywhere else it
 takes the style last chosen. A click before the reading finishes waits for it under a busy cursor.
+
+**Patch** (`E`) is a solid fill that conceals what is under it. Its colour is sampled from the
+ring of capture pixels around it and re-sampled as it moves until a colour is set by hand. Its
+edges snap to gaps within the patch's own width or height; `⌥` disables snapping.
 
 **Replace** (`X`): a click or drag over recognised lines makes, for each line touched, a patch
 over its ink and matched text holding its string — one undo step — and types into the first in
@@ -466,7 +470,7 @@ known strings. The noise is seeded from a per-document salt stored in the master
 shows the true result.
 
 **The edit document** holds the cuts, an optional crop, the annotations (arrow, rectangle, path,
-text, step, highlight, blur), all in original pixels, an optional border, the first step number
+text, step, highlight, blur, patch), all in original pixels, with sampled colours and text styles, an optional border, the first step number
 and whether it restarts a series' numbering, the margin colour, plus the blur salt, so every edit stays adjustable
 from the master and a capture reopened on its own renders the numbers it was saved with.
 Render order: blur (from original pixels) → crop → cuts and their labels → margin → annotations,
