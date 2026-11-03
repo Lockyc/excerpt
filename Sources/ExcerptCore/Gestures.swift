@@ -272,7 +272,7 @@ public enum Gestures {
         from start: CGPoint, to end: CGPoint, width: Int, height: Int, minimum: Double,
         snapping buffer: PixelBuffer?, radius: Int
     ) -> PixelRect? {
-        func whole(_ v: CGFloat) -> Int { Int(min(max(Double(v.rounded()), -1e9), 1e9)) }
+        func whole(_ v: CGFloat) -> Int { ColorSampler.wholePixel(v, .toNearestOrAwayFromZero) }
         var left = whole(min(start.x, end.x))
         var right = whole(max(start.x, end.x))
         var top = whole(min(start.y, end.y))
@@ -281,8 +281,7 @@ public enum Gestures {
             func line(_ v: Int, _ axis: Axis, _ extent: Int, _ span: Range<Int>) -> Int? {
                 guard v > 0, v < extent else { return nil }
                 let snapped = GapSnapper.snap(v, axis: axis, in: buffer, radius: radius, span: span)
-                return GapSnapper.isUniform(
-                    line: snapped, axis: axis, in: buffer, span: span, tolerance: 6)
+                return GapSnapper.isUniform(line: snapped, axis: axis, in: buffer, span: span)
                     ? snapped : nil
             }
             let across = left..<right

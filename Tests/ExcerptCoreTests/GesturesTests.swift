@@ -319,13 +319,35 @@ import Testing
 @Suite struct PatchGestureTests {
     let sheet = PixelBuffer(Fixtures.sheet(width: 360, height: 200))
 
+    /// The sheet's rows end in a bottom border at y 180, with plain white padding below it.
+    let padded: PixelBuffer = {
+        let tall = PixelBuffer(Fixtures.sheet(width: 360, height: 220))
+        return PixelBuffer(
+            Fixtures.paint(width: 360, height: 220) { x, y in
+                y > 180 ? RGBA(r: 255, g: 255, b: 255, a: 255) : tall[x: x, y: y]
+            })
+    }()
+
     @Test func patchOverTableRowKeepsGridlines() {
-        // Across the full width only the gridlines (rows 40, 60, 80) are uniform: the drag from
-        // 45 to 75 snaps to the lines at 40 and 80, and the patch keeps both, covering 41..<80.
+        // The last row (161..<180) dragged from 165 to 178: across the full width only the
+        // gridlines are uniform, so the top snaps to the line at 160 and the bottom to the
+        // border at 180. The patch covers 161..<180: both lines and the padding below survive.
         let rect = Gestures.patch(
-            from: CGPoint(x: 0, y: 45), to: CGPoint(x: 360, y: 75), width: 360, height: 200,
+            from: CGPoint(x: 0, y: 165), to: CGPoint(x: 360, y: 178), width: 360, height: 220,
+            minimum: 4, snapping: padded, radius: 12)
+        #expect(rect == PixelRect(x: 0, y: 161, width: 360, height: 19))
+        #expect((rect?.y ?? 0) + (rect?.height ?? 0) == 180)
+    }
+
+    @Test func edgesSnapWithinTheDraggedCellsOwnSpan() {
+        // Inside the second cell column (x 61..<119), rows 16..19 and 36..39 are plain white
+        // there though no row is uniform across the image: the drag from 10 to 30 snaps to the
+        // cell's rows 16 and 36 (the patch spans 17..<36), where a full-width test would pick
+        // the gridlines 0 and 20. Columns snap over the dragged rows to the cell's gridlines.
+        let rect = Gestures.patch(
+            from: CGPoint(x: 65, y: 10), to: CGPoint(x: 115, y: 30), width: 360, height: 200,
             minimum: 4, snapping: sheet, radius: 12)
-        #expect(rect == PixelRect(x: 0, y: 41, width: 360, height: 39))
+        #expect(rect == PixelRect(x: 61, y: 17, width: 59, height: 19))
     }
 
     @Test func withoutSnappingTheDragIsKept() {

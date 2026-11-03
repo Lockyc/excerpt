@@ -49,7 +49,8 @@ public enum GapSnapper {
     /// Whether the line is one colour within `tolerance` across `span`, clipped to the buffer;
     /// false when no part of `span` lies in it.
     public static func isUniform(
-        line: Int, axis: Axis, in buffer: PixelBuffer, span: Range<Int>, tolerance: UInt8
+        line: Int, axis: Axis, in buffer: PixelBuffer, span: Range<Int>,
+        tolerance: UInt8 = 6
     ) -> Bool {
         let count = axis == .horizontal ? buffer.width : buffer.height
         let lower = max(span.lowerBound, 0)

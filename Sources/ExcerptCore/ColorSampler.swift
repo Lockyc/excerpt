@@ -21,15 +21,10 @@ public enum ColorSampler {
     ) -> RGBA? {
         guard rect.minX.isFinite, rect.minY.isFinite, rect.maxX.isFinite, rect.maxY.isFinite
         else { return nil }
-        // Far past the buffer a coordinate means the same as 1e9 (nothing in range), and keeps
-        // the Int conversion from trapping.
-        func whole(_ v: CGFloat, _ rule: FloatingPointRoundingRule) -> Int {
-            Int(min(max(Double(v.rounded(rule)), -1e9), 1e9))
-        }
-        let minX = whole(rect.minX, .down)
-        let minY = whole(rect.minY, .down)
-        let maxX = whole(rect.maxX, .up)
-        let maxY = whole(rect.maxY, .up)
+        let minX = wholePixel(rect.minX, .down)
+        let minY = wholePixel(rect.minY, .down)
+        let maxX = wholePixel(rect.maxX, .up)
+        let maxY = wholePixel(rect.maxY, .up)
 
         var buckets: [(color: RGBA, count: Int)] = []
         func take(_ x: Int, _ y: Int) {
@@ -58,6 +53,13 @@ public enum ColorSampler {
             guard let best else { return b }
             return b.count > best.count ? b : best
         }?.color
+    }
+
+    /// `v` rounded by `rule` to a whole pixel. Far past any buffer a coordinate means the same
+    /// as 1e9 (nothing in range), and NaN is 0, so the Int conversion never traps.
+    static func wholePixel(_ v: CGFloat, _ rule: FloatingPointRoundingRule) -> Int {
+        guard !v.isNaN else { return 0 }
+        return Int(min(max(Double(v.rounded(rule)), -1e9), 1e9))
     }
 
     private static func near(_ a: RGBA, _ b: RGBA, _ t: UInt8) -> Bool {
