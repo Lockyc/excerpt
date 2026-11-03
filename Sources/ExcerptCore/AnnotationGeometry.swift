@@ -100,7 +100,7 @@ public enum AnnotationGeometry {
             .insetBy(dx: -w / 2, dy: -w / 2)
         case .rectangle(let rect):
             return rect.standardized.insetBy(dx: -w / 2, dy: -w / 2)
-        case .highlight(let rect), .blur(let rect):
+        case .highlight(let rect), .blur(let rect), .patch(let rect, _):
             return rect.standardized
         case .text(_, _, let background):
             let text = textRect(of: annotation, scale: scale)!
@@ -138,7 +138,7 @@ public enum AnnotationGeometry {
     public static func isDrawn(_ annotation: Annotation, map: RenderMap, scale: Double) -> Bool {
         guard !map.isHidden(bounds(of: annotation, scale: scale)) else { return false }
         switch annotation.shape {
-        case .rectangle(let rect), .highlight(let rect), .blur(let rect):
+        case .rectangle(let rect), .highlight(let rect), .blur(let rect), .patch(let rect, _):
             return map.rect(rect.standardized) != nil
         case .arrow(let tail, let head):
             // Decided on the unstroked extent: a stroke poking past a band edge doesn't

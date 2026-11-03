@@ -399,7 +399,7 @@ extension EditorModel {
         switch shape {
         case .arrow(let tail, let head):
             return Double(hypot(head.x - tail.x, head.y - tail.y)) < minimumDrag
-        case .rectangle(let rect), .highlight(let rect), .blur(let rect):
+        case .rectangle(let rect), .highlight(let rect), .blur(let rect), .patch(let rect, _):
             return Double(max(rect.width, rect.height)) < minimumDrag
         case .text, .step, .path:
             return false

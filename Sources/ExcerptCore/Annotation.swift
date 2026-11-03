@@ -86,6 +86,9 @@ public enum Shape: Codable, Equatable, Sendable {
     /// A polyline through `points`, or a polygon when `closed`. `fill` tints a closed path's
     /// inside as a highlight does; an open path keeps it but doesn't draw it.
     case path(points: [CGPoint], closed: Bool, fill: Bool)
+    /// A solid, unstroked fill that conceals what is under it. `autoColor` true re-samples its
+    /// colour from the surrounding pixels; false keeps the colour as chosen.
+    case patch(rect: CGRect, autoColor: Bool)
 
     /// The same shape moved by `dx`, `dy`.
     public func offset(dx: Double, dy: Double) -> Shape {
@@ -98,6 +101,7 @@ public enum Shape: Codable, Equatable, Sendable {
             return .text(origin: move(origin), string: string, background: background)
         case .highlight(let rect): return .highlight(rect: move(rect))
         case .blur(let rect): return .blur(rect: move(rect))
+        case .patch(let rect, let autoColor): return .patch(rect: move(rect), autoColor: autoColor)
         case .step(let center): return .step(center: move(center))
         case .path(let points, let closed, let fill):
             return .path(points: points.map { move($0) }, closed: closed, fill: fill)
@@ -126,6 +130,11 @@ public enum Shape: Codable, Equatable, Sendable {
 
     public var isBlur: Bool {
         if case .blur = self { return true }
+        return false
+    }
+
+    public var isPatch: Bool {
+        if case .patch = self { return true }
         return false
     }
 

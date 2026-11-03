@@ -62,7 +62,7 @@ extension EditorModel {
                 color, size, .closed(closed, enabled: closed || points.count >= 3),
                 .fill(fill, enabled: closed), .delete,
             ]
-        case .highlight:
+        case .highlight, .patch:
             return [color, .delete]
         case .text(_, _, let background):
             return [color, size, .background(background == true), .delete]

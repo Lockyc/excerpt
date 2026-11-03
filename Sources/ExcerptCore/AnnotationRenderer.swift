@@ -52,6 +52,11 @@ public enum AnnotationRenderer {
                     context.setFillColor(color.copy(alpha: CGFloat(highlightOpacity))!)
                     context.fill(flip.rect(placed))
                 }
+            case .patch(let rect, _):
+                if let placed = map.rect(rect.standardized) {
+                    context.setFillColor(color)
+                    context.fill(flip.rect(placed))
+                }
             case .text(let origin, let string, let background):
                 let pixelSize = AnnotationGeometry.textPixelSize(annotation, scale: scale)
                 let onPill = background == true

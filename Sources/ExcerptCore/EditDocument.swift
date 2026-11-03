@@ -241,7 +241,8 @@ public struct EditDocument: Codable, Equatable, Sendable {
             case .arrow(let tail, let head): ok = inRange(tail.x, tail.y, head.x, head.y)
             case .text(let origin, _, _): ok = inRange(origin.x, origin.y)
             case .step(let center): ok = inRange(center.x, center.y)
-            case .rectangle(let r), .highlight(let r), .blur(let r): ok = rectOK(r)
+            case .rectangle(let r), .highlight(let r), .blur(let r), .patch(let r, _):
+                ok = rectOK(r)
             case .path(let points, _, _):
                 ok = points.count >= 2 && points.allSatisfy { inRange($0.x, $0.y) }
             }
