@@ -93,11 +93,13 @@ import Testing
         #expect(rect.minX > 0 && rect.maxX <= 320 && rect.minY > 0 && rect.maxY <= 80)
 
         let text = m.document.annotations[1]
-        guard case .text(_, let string, let background, let style?) = text.shape else {
+        guard case .text(let origin, let string, let background, let style?) = text.shape else {
             Issue.record("no styled text")
             return
         }
         #expect(string == "You")
+        // On the cell's centre, where the header was drawn.
+        #expect(abs(Double(origin.x) - 160) <= 1, "origin.x \(origin.x)")
         #expect(background == false)
         #expect(style.alignment == .centered)
         #expect(style.font == .mono)

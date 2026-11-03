@@ -66,6 +66,9 @@ import Testing
                 bold: matched.style.bold))
         let baseline = Double(matched.origin.y) + Double(ascent)
         #expect(abs(baseline - f.baseline) <= 1, "baseline \(baseline) vs \(f.baseline)")
+        #expect(
+            abs(Double(matched.origin.x) - Double(origin.x)) <= 1,
+            "origin.x \(matched.origin.x) vs \(origin.x)")
         let ink = matched.color.rgba
         for (a, b) in [(ink.r, color.r), (ink.g, color.g), (ink.b, color.b)] {
             #expect(abs(Int(a) - Int(b)) <= 8, "colour \(ink) vs \(color)")
@@ -108,6 +111,29 @@ import Testing
             "git commit --amend", style: TextStyle(points: 12, bold: false, font: .mono),
             color: Self.black, at: CGPoint(x: 16, y: 30), scale: 2,
             ground: Self.plain(Self.white, width: 600, height: 160))
+    }
+
+    /// A wide left side-bearing: the ink starts well right of the glyph origin.
+    @Test func monoBoldNameLeft() throws {
+        try Self.expectRoundTrip(
+            "Lachlan", style: TextStyle(points: 13, bold: true, font: .mono),
+            color: Self.white, at: CGPoint(x: 40, y: 50), scale: 2,
+            ground: Self.plain(Self.slate))
+    }
+
+    /// No ground beside the run on either side — its ink spans the whole buffer — so there is no
+    /// region to be centred in: the text is left-aligned.
+    @Test func aRunWithNoGroundBesideItIsLeft() throws {
+        let f = Self.fixture(
+            "Revenue", style: TextStyle(points: 13, bold: true), color: Self.white,
+            at: CGPoint(x: 40, y: 30), scale: 1, ground: Self.plain(Self.slate))
+        let drawn = f.run.bounds.insetBy(dx: 2, dy: 2)
+        let strip = try #require(
+            f.buffer.makeImage().cropping(
+                to: CGRect(x: drawn.minX, y: 0, width: drawn.width, height: 120)))
+        let run = RecognizedText(f.run.string, f.run.bounds.offsetBy(dx: -drawn.minX, dy: 0))
+        let matched = try #require(TextMatcher.match(run, in: PixelBuffer(strip), scale: 1))
+        #expect(matched.style.alignment == .left)
     }
 
     @Test func noInkIsNil() {

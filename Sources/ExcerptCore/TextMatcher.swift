@@ -5,8 +5,9 @@ import Foundation
 /// The look of a recognised run of text, as a text annotation reproduces it: drawn at `origin`
 /// in `style` and `color`, its baseline lands on the original's.
 public struct MatchedText: Equatable, Sendable {
-    /// A text annotation's origin: the top of its line, at the ink's left edge (`.left`) or the
-    /// centre of the flat region around it (`.centered`).
+    /// A text annotation's origin: the top of its line, at the glyph origin that puts the
+    /// rendered ink's left edge on the run's (`.left`) or the centre of the flat region around
+    /// it (`.centered`).
     public let origin: CGPoint
     public let style: TextStyle
     public let color: AnnotationColor
@@ -42,7 +43,8 @@ public enum TextMatcher {
     /// this fraction of the ink's columns, weighed by their coverage there, end in it.
     static let baselineColumnFraction = 0.25
 
-    /// Centred when the run's middle is within this many points of its flat region's middle.
+    /// Centred when the run's middle is within this many points of its flat region's middle, and
+    /// that region holds ground on both sides of the run.
     static let centredTolerance = 2.0
 
     /// Steps refining a candidate's size, from its height fit, until its rendered ink is as wide
@@ -109,16 +111,22 @@ public enum TextMatcher {
 
         let range = TextStyle.pointsRange
         let points = min(max(best.size / scale, range.lowerBound), range.upperBound)
-        let ascent = CTFontGetAscent(
-            TextLayout.font(pixelSize: points * scale, font: best.font, bold: best.bold))
+        let font = TextLayout.font(pixelSize: points * scale, font: best.font, bold: best.bold)
         let region = flatRegion(around: ink.columns, rows: ys, in: buffer, ground: ground)
         let regionMid = Double(region.lowerBound + region.upperBound) / 2
         let inkMid = Double(ink.columns.lowerBound + ink.columns.upperBound) / 2
-        let centred = abs(inkMid - regionMid) <= centredTolerance * scale
+        let grounded =
+            region.lowerBound < ink.columns.lowerBound && region.upperBound > ink.columns.upperBound
+        let centred = grounded && abs(inkMid - regionMid) <= centredTolerance * scale
+        // The renderer puts the glyph origin at `origin.x`; the ink starts one left side-bearing
+        // to its right.
+        let bearing = CTLineGetBoundsWithOptions(
+            TextLayout.line(string, font: font, color: color.cgColor), .useGlyphPathBounds
+        ).minX
         return MatchedText(
             origin: CGPoint(
-                x: centred ? regionMid : Double(ink.columns.lowerBound),
-                y: ink.baseline - Double(ascent)),
+                x: centred ? regionMid : ink.left - Double(bearing),
+                y: ink.baseline - Double(CTFontGetAscent(font))),
             style: TextStyle(
                 points: points, bold: best.bold, font: best.font,
                 alignment: centred ? .centered : .left),
