@@ -17,7 +17,7 @@ public enum ColorSampler {
     /// the first bucket in ring order (top edge left to right, right edge, bottom, left). The
     /// result is the bucket's first colour. Nil when no ring pixel lies in the buffer.
     public static func edgeColor(
-        around rect: CGRect, in buffer: PixelBuffer, tolerance: UInt8 = 6
+        around rect: CGRect, in buffer: PixelBuffer, tolerance: UInt8 = GapSnapper.tolerance
     ) -> RGBA? {
         guard rect.minX.isFinite, rect.minY.isFinite, rect.maxX.isFinite, rect.maxY.isFinite
         else { return nil }

@@ -47,9 +47,9 @@ public enum HitTest {
         return nil
     }
 
-    /// The rendered rect a rectangle, highlight, blur, text or step covers, stroke included,
-    /// placed as `AnnotationRenderer` places it: rects through `map.rect`; text and a step at
-    /// full size from their mapped origin or centre.
+    /// The rendered rect a rectangle, highlight, blur, patch, text or step covers, stroke
+    /// included, placed as `AnnotationRenderer` places it: rects through `map.rect`; text and a
+    /// step at full size from their mapped origin or centre.
     static func placedBounds(of annotation: Annotation, scale: Double, map: RenderMap)
         -> CGRect?
     {

@@ -178,7 +178,7 @@ public enum AnnotationGeometry {
     }
 }
 
-/// Text laid out one CoreText line per `\n`-separated line, in the emphasized system font.
+/// Text laid out one CoreText line per `\n`-separated line, in its font and weight.
 /// `@unchecked Sendable`: its CoreText lines are immutable once made.
 public struct TextLayout: @unchecked Sendable {
     let lines: [CTLine]
@@ -187,9 +187,9 @@ public struct TextLayout: @unchecked Sendable {
     let leading: CGFloat
     let widths: [CGFloat]
 
-    /// The one text font: annotation text is measured, drawn and typed in it. `pixelSize` is the
-    /// text size in points times the capture scale (times the editor zoom when typing).
-    /// Memoised by size in `TextCache`.
+    /// Annotation text's font in `font` and `bold`: text is measured, drawn and typed in it.
+    /// `pixelSize` is the text size in points times the capture scale (times the editor zoom
+    /// when typing). Memoised by size, font and weight in `TextCache`.
     public static func font(pixelSize: Double, font: TextFont = .sans, bold: Bool = true) -> CTFont
     {
         TextCache.shared.font(pixelSize: pixelSize, font: font, bold: bold) {

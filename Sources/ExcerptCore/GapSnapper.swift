@@ -9,8 +9,13 @@ public enum GapSnapper {
     /// nearest whole pixel.
     public static func radius(scale: Double) -> Int { Int((radiusPoints * scale).rounded()) }
 
+    /// How far, per channel, a pixel may be from a colour and still count as it: the default for
+    /// a uniform line here and for a ground `ColorSampler.edgeColor` reads.
+    public static let tolerance: UInt8 = 6
+
     public static func snap(
-        _ position: Int, axis: Axis, in buffer: PixelBuffer, radius: Int, tolerance: UInt8 = 6
+        _ position: Int, axis: Axis, in buffer: PixelBuffer, radius: Int,
+        tolerance: UInt8 = tolerance
     ) -> Int {
         let across = axis == .horizontal ? buffer.width : buffer.height
         return snap(
@@ -23,7 +28,7 @@ public enum GapSnapper {
     /// misses the buffer finds no line and keeps the (clamped) position.
     public static func snap(
         _ position: Int, axis: Axis, in buffer: PixelBuffer, radius: Int, span: Range<Int>,
-        tolerance: UInt8 = 6
+        tolerance: UInt8 = tolerance
     ) -> Int {
         let extent = axis == .horizontal ? buffer.height : buffer.width
         let start = min(max(position, 0), extent - 1)
@@ -50,7 +55,7 @@ public enum GapSnapper {
     /// false when no part of `span` lies in it.
     public static func isUniform(
         line: Int, axis: Axis, in buffer: PixelBuffer, span: Range<Int>,
-        tolerance: UInt8 = 6
+        tolerance: UInt8 = tolerance
     ) -> Bool {
         let count = axis == .horizontal ? buffer.width : buffer.height
         let lower = max(span.lowerBound, 0)
