@@ -32,6 +32,7 @@ final class EditorModel {
             batch {
                 endTyping()
                 cancelDrag()
+                pickingColor = false
                 // Pressing the current tool's key again is not a switch: the path carries on.
                 if tool != oldValue { finishPath() }
                 selection = nil
@@ -271,10 +272,39 @@ final class EditorModel {
         setBorder(true)
     }
 
-    /// Sets the colour new annotations get, and recolours the selected annotation.
+    /// Sets the colour new annotations get, and recolours the selected annotation. A colour
+    /// chosen by hand stops a patch following the ground around it.
     func setColor(_ color: AnnotationColor) {
         style.color = color
-        restyleSelection { $0.color = color }
+        restyleSelection { annotation in
+            annotation.color = color
+            if case .patch(let rect, _) = annotation.shape {
+                annotation.shape = .patch(rect: rect, autoColor: false)
+            }
+        }
+    }
+
+    /// Whether the next click on the canvas samples a colour instead of drawing: set by the item
+    /// bar's eyedropper, ended by a pick, Escape, or a change of tool.
+    private(set) var pickingColor = false { didSet { changed() } }
+
+    func beginPickingColor() { pickingColor = true }
+
+    /// Ends picking, changing nothing.
+    func cancelPickingColor() { pickingColor = false }
+
+    /// Takes the colour of the original's pixel under `pointer` (never the render, which has
+    /// annotations over it): it becomes the style, the last sample, and the colour of the item
+    /// being typed, built or selected. A pointer off the capture picks nothing and picking
+    /// carries on.
+    func pick(at pointer: Pointer) {
+        guard pickingColor, let sampled = ColorSampler.pixel(at: pointer.original, in: pixels)
+        else { return }
+        batch {
+            pickingColor = false
+            style.lastSampled = sampled
+            setColor(.sampled(sampled))
+        }
     }
 
     /// Sets the size new annotations get, and resizes the selected annotation.

@@ -2,7 +2,9 @@ import ExcerptCore
 
 /// One control on the item bar, carrying its current value.
 enum ItemOption: Equatable {
-    case color(AnnotationColor)
+    /// The palette, the last eyedropper sample (nil until there is one) and the eyedropper
+    /// itself, lit while it is picking.
+    case color(AnnotationColor, lastSampled: RGBA? = nil, picking: Bool = false)
     case size(StrokeWidth)
     case background(Bool)
     /// Whether a path is closed; disabled on an open path of two points, which has no shape to
@@ -26,12 +28,16 @@ extension EditorModel {
     /// (under the crop tool) the crop; nil when there is nothing to show a bar for.
     var itemOptions: [ItemOption]? {
         if let typing {
-            return Self.options(for: typing, canMoveEarlier: false, canMoveLater: false)
+            return Self.options(
+                for: typing, canMoveEarlier: false, canMoveLater: false,
+                lastSampled: style.lastSampled, picking: pickingColor)
         }
         if let building,
             let annotation = document.annotations.first(where: { $0.id == building.id })
         {
-            return Self.options(for: annotation, canMoveEarlier: false, canMoveLater: false)
+            return Self.options(
+                for: annotation, canMoveEarlier: false, canMoveLater: false,
+                lastSampled: style.lastSampled, picking: pickingColor)
         }
         switch selection {
         case .annotation(let id):
@@ -40,7 +46,8 @@ extension EditorModel {
             }
             return Self.options(
                 for: annotation, canMoveEarlier: canMoveStepEarlier,
-                canMoveLater: canMoveStepLater)
+                canMoveLater: canMoveStepLater, lastSampled: style.lastSampled,
+                picking: pickingColor)
         case .seam:
             return [.delete]
         case nil:
@@ -50,9 +57,10 @@ extension EditorModel {
 
     /// The options each kind of annotation takes: the one place they are decided.
     static func options(
-        for annotation: Annotation, canMoveEarlier: Bool, canMoveLater: Bool
+        for annotation: Annotation, canMoveEarlier: Bool, canMoveLater: Bool,
+        lastSampled: RGBA? = nil, picking: Bool = false
     ) -> [ItemOption] {
-        let color = ItemOption.color(annotation.color)
+        let color = ItemOption.color(annotation.color, lastSampled: lastSampled, picking: picking)
         let size = ItemOption.size(annotation.width)
         switch annotation.shape {
         case .arrow, .rectangle:

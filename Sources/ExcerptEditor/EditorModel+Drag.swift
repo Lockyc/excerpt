@@ -149,6 +149,10 @@ extension EditorModel {
 
     func mouseDown(_ p: Pointer, map: RenderMap, clickCount: Int = 1, option: Bool = false) {
         batch {
+            if pickingColor {
+                pick(at: p)
+                return
+            }
             cancelDrag()
             if building != nil, clickCount >= 2 {
                 finishPath()

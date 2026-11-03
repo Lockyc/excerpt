@@ -3,12 +3,20 @@ import ExcerptCore
 
 extension Palette {
     /// A round swatch for colour controls.
-    var swatch: NSImage {
+    var swatch: NSImage { RGBA.swatch(rgba) }
+}
+
+extension RGBA {
+    /// A round swatch of `color`, or an empty ring for nil.
+    static func swatch(_ color: RGBA?) -> NSImage {
         NSImage(size: CGSize(width: 18, height: 18), flipped: false) { rect in
-            NSColor(cgColor: self.rgba.cgColor)?.setFill()
-            NSBezierPath(ovalIn: rect.insetBy(dx: 1, dy: 1)).fill()
+            let circle = NSBezierPath(ovalIn: rect.insetBy(dx: 1, dy: 1))
+            if let color {
+                NSColor(cgColor: color.cgColor)?.setFill()
+                circle.fill()
+            }
             NSColor.separatorColor.setStroke()
-            NSBezierPath(ovalIn: rect.insetBy(dx: 1, dy: 1)).stroke()
+            circle.stroke()
             return true
         }
     }
@@ -34,6 +42,7 @@ extension StrokeWidth {
 @MainActor
 final class ItemBar: NSVisualEffectView {
     var onColor: (AnnotationColor) -> Void = { _ in }
+    var onEyedropper: () -> Void = {}
     var onSize: (StrokeWidth) -> Void = { _ in }
     var onBackground: (Bool) -> Void = { _ in }
     var onClosed: (Bool) -> Void = { _ in }
@@ -88,20 +97,45 @@ final class ItemBar: NSVisualEffectView {
 
     private func control(for option: ItemOption) -> NSView {
         switch option {
-        case .color(let selected):
-            let chosen: Palette? =
-                if case .palette(let palette) = selected { palette } else { nil }
-            let control = segments(Palette.allCases, selected: chosen ?? .initial) {
-                control, i, color in
+        case .color(let selected, let lastSampled, let picking):
+            let palette = Palette.allCases
+            let control = segments(palette, selected: .initial) { control, i, color in
                 control.setImage(color.swatch, forSegment: i)
                 control.setToolTip(color.rawValue.capitalized, forSegment: i)
             }
-            // A sampled colour matches no palette segment.
-            if chosen == nil { control.selectedSegment = -1 }
-            return wire(control) { [weak self] in
-                self?.onColor(
-                    .palette(Palette.allCases[($0 as! NSSegmentedControl).selectedSegment]))
+            // The last eyedropper sample is the segment after the palette.
+            let sample = palette.count
+            control.segmentCount = sample + 1
+            control.setWidth(28, forSegment: sample)
+            control.setImage(RGBA.swatch(lastSampled), forSegment: sample)
+            control.setEnabled(lastSampled != nil, forSegment: sample)
+            control.setToolTip(
+                lastSampled == nil
+                    ? "Pick a colour with the eyedropper first" : "Last picked colour",
+                forSegment: sample)
+            switch selected {
+            case .palette(let chosen):
+                control.selectedSegment = palette.firstIndex(of: chosen) ?? 0
+            case .sampled(let color):
+                control.selectedSegment = color == lastSampled ? sample : -1
             }
+            let picker = wire(control) { [weak self] in
+                let i = ($0 as! NSSegmentedControl).selectedSegment
+                if i < sample {
+                    self?.onColor(.palette(palette[i]))
+                } else if let lastSampled {
+                    self?.onColor(.sampled(lastSampled))
+                }
+            }
+            let dropper = symbolButton("eyedropper", label: "Eyedropper")
+            dropper.setButtonType(.pushOnPushOff)
+            dropper.state = picking ? .on : .off
+            dropper.toolTip = "Pick a colour from the capture (Esc cancels)"
+            let eyedropper = wire(dropper) { [weak self] _ in self?.onEyedropper() }
+            let row = NSStackView(views: [picker, eyedropper])
+            row.orientation = .horizontal
+            row.spacing = 4
+            return row
         case .size(let selected):
             let control = segments(StrokeWidth.allCases, selected: selected) { control, i, width in
                 control.setLabel(width.label, forSegment: i)

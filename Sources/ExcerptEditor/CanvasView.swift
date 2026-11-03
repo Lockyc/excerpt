@@ -62,6 +62,10 @@ final class CanvasView: NSView, NSTextViewDelegate {
         map = base.map.withMargin(liveMargin)
         model.onChange = { [weak self] in self?.refresh() }
         itemBar.onColor = { [weak self] in self?.model.setColor($0) }
+        itemBar.onEyedropper = { [weak self] in
+            guard let model = self?.model else { return }
+            if model.pickingColor { model.cancelPickingColor() } else { model.beginPickingColor() }
+        }
         itemBar.onSize = { [weak self] in self?.model.setWidth($0) }
         itemBar.onBackground = { [weak self] in self?.model.setBackground($0) }
         itemBar.onClosed = { [weak self] in self?.model.setClosed($0) }
@@ -152,6 +156,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
         func resize(_ seam: Seam) -> NSCursor {
             seam.axis == .horizontal ? .rowResize : .columnResize
         }
+        if model.pickingColor { return ToolGlyph.eyedropperCursor }
         switch model.drag {
         case .move?, .vertex?: return .closedHand
         case .edge(let seam, _, _)?: return resize(seam)
@@ -491,6 +496,10 @@ final class CanvasView: NSView, NSTextViewDelegate {
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
         let p = pointer(event)
+        if model.pickingColor {
+            model.mouseDown(p, map: map)
+            return
+        }
         if model.tool == .text {
             beginText(at: p)
             return
@@ -576,7 +585,13 @@ final class CanvasView: NSView, NSTextViewDelegate {
         case 36, 76:  // return, enter
             if model.building != nil { model.finishPath() } else { super.keyDown(with: event) }
         case 53:  // escape
-            if model.building != nil { model.dropLastVertex() } else { model.selection = nil }
+            if model.pickingColor {
+                model.cancelPickingColor()
+            } else if model.building != nil {
+                model.dropLastVertex()
+            } else {
+                model.selection = nil
+            }
         default:
             super.keyDown(with: event)
         }
@@ -679,7 +694,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
             return true
         }
         if selector == #selector(NSResponder.cancelOperation(_:)) {
-            commitInProgress()
+            if model.pickingColor { model.cancelPickingColor() } else { commitInProgress() }
             return true
         }
         return false

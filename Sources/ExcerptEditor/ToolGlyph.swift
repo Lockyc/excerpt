@@ -64,12 +64,20 @@ enum ToolGlyph {
 
     private static var cursors: [Tool: NSCursor] = [:]
 
+    /// The cursor while the eyedropper is picking a colour.
+    static let eyedropperCursor = badgedCrosshair(
+        NSImage(systemSymbolName: "eyedropper", accessibilityDescription: nil)?
+            .withSymbolConfiguration(.init(pointSize: 11, weight: .regular)))
+
     /// A white-edged crosshair centred on the hot spot, the glyph below and right of it.
     private static func badgedCrosshair(_ tool: Tool) -> NSCursor {
+        badgedCrosshair(image(tool, pointSize: 11))
+    }
+
+    private static func badgedCrosshair(_ glyph: NSImage?) -> NSCursor {
         let arm: CGFloat = 8
         let size = CGSize(width: 34, height: 34)
         let centre = CGPoint(x: arm + 1, y: arm + 1)
-        let glyph = image(tool, pointSize: 11)
         let image = NSImage(size: size, flipped: true) { _ in
             guard let context = NSGraphicsContext.current?.cgContext else { return false }
             let cross = CGMutablePath()
