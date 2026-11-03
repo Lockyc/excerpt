@@ -54,7 +54,9 @@ public enum AnnotationRenderer {
                 }
             case .patch(let rect, _):
                 if let placed = map.rect(rect.standardized) {
-                    context.setFillColor(color)
+                    // Opaque whatever its colour's alpha: a sampled colour can be translucent,
+                    // and a patch must hide all it covers.
+                    context.setFillColor(color.copy(alpha: 1)!)
                     context.fill(flip.rect(placed))
                 }
             case .text(let origin, _, let background, let style):
