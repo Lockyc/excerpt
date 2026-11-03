@@ -79,15 +79,14 @@ public enum AnnotationRenderer {
                             cornerHeight: radius, transform: nil))
                     context.fillPath()
                 }
-                context.textMatrix = .identity
                 for (index, line) in layout.lines.enumerated() {
                     let baseline =
                         Double(topLeft.y) + Double(layout.ascent)
                         + Double(index) * Double(layout.lineHeight)
                     let indent = centred ? (layout.size.width - layout.widths[index]) / 2 : 0
-                    context.textPosition = flip.point(
-                        CGPoint(x: Double(topLeft.x + indent), y: baseline))
-                    CTLineDraw(line, context)
+                    TextLayout.draw(
+                        line, at: flip.point(CGPoint(x: Double(topLeft.x + indent), y: baseline)),
+                        in: context)
                 }
             case .step(let center):
                 drawStep(

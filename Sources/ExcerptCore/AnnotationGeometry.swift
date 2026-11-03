@@ -215,17 +215,30 @@ public struct TextLayout: @unchecked Sendable {
         bold: Bool
     ) {
         let font = Self.font(pixelSize: pixelSize, font: textFont, bold: bold)
-        let attributes: [NSAttributedString.Key: Any] = [
-            NSAttributedString.Key(kCTFontAttributeName as String): font,
-            NSAttributedString.Key(kCTForegroundColorAttributeName as String): color,
-        ]
-        lines = string.components(separatedBy: "\n").map {
-            CTLineCreateWithAttributedString(NSAttributedString(string: $0, attributes: attributes))
-        }
+        lines = string.components(separatedBy: "\n").map { Self.line($0, font: font, color: color) }
         ascent = CTFontGetAscent(font)
         descent = CTFontGetDescent(font)
         leading = CTFontGetLeading(font)
         widths = lines.map { CGFloat(CTLineGetTypographicBounds($0, nil, nil, nil)) }
+    }
+
+    /// One line of annotation text: the one place a string, font and colour become a `CTLine`,
+    /// so what the renderer draws and what `TextMatcher` scores against are built alike.
+    static func line(_ string: String, font: CTFont, color: CGColor) -> CTLine {
+        let attributes: [NSAttributedString.Key: Any] = [
+            NSAttributedString.Key(kCTFontAttributeName as String): font,
+            NSAttributedString.Key(kCTForegroundColorAttributeName as String): color,
+        ]
+        return CTLineCreateWithAttributedString(
+            NSAttributedString(string: string, attributes: attributes))
+    }
+
+    /// Draws `line` with its baseline's left end at `position`, in `context`'s own bottom-left
+    /// coordinates: how every line of annotation text reaches the pixels.
+    static func draw(_ line: CTLine, at position: CGPoint, in context: CGContext) {
+        context.textMatrix = .identity
+        context.textPosition = position
+        CTLineDraw(line, context)
     }
 
     var lineHeight: CGFloat { ascent + descent + leading }

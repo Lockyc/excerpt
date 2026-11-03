@@ -195,7 +195,7 @@ public enum TextMatcher {
         var size = 100.0
         for _ in 0..<4 {
             let top = CTLineGetBoundsWithOptions(
-                line(string, font: font, bold: bold, pixelSize: size, color: nil),
+                line(string, font: font, bold: bold, pixelSize: size, color: .black),
                 .useGlyphPathBounds
             ).maxY
             guard top > 0 else { return size }
@@ -204,18 +204,15 @@ public enum TextMatcher {
         return size
     }
 
+    /// `string` as annotation text lays it out, in a font made afresh rather than from
+    /// `TextCache`: a match tries dozens of fractional sizes no annotation will use, which would
+    /// crowd out the fonts a repaint relies on.
     static func line(
-        _ string: String, font: TextFont, bold: Bool, pixelSize: Double, color: CGColor?
+        _ string: String, font: TextFont, bold: Bool, pixelSize: Double, color: CGColor
     ) -> CTLine {
-        var attributes: [NSAttributedString.Key: Any] = [
-            NSAttributedString.Key(kCTFontAttributeName as String): TextLayout.font(
-                pixelSize: pixelSize, font: font, bold: bold)
-        ]
-        if let color {
-            attributes[NSAttributedString.Key(kCTForegroundColorAttributeName as String)] = color
-        }
-        return CTLineCreateWithAttributedString(
-            NSAttributedString(string: string, attributes: attributes))
+        TextLayout.line(
+            string, font: TextLayout.makeFont(pixelSize: pixelSize, font: font, bold: bold),
+            color: color)
     }
 
     /// The largest per-channel difference between two colours.
@@ -343,10 +340,12 @@ public enum TextMatcher {
             let context = PixelBuffer.makeContext(width: xs.count, height: ys.count)
             context.setFillColor(ground.cgColor)
             context.fill(CGRect(x: 0, y: 0, width: xs.count, height: ys.count))
-            context.textPosition = CGPoint(
-                x: Double(columns.lowerBound - xs.lowerBound) - Double(glyphs.minX) + shift,
-                y: Double(ys.upperBound) - baseline)
-            CTLineDraw(line, context)
+            TextLayout.draw(
+                line,
+                at: CGPoint(
+                    x: Double(columns.lowerBound - xs.lowerBound) - Double(glyphs.minX) + shift,
+                    y: Double(ys.upperBound) - baseline),
+                in: context)
             return Ink(
                 PixelBuffer(context.makeImage()!), xs: 0..<xs.count, ys: 0..<ys.count,
                 ground: ground, color: color)
