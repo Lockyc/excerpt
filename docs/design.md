@@ -75,7 +75,7 @@ Selecting a seam shows a handle per side; dragging one reveals or hides content 
 `Delete` removes the cut.
 
 **The seam.** Both edges get a jagged torn edge with a soft shadow, separated by a `SeamStyle.gapPoints` (18pt) gap in
-a neutral fill holding a pill: `⋯ 1,240 px hidden`, in points (rotated 90° on vertical cuts).
+a neutral fill.
 The tear's shape is seeded from the cut's position, so identical edits render identical pixels.
 
 ## Capture
