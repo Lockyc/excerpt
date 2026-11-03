@@ -2,13 +2,6 @@ import CoreGraphics
 import ExcerptCore
 import Foundation
 
-/// Reads the text in an image and returns its runs, bounds in the image's pixels, top-left
-/// origin. The one seam between excerpt and an OCR engine, so everything around it is tested
-/// without one.
-public protocol TextRecognizer: Sendable {
-    func recognize(_ image: CGImage) throws -> [RecognizedText]
-}
-
 /// The text of an image in reading order: what Capture Text copies.
 public enum CaptureText {
     /// A part of the image read on its own: the full width by one slice of the rows, so a tall

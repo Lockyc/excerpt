@@ -1,14 +1,16 @@
 import CoreGraphics
+import ExcerptCore
 import Vision
 
 /// Vision's accurate text recognition, on device, plus QR codes: a code's payload is a run at
 /// the code's bounds, so it reads in place among the text. Language correction is off:
 /// screenshots are full of identifiers, numbers and paths that correction would "fix". A Vision
-/// failure throws; it is never an empty result.
+/// failure throws; it is never an empty result. Vision has a `RecognizedText` of its own, so
+/// Core's is named in full here.
 public struct VisionTextRecognizer: TextRecognizer {
     public init() {}
 
-    public func recognize(_ image: CGImage) throws -> [RecognizedText] {
+    public func recognize(_ image: CGImage) throws -> [ExcerptCore.RecognizedText] {
         // The request revisions are the OS default on purpose: current accuracy.
         let text = VNRecognizeTextRequest()
         text.recognitionLevel = .accurate
@@ -17,16 +19,18 @@ public struct VisionTextRecognizer: TextRecognizer {
         let codes = VNDetectBarcodesRequest()
         codes.symbologies = [.qr]
         try VNImageRequestHandler(cgImage: image).perform([text, codes])
-        let lines: [RecognizedText] = (text.results ?? []).compactMap { observation in
+        let lines: [ExcerptCore.RecognizedText] = (text.results ?? []).compactMap { observation in
             guard let candidate = observation.topCandidates(1).first else { return nil }
-            return RecognizedText(candidate.string, pixelRect(observation.boundingBox, image))
+            return ExcerptCore.RecognizedText(
+                candidate.string, pixelRect(observation.boundingBox, image))
         }
         // A code with no string payload (binary data) has nothing to copy.
-        let payloads: [RecognizedText] = (codes.results ?? []).compactMap { observation in
+        let payloads: [ExcerptCore.RecognizedText] = (codes.results ?? []).compactMap {
+            observation in
             guard let payload = observation.payloadStringValue, !payload.isEmpty else {
                 return nil
             }
-            return RecognizedText(payload, pixelRect(observation.boundingBox, image))
+            return ExcerptCore.RecognizedText(payload, pixelRect(observation.boundingBox, image))
         }
         return lines + payloads
     }

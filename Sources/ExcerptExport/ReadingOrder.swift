@@ -1,17 +1,6 @@
 import CoreGraphics
+import ExcerptCore
 import Foundation
-
-/// One run of text a recogniser found, with its bounds in the pixels of the image it read,
-/// top-left origin.
-public struct RecognizedText: Equatable, Sendable {
-    public let string: String
-    public let bounds: CGRect
-
-    public init(_ string: String, _ bounds: CGRect) {
-        self.string = string
-        self.bounds = bounds
-    }
-}
 
 /// A line of text: the runs that sit side by side, left to right.
 public struct TextLine: Equatable, Sendable {
