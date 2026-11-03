@@ -285,6 +285,23 @@ import Testing
         #expect(window.firstResponder === canvas)
     }
 
+    @Test func aPickClickLeavesTheCanvasAsFirstResponder() throws {
+        let (window, _, canvas) = editor(EditDocument(scale: 1, salt: 7))
+        window.makeFirstResponder(nil)
+        canvas.model.beginPickingColor()
+        let g = CanvasView.gutter * canvas.zoom
+        let click = try #require(
+            NSEvent.mouseEvent(
+                with: .leftMouseDown,
+                location: canvas.convert(
+                    CGPoint(x: 100 * canvas.zoom + g, y: 100 * canvas.zoom + g), to: nil),
+                modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber, context: nil,
+                eventNumber: 0, clickCount: 1, pressure: 1))
+        canvas.mouseDown(with: click)
+        #expect(!canvas.model.pickingColor)
+        #expect(window.firstResponder === canvas)
+    }
+
     @Test func aPickClickWhileTypingRecoloursTheTextAndKeepsTypingOpen() throws {
         let (window, _, canvas) = editor(EditDocument(scale: 1, salt: 7))
         canvas.model.tool = .text

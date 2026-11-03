@@ -495,10 +495,11 @@ final class CanvasView: NSView, NSTextViewDelegate {
 
     override func mouseDown(with event: NSEvent) {
         let p = pointer(event)
-        // A pick leaves focus where it is: taking it would commit the text being typed before
-        // the colour could reach it.
+        // A pick leaves focus with the text being typed: taking it would commit the text before
+        // the colour could reach it. Otherwise the canvas takes it, for the keys.
         if model.pickingColor {
             model.mouseDown(p, map: map)
+            if model.typing == nil { window?.makeFirstResponder(self) }
             return
         }
         window?.makeFirstResponder(self)
