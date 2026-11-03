@@ -1,4 +1,5 @@
 import CoreGraphics
+import CoreText
 import ExcerptCore
 import ExcerptTestSupport
 import Testing
@@ -58,18 +59,33 @@ struct FailingRecognizer: TextRecognizer {
         await m.loadTextRuns(using: FixedRecognizer(runs: [Self.run]))
         #expect(m.textRuns == [Self.run])
         m.beginTyping(at: pointer(m, onText), map: map(m))
-        let expected = try #require(
+        let measured = try #require(
             TextMatcher.match(Self.run, in: PixelBuffer(Self.image), scale: Self.scale))
         let typing = try #require(m.typing)
-        guard case .text(let origin, let string, let background, let style) = typing.shape else {
-            Issue.record("not text")
+        guard case .text(let origin, let string, let background, let style?) = typing.shape
+        else {
+            Issue.record("not styled text")
             return
         }
-        #expect(origin == expected.origin)
         #expect(string == "")
         #expect(background == false)
-        #expect(style == expected.style)
-        #expect(typing.color == expected.color)
+        #expect(typing.color == measured.color)
+        #expect(style.bold == measured.style.bold)
+        #expect(style.font == measured.style.font)
+        #expect(style.alignment == measured.style.alignment)
+        #expect(origin.x == measured.origin.x)
+        // The size lands on the size control's half-point grid, the baseline where it was.
+        #expect((style.points * 2).rounded() == style.points * 2)
+        #expect(abs(style.points - measured.style.points) <= 0.25)
+        func baseline(_ origin: CGPoint, _ style: TextStyle) -> Double {
+            Double(origin.y)
+                + Double(
+                    CTFontGetAscent(
+                        TextLayout.font(
+                            pixelSize: style.points * Self.scale, font: style.font,
+                            bold: style.bold)))
+        }
+        #expect(abs(baseline(origin, style) - baseline(measured.origin, measured.style)) < 0.001)
     }
 
     @Test func clickOnPlainAreaKeepsLastStyle() async throws {
@@ -109,8 +125,9 @@ struct FailingRecognizer: TextRecognizer {
         #expect(m.isTypingPending)
         await load.value
         #expect(!m.isTypingPending)
-        let expected = try #require(
+        let measured = try #require(
             TextMatcher.match(Self.run, in: PixelBuffer(Self.image), scale: Self.scale))
+        let expected = EditorModel.matchedText(measured, scale: Self.scale)
         guard case .text(_, _, _, let style)? = m.typing?.shape else {
             Issue.record("no text")
             return
@@ -141,6 +158,10 @@ struct FailingRecognizer: TextRecognizer {
         m.setTextSize(500)
         guard case .text(_, _, _, let clamped)? = m.typing?.shape else { return }
         #expect(clamped?.points == TextStyle.pointsRange.upperBound)
+        // On the size control's half-point grid.
+        m.setTextSize(13.27)
+        guard case .text(_, _, _, let snapped)? = m.typing?.shape else { return }
+        #expect(snapped?.points == 13.5)
         // A preset sets the styled text's size too.
         m.setWidth(.thin)
         guard case .text(_, _, _, let preset)? = m.typing?.shape else { return }

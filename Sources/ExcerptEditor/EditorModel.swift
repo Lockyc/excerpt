@@ -1,4 +1,5 @@
 import CoreGraphics
+import CoreText
 import ExcerptCore
 import ExcerptExport
 
@@ -71,7 +72,10 @@ final class EditorModel {
     private(set) lazy var pixels = PixelBuffer(original)
     /// The runs of text in the original, in its pixels, that new text matches; nil until read
     /// (`startLoadingTextRuns`), empty when reading failed.
-    private(set) var textRuns: [RecognizedText]?
+    var textRuns: [RecognizedText]? { readText?.map(\.run) }
+    /// Each run read, with the look text started on it takes (`matchedText`), worked out as it
+    /// is read, so a click only looks it up.
+    private var readText: [(run: RecognizedText, match: MatchedText?)]?
     /// The one read of `textRuns`, once started.
     private var runsLoad: Task<Void, Never>?
     /// Where new text was asked for before `textRuns` were read: begun once they are.
@@ -333,10 +337,10 @@ final class EditorModel {
         }
     }
 
-    /// Sizes the text being typed or selected, held to `TextStyle.pointsRange`.
+    /// Sizes the text being typed or selected, on the size control's grid
+    /// (`snappedTextSize`).
     func setTextSize(_ points: Double) {
-        let range = TextStyle.pointsRange
-        restyleText { $0.points = min(max(points, range.lowerBound), range.upperBound) }
+        restyleText { $0.points = Self.snappedTextSize(points) }
     }
 
     func setBold(_ on: Bool) { restyleText { $0.bold = on } }
@@ -477,13 +481,13 @@ final class EditorModel {
     var isTypingPending: Bool { pendingBegin != nil }
 
     /// Whether `textRuns` are being read.
-    var isLoadingTextRuns: Bool { runsLoad != nil && textRuns == nil }
+    var isLoadingTextRuns: Bool { runsLoad != nil && readText == nil }
 
     /// Empty text at `pointer`, matched to the run under it when there is one.
     private func newText(at pointer: Pointer) -> Annotation {
         let id = document.nextAnnotationID
-        if let run = textRuns?.first(where: { $0.bounds.contains(pointer.original) }),
-            let matched = TextMatcher.match(run, in: pixels, scale: document.scale)
+        if let matched = readText?.first(where: { $0.run.bounds.contains(pointer.original) })?
+            .match
         {
             return Annotation(
                 id: id,
@@ -497,19 +501,30 @@ final class EditorModel {
             color: style.color, width: style.width)
     }
 
-    /// Reads the original's runs of text into `textRuns` off the main thread, once per model:
-    /// a second call hands back the first's task. A recogniser that throws leaves them empty.
-    /// New text asked for meanwhile begins when they are read.
+    /// Reads the original's runs of text into `textRuns`, and matches each, off the main
+    /// thread, once per model: a second call hands back the first's task. A recogniser that
+    /// throws leaves them empty. New text asked for meanwhile begins when they are read.
     @MainActor @discardableResult
     func startLoadingTextRuns(using recognizer: any TextRecognizer) -> Task<Void, Never> {
         if let runsLoad { return runsLoad }
         let original = original
         let scale = document.scale
         let load = Task { @MainActor [weak self] in
-            let runs = await Task.detached(priority: .userInitiated) {
-                (try? CaptureText.runs(of: original, using: recognizer, scale: scale)) ?? []
+            let read = await Task.detached(priority: .userInitiated) {
+                () -> [(run: RecognizedText, match: MatchedText?)] in
+                let runs = (try? CaptureText.runs(of: original, using: recognizer, scale: scale))
+                guard let runs, !runs.isEmpty else { return [] }
+                let buffer = PixelBuffer(original)
+                return runs.map { run in
+                    (
+                        run,
+                        TextMatcher.match(run, in: buffer, scale: scale).map {
+                            Self.matchedText($0, scale: scale)
+                        }
+                    )
+                }
             }.value
-            self?.finishLoading(runs)
+            self?.finishLoading(read)
         }
         runsLoad = load
         return load
@@ -521,9 +536,36 @@ final class EditorModel {
         await startLoadingTextRuns(using: recognizer).value
     }
 
-    private func finishLoading(_ runs: [RecognizedText]) {
+    /// `matched` with its size on the size control's half-point grid (`textSizeStep`), within
+    /// `TextStyle.pointsRange`, and its origin moved so the baseline stays on the original's.
+    static func matchedText(_ matched: MatchedText, scale: Double) -> MatchedText {
+        var style = matched.style
+        style.points = snappedTextSize(style.points)
+        func ascent(_ style: TextStyle) -> Double {
+            Double(
+                CTFontGetAscent(
+                    TextLayout.font(
+                        pixelSize: style.points * scale, font: style.font, bold: style.bold)))
+        }
+        var origin = matched.origin
+        origin.y += ascent(matched.style) - ascent(style)
+        return MatchedText(
+            origin: origin, style: style, color: matched.color, ground: matched.ground)
+    }
+
+    /// The step of the text size control, in points.
+    static let textSizeStep = 0.5
+
+    /// `points` on the `textSizeStep` grid, within `TextStyle.pointsRange`.
+    static func snappedTextSize(_ points: Double) -> Double {
+        let range = TextStyle.pointsRange
+        let snapped = (points / textSizeStep).rounded() * textSizeStep
+        return min(max(snapped, range.lowerBound), range.upperBound)
+    }
+
+    private func finishLoading(_ read: [(run: RecognizedText, match: MatchedText?)]) {
         batch {
-            textRuns = runs
+            readText = read
             guard let pointer = pendingBegin else { return }
             pendingBegin = nil
             typing = newText(at: pointer)

@@ -55,6 +55,9 @@ extension TextFont {
 }
 
 extension TextAlign {
+    /// The alignment control's segments, in order.
+    static let shown: [TextAlign] = [.left, .centered]
+
     var label: String {
         switch self {
         case .left: "Align left"
@@ -91,8 +94,10 @@ final class ItemBar: NSVisualEffectView {
     var onDelete: () -> Void = {}
 
     private let stack = NSStackView()
-    private var shown: [ItemOption] = []
-    /// Target-action needs objects; each control's closure lives here.
+    /// Each control shown: its option, its view in `stack`, and the target-action objects its
+    /// closures live in (a control's target is weak).
+    private var slots: [(option: ItemOption, view: NSView, actions: [Action])] = []
+    /// Collects what `wire` makes while one control is built.
     private var actions: [Action] = []
 
     init() {
@@ -122,14 +127,67 @@ final class ItemBar: NSVisualEffectView {
     /// click never reaches the canvas underneath.
     override func mouseDown(with event: NSEvent) {}
 
-    /// Rebuilds the controls when the options change, and sizes the bar to fit them.
+    /// Shows `options` and sizes the bar to fit them. A control whose option only changed value
+    /// is updated in place, so one being clicked or held (the size stepper's autorepeat) carries
+    /// on through the change its action makes; the rest are rebuilt.
     func show(_ options: [ItemOption]) {
-        guard options != shown else { return }
-        shown = options
-        actions = []
-        for view in stack.arrangedSubviews { view.removeFromSuperview() }
-        for option in options { stack.addArrangedSubview(control(for: option)) }
+        guard options != slots.map(\.option) else { return }
+        if options.count != slots.count {
+            for slot in slots { slot.view.removeFromSuperview() }
+            slots = options.map(build)
+            for slot in slots { stack.addArrangedSubview(slot.view) }
+        } else {
+            for (i, option) in options.enumerated() where option != slots[i].option {
+                if update(slots[i].view, from: slots[i].option, to: option) {
+                    slots[i].option = option
+                } else {
+                    slots[i].view.removeFromSuperview()
+                    slots[i] = build(option)
+                    stack.insertArrangedSubview(slots[i].view, at: i)
+                }
+            }
+        }
         setFrameSize(stack.fittingSize)
+    }
+
+    private func build(_ option: ItemOption) -> (
+        option: ItemOption, view: NSView, actions: [Action]
+    ) {
+        actions = []
+        let view = control(for: option)
+        _ = update(view, from: option, to: option)
+        defer { actions = [] }
+        return (option, view, actions)
+    }
+
+    /// Sets the value `to` carries on `view`, built for `from`; false when it can't, being a
+    /// control of another kind or one rebuilt for any change.
+    private func update(_ view: NSView, from: ItemOption, to: ItemOption) -> Bool {
+        switch (from, to) {
+        case (.size, .size(let selected)):
+            guard let control = view as? NSSegmentedControl else { return false }
+            control.selectedSegment =
+                selected.flatMap { StrokeWidth.allCases.firstIndex(of: $0) } ?? -1
+        case (.textSize, .textSize(let points)):
+            guard let row = view as? NSStackView,
+                let label = row.arrangedSubviews.first as? NSTextField,
+                let stepper = row.arrangedSubviews.last as? NSStepper
+            else { return false }
+            label.stringValue = TextStyle.label(points: points)
+            stepper.doubleValue = points
+        case (.bold, .bold(let on)), (.background, .background(let on)):
+            guard let button = view as? NSButton else { return false }
+            button.state = on ? .on : .off
+        case (.font, .font(let selected)):
+            guard let menu = view as? NSPopUpButton else { return false }
+            menu.selectItem(at: TextFont.allCases.firstIndex(of: selected) ?? 0)
+        case (.alignment, .alignment(let selected)):
+            guard let control = view as? NSSegmentedControl else { return false }
+            control.selectedSegment = TextAlign.shown.firstIndex(of: selected) ?? -1
+        default:
+            return false
+        }
+        return true
     }
 
     private func control(for option: ItemOption) -> NSView {
@@ -173,57 +231,51 @@ final class ItemBar: NSVisualEffectView {
             row.orientation = .horizontal
             row.spacing = 4
             return row
-        case .size(let selected):
-            let control = segments(StrokeWidth.allCases, selected: selected) { control, i, width in
+        // These kinds' values are set by `update`.
+        case .size:
+            let control = segments(StrokeWidth.allCases, selected: nil) { control, i, width in
                 control.setLabel(width.label, forSegment: i)
                 control.setToolTip(width.tip, forSegment: i)
             }
             return wire(control) { [weak self] in
                 self?.onSize(StrokeWidth.allCases[($0 as! NSSegmentedControl).selectedSegment])
             }
-        case .textSize(let points):
+        case .textSize:
             let range = TextStyle.pointsRange
-            let label = NSTextField(labelWithString: TextStyle.label(points: points))
+            let label = NSTextField(labelWithString: "")
             label.font = .monospacedDigitSystemFont(
                 ofSize: NSFont.smallSystemFontSize, weight: .regular)
             label.toolTip = "Text size"
             let stepper = NSStepper()
             stepper.minValue = range.lowerBound
             stepper.maxValue = range.upperBound
-            stepper.increment = 0.5
+            stepper.increment = EditorModel.textSizeStep
             stepper.valueWraps = false
             stepper.autorepeat = true
-            stepper.doubleValue = points
             stepper.toolTip =
                 "Text size, \(TextStyle.label(points: range.lowerBound)) to "
                 + TextStyle.label(points: range.upperBound)
-            let step = wire(stepper) { [weak self, weak label] in
-                let points = $0.doubleValue
-                label?.stringValue = TextStyle.label(points: points)
-                self?.onTextSize(points)
-            }
+            let step = wire(stepper) { [weak self] in self?.onTextSize($0.doubleValue) }
             let row = NSStackView(views: [label, step])
             row.orientation = .horizontal
             row.spacing = 2
             return row
-        case .bold(let on):
+        case .bold:
             let button = symbolButton("bold", label: "Bold")
             button.setButtonType(.pushOnPushOff)
-            button.state = on ? .on : .off
             button.toolTip = "Bold"
             return wire(button) { [weak self] in self?.onBold(($0 as! NSButton).state == .on) }
-        case .font(let selected):
+        case .font:
             let menu = NSPopUpButton(frame: .zero, pullsDown: false)
             for font in TextFont.allCases { menu.addItem(withTitle: font.label) }
-            menu.selectItem(at: TextFont.allCases.firstIndex(of: selected) ?? 0)
             menu.toolTip = "Font"
             return wire(menu) { [weak self] in
                 let i = ($0 as! NSPopUpButton).indexOfSelectedItem
                 if TextFont.allCases.indices.contains(i) { self?.onFont(TextFont.allCases[i]) }
             }
-        case .alignment(let selected):
-            let alignments: [TextAlign] = [.left, .centered]
-            let control = segments(alignments, selected: selected) { control, i, alignment in
+        case .alignment:
+            let alignments = TextAlign.shown
+            let control = segments(alignments, selected: nil) { control, i, alignment in
                 control.setImage(
                     NSImage(
                         systemSymbolName: alignment.symbol,
@@ -234,10 +286,9 @@ final class ItemBar: NSVisualEffectView {
             return wire(control) { [weak self] in
                 self?.onAlignment(alignments[($0 as! NSSegmentedControl).selectedSegment])
             }
-        case .background(let on):
+        case .background:
             let button = symbolButton("character.textbox", label: "Background")
             button.setButtonType(.pushOnPushOff)
-            button.state = on ? .on : .off
             button.toolTip = "Text on a background of its colour"
             return wire(button) { [weak self] in
                 self?.onBackground(($0 as! NSButton).state == .on)
