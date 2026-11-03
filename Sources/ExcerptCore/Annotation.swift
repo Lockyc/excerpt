@@ -161,4 +161,11 @@ public struct Annotation: Codable, Equatable, Sendable, Identifiable {
         self.color = color
         self.width = width
     }
+
+    /// The style text is drawn in: its own, else legacy text's (`style` nil) — the preset's
+    /// `StrokeWidth.textPoints`, bold, sans, left. Nil for other kinds.
+    public var textStyle: TextStyle? {
+        guard case .text(_, _, _, let style) = shape else { return nil }
+        return style ?? TextStyle(points: width.textPoints)
+    }
 }

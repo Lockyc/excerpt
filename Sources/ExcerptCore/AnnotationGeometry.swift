@@ -41,31 +41,31 @@ public enum AnnotationGeometry {
     /// down.
     static let pillPadding = (x: 0.35, y: 0.15)
 
-    /// Text size in pixels.
+    /// Text size in pixels; 0 for other kinds.
     public static func textPixelSize(_ annotation: Annotation, scale: Double) -> Double {
-        var points = annotation.width.textPoints
-        if case .text(_, _, _, let style?) = annotation.shape { points = style.points }
-        return points * scale
+        (annotation.textStyle?.points ?? 0) * scale
     }
 
     /// A text annotation's lines laid out in `color` in its font; nil for other kinds.
     public static func textLayout(of annotation: Annotation, scale: Double, color: CGColor)
         -> TextLayout?
     {
-        guard case .text(_, let string, _, let style) = annotation.shape else { return nil }
+        guard case .text(_, let string, _, _) = annotation.shape,
+            let style = annotation.textStyle
+        else { return nil }
         return TextLayout(
-            string, pixelSize: textPixelSize(annotation, scale: scale), color: color,
-            font: style?.font ?? .sans, bold: style?.bold ?? true)
+            string, pixelSize: style.points * scale, color: color, font: style.font,
+            bold: style.bold)
     }
 
     /// Where a text annotation's lines sit, in original pixels, without its background; nil
     /// for other kinds. A centred text is centred on `origin.x`.
     public static func textRect(of annotation: Annotation, scale: Double) -> CGRect? {
-        guard case .text(let origin, _, _, let style) = annotation.shape,
+        guard case .text(let origin, _, _, _) = annotation.shape,
             let layout = textLayout(of: annotation, scale: scale, color: .black)
         else { return nil }
         let size = layout.size
-        let centred = style?.alignment == .centered
+        let centred = annotation.textStyle?.alignment == .centered
         let left = Double(origin.x) - (centred ? Double(size.width) / 2 : 0)
         return CGRect(origin: CGPoint(x: left, y: Double(origin.y)), size: size)
     }

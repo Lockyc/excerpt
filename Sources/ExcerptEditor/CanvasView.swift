@@ -655,17 +655,16 @@ final class CanvasView: NSView, NSTextViewDelegate {
     /// this zoom, transparent glyphs, and the caret in the ink the render uses.
     private func syncTextView() {
         guard let view = textView, let typing = model.typing,
-            case .text(_, _, let background, let textStyle) = typing.shape,
+            case .text(_, _, let background, _) = typing.shape, let textStyle = typing.textStyle,
             let rect = AnnotationGeometry.textRect(of: typing, scale: model.document.scale)
         else { return }
         let pixelSize =
             AnnotationGeometry.textPixelSize(typing, scale: model.document.scale) * Double(zoom)
         let font =
-            TextLayout.font(
-                pixelSize: pixelSize, font: textStyle?.font ?? .sans, bold: textStyle?.bold ?? true)
+            TextLayout.font(pixelSize: pixelSize, font: textStyle.font, bold: textStyle.bold)
             as NSFont
         let lineHeight = font.ascender - font.descender + font.leading
-        let centred = textStyle?.alignment == .centered
+        let centred = textStyle.alignment == .centered
         let alignment: NSTextAlignment = centred ? .center : .left
         let shownAlignment =
             (view.typingAttributes[.paragraphStyle] as? NSParagraphStyle)?.alignment

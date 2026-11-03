@@ -27,6 +27,10 @@ import Testing
             origin: .zero, string: "Total", style: TextStyle(points: StrokeWidth.thin.textPoints))
         #expect(AnnotationGeometry.textPixelSize(legacy, scale: 2) == 40)
         #expect(
+            legacy.textStyle
+                == TextStyle(points: 20, bold: true, font: .sans, alignment: .left))
+        #expect(Annotation(id: 3, shape: .step(center: .zero)).textStyle == nil)
+        #expect(
             AnnotationGeometry.textRect(of: legacy, scale: 2)
                 == AnnotationGeometry.textRect(of: styled, scale: 2))
     }

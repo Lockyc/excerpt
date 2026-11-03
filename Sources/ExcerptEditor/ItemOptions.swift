@@ -78,11 +78,11 @@ extension EditorModel {
             ]
         case .highlight, .patch:
             return [color, .delete]
-        case .text(_, _, let background, let textStyle):
+        case .text(_, _, let background, let own):
             // Legacy text shows the style it is drawn in.
-            let shown = textStyle ?? .implicit(annotation.width)
+            let shown = annotation.textStyle!
             let preset =
-                textStyle == nil
+                own == nil
                 ? annotation.width
                 : StrokeWidth.allCases.first { $0.textPoints == shown.points }
             return [

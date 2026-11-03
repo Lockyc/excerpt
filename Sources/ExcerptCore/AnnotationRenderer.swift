@@ -59,14 +59,14 @@ public enum AnnotationRenderer {
                     context.setFillColor(color.copy(alpha: 1)!)
                     context.fill(flip.rect(placed))
                 }
-            case .text(let origin, _, let background, let style):
+            case .text(let origin, _, let background, _):
                 let pixelSize = AnnotationGeometry.textPixelSize(annotation, scale: scale)
                 let onPill = background == true
                 let layout = AnnotationGeometry.textLayout(
                     of: annotation, scale: scale,
                     color: onPill ? annotation.color.contrastingInk.cgColor : color)!
                 var topLeft = map.point(origin, bias: .after)
-                let centred = style?.alignment == .centered
+                let centred = annotation.textStyle?.alignment == .centered
                 if centred { topLeft.x -= layout.size.width / 2 }
                 if onPill {
                     let pill = AnnotationGeometry.pill(

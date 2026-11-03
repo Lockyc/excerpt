@@ -366,14 +366,15 @@ final class EditorModel {
     private func restyleText(_ change: (inout TextStyle) -> Void) {
         let scale = document.scale
         restyleSelection { annotation in
-            guard case .text(var origin, let string, let background, let current) = annotation.shape
+            guard case .text(var origin, let string, let background, _) = annotation.shape,
+                let current = annotation.textStyle
             else { return }
             let before = AnnotationGeometry.textRect(of: annotation, scale: scale)
-            var textStyle = current ?? .implicit(annotation.width)
+            var textStyle = current
             change(&textStyle)
             annotation.shape = .text(
                 origin: origin, string: string, background: background, style: textStyle)
-            guard textStyle.alignment != (current?.alignment ?? .left), let before,
+            guard textStyle.alignment != current.alignment, let before,
                 let after = AnnotationGeometry.textRect(of: annotation, scale: scale)
             else { return }
             origin.x += before.minX - after.minX
@@ -791,9 +792,4 @@ final class EditorModel {
         default: return "\(count) annotations hidden by cuts"
         }
     }
-}
-
-extension TextStyle {
-    /// The style legacy text of `width` (its `style` nil) is drawn in.
-    static func implicit(_ width: StrokeWidth) -> TextStyle { TextStyle(points: width.textPoints) }
 }
