@@ -102,7 +102,8 @@ import Testing
     @Test func aSelectedPatchOffersColourAndDelete() {
         let m = model()
         drag(m, (5, 5), (25, 25))
-        #expect(m.itemOptions == [.color(m.document.annotations[0].color), .delete])
+        let color = m.document.annotations[0].color
+        #expect(m.itemOptions == [.color(color, sample: color.rgba), .delete])
     }
 }
 

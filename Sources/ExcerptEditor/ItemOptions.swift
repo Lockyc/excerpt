@@ -2,9 +2,9 @@ import ExcerptCore
 
 /// One control on the item bar, carrying its current value.
 enum ItemOption: Equatable {
-    /// The palette, the last eyedropper sample (nil until there is one) and the eyedropper
+    /// The palette, the sampled swatch's colour (nil until there is one) and the eyedropper
     /// itself, lit while it is picking.
-    case color(AnnotationColor, lastSampled: RGBA? = nil, picking: Bool = false)
+    case color(AnnotationColor, sample: RGBA? = nil, picking: Bool = false)
     /// The size presets, the one lit; none when styled text is between them.
     case size(StrokeWidth?)
     /// Text's own size in points, set freely within `TextStyle.pointsRange`.
@@ -66,7 +66,10 @@ extension EditorModel {
         for annotation: Annotation, canMoveEarlier: Bool, canMoveLater: Bool,
         lastSampled: RGBA? = nil, picking: Bool = false
     ) -> [ItemOption] {
-        let color = ItemOption.color(annotation.color, lastSampled: lastSampled, picking: picking)
+        // The sampled swatch shows the item's own colour when that was sampled, lit.
+        var sample = lastSampled
+        if case .sampled(let own) = annotation.color { sample = own }
+        let color = ItemOption.color(annotation.color, sample: sample, picking: picking)
         let size = ItemOption.size(annotation.width)
         switch annotation.shape {
         case .arrow, .rectangle:

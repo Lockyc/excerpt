@@ -192,34 +192,34 @@ final class ItemBar: NSVisualEffectView {
 
     private func control(for option: ItemOption) -> NSView {
         switch option {
-        case .color(let selected, let lastSampled, let picking):
+        case .color(let selected, let sampled, let picking):
             let palette = Palette.allCases
             let control = segments(palette, selected: .initial) { control, i, color in
                 control.setImage(color.swatch, forSegment: i)
                 control.setToolTip(color.rawValue.capitalized, forSegment: i)
             }
-            // The last eyedropper sample is the segment after the palette.
+            // The sampled colour is the segment after the palette.
             let sample = palette.count
             control.segmentCount = sample + 1
             control.setWidth(28, forSegment: sample)
-            control.setImage(RGBA.swatch(lastSampled), forSegment: sample)
-            control.setEnabled(lastSampled != nil, forSegment: sample)
+            control.setImage(RGBA.swatch(sampled), forSegment: sample)
+            control.setEnabled(sampled != nil, forSegment: sample)
             control.setToolTip(
-                lastSampled == nil
-                    ? "Pick a colour with the eyedropper first" : "Last picked colour",
+                sampled == nil
+                    ? "Pick a colour with the eyedropper first" : "Sampled colour",
                 forSegment: sample)
             switch selected {
             case .palette(let chosen):
                 control.selectedSegment = palette.firstIndex(of: chosen) ?? 0
             case .sampled(let color):
-                control.selectedSegment = color == lastSampled ? sample : -1
+                control.selectedSegment = color == sampled ? sample : -1
             }
             let picker = wire(control) { [weak self] in
                 let i = ($0 as! NSSegmentedControl).selectedSegment
                 if i < sample {
                     self?.onColor(.palette(palette[i]))
-                } else if let lastSampled {
-                    self?.onColor(.sampled(lastSampled))
+                } else if let sampled {
+                    self?.onColor(.sampled(sampled))
                 }
             }
             let dropper = symbolButton("eyedropper", label: "Eyedropper")

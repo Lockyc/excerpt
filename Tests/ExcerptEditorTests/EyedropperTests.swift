@@ -114,13 +114,13 @@ import Testing
         let m = model()
         m.apply { $0.annotations.append(note(1, CGRect(x: 5, y: 5, width: 20, height: 20))) }
         m.selection = .annotation(1)
-        #expect(m.itemOptions?.first == .color(.initial, lastSampled: nil, picking: false))
+        #expect(m.itemOptions?.first == .color(.initial, sample: nil, picking: false))
         m.beginPickingColor()
-        #expect(m.itemOptions?.first == .color(.initial, lastSampled: nil, picking: true))
+        #expect(m.itemOptions?.first == .color(.initial, sample: nil, picking: true))
         m.pick(at: pointer(m, 50, 50))
         #expect(
             m.itemOptions?.first
-                == .color(.sampled(Self.blue), lastSampled: Self.blue, picking: false))
+                == .color(.sampled(Self.blue), sample: Self.blue, picking: false))
     }
 
     @Test func aSavedStyleWithoutASampleDecodes() throws {
@@ -185,7 +185,7 @@ import Testing
         let bar = ItemBar()
         var applied: [AnnotationColor] = []
         bar.onColor = { applied.append($0) }
-        bar.show([.color(.initial, lastSampled: EyedropperTests.blue)])
+        bar.show([.color(.initial, sample: EyedropperTests.blue)])
         let control = segments(bar)
         let sample = Palette.allCases.count
         #expect(control.isEnabled(forSegment: sample))
