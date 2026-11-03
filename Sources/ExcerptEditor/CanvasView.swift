@@ -562,6 +562,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
         let before = pendingCut.map(bandRect)
         model.mouseUp(pointer(event), map: map, snap: snap(event))
         if let cut = pendingCut, let before { animateCollapse(of: cut, from: before) }
+        if model.tool == .replace { openTyping() }
     }
 
     /// The shaded band shrinks into its new seam.
@@ -618,15 +619,20 @@ final class CanvasView: NSView, NSTextViewDelegate {
     func beginText(at p: Pointer) {
         commitInProgress()
         model.beginTyping(at: p, map: map)
+        openTyping()
+    }
+
+    /// Opens the text view on the typing the model began, or waits for it to begin.
+    private func openTyping() {
         if model.isTypingPending {
             isAwaitingText = true
             updateCursor()
-        } else {
+        } else if model.typing != nil, textView == nil {
             openTextView()
         }
     }
 
-    /// Takes the keys for the text being typed.
+    /// Takes the keys for the text being typed; a Replace's pre-fill opens selected.
     private func openTextView() {
         typingUndo = UndoManager()
         let view = NSTextView(frame: .zero)
@@ -642,6 +648,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
         textView = view
         syncTextView()
         window?.makeFirstResponder(view)
+        if model.selectsTypedString { view.selectAll(nil) }
     }
 
     /// Lays the text view over the rendered text being typed: the same font and line height at

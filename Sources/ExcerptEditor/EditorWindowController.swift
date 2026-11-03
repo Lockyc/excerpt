@@ -422,8 +422,10 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
         let limit = model.tool == .cut ? model.cutLimitNote : ""
         let hint =
             !limit.isEmpty ? limit : model.tool == .cut || model.tool == .crop ? Self.snapHint : ""
-        window?.subtitle = [saving ? "Saving…" : "", hint, model.hiddenNote(map: canvas.map)]
-            .filter { !$0.isEmpty }.joined(separator: " · ")
+        window?.subtitle = [
+            saving ? "Saving…" : "", hint, model.replaceNote, model.hiddenNote(map: canvas.map),
+        ]
+        .filter { !$0.isEmpty }.joined(separator: " · ")
 
         undoButton.isEnabled = model.canUndo
         undoButton.toolTip = model.canUndo ? "Undo (⌘Z)" : "Nothing to undo"

@@ -96,7 +96,7 @@ extension EditorModel {
             return vertexHandle(at: p, map: map, option: option) ?? ownAnnotation(at: p, map: map)
         case .rectangle, .highlight, .step, .blur, .patch:
             return ownAnnotation(at: p, map: map)
-        case .crop, .text:
+        case .crop, .text, .replace:
             return nil
         }
     }
@@ -177,7 +177,7 @@ extension EditorModel {
                 preview(next)
                 selection = nil
                 setDrag(.shape(id: id, start: p.original, before: before))
-            case .blur, .crop, .patch:
+            case .blur, .crop, .patch, .replace:
                 selection = nil
                 setDrag(.region(start: p.original))
             case .step:
@@ -290,14 +290,12 @@ extension EditorModel {
                     selection = .annotation(id)
                 case (.patch, .region(let rect)?):
                     let id = document.nextAnnotationID
-                    apply { doc in
-                        doc.annotations.append(
-                            Annotation(
-                                id: id, shape: .patch(rect: rect, autoColor: true),
-                                color: .sampled(groundColor(around: rect) ?? style.color.rgba),
-                                width: style.width))
-                    }
+                    apply { $0.annotations.append(groundPatch(id: id, over: rect)) }
                     selection = .annotation(id)
+                case (.replace, .region(let rect)?):
+                    replace(in: rect)
+                case (.replace, nil):
+                    replace(in: CGRect(origin: p.original, size: .zero))
                 case (.crop, .region(let rect)?):
                     let crop = PixelRect(
                         x: Int(rect.minX), y: Int(rect.minY), width: Int(rect.width),
@@ -396,7 +394,7 @@ extension EditorModel {
                 from: start, to: end, width: original.width, height: original.height,
                 minimum: minimumDrag, snapping: snap ? pixels : nil, radius: snapRadius
             ).map { .region($0.cgRect) }
-        case .patch:
+        case .patch, .replace:
             return Gestures.patch(
                 from: start, to: end, width: original.width, height: original.height,
                 minimum: minimumDrag, snapping: snap ? pixels : nil, radius: snapRadius
@@ -419,6 +417,13 @@ extension EditorModel {
     /// margin colour where the rect lies wholly outside the capture; nil when there is neither.
     func groundColor(around rect: CGRect) -> RGBA? {
         ColorSampler.edgeColor(around: rect, in: pixels) ?? document.marginColor
+    }
+
+    /// A new patch over `rect` that follows its ground: the colour around it, else the style's.
+    func groundPatch(id: Int, over rect: CGRect) -> Annotation {
+        Annotation(
+            id: id, shape: .patch(rect: rect, autoColor: true),
+            color: .sampled(groundColor(around: rect) ?? style.color.rgba), width: style.width)
     }
 
     /// A moved patch still following its ground takes the colour around where it now lies; one

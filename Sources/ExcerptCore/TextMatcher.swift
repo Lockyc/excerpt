@@ -12,12 +12,17 @@ public struct MatchedText: Equatable, Sendable {
     public let color: AnnotationColor
     /// The colour around the run.
     public let ground: RGBA
+    /// The whole pixels holding the run's ink, descenders included.
+    public let ink: CGRect
 
-    public init(origin: CGPoint, style: TextStyle, color: AnnotationColor, ground: RGBA) {
+    public init(
+        origin: CGPoint, style: TextStyle, color: AnnotationColor, ground: RGBA, ink: CGRect
+    ) {
         self.origin = origin
         self.style = style
         self.color = color
         self.ground = ground
+        self.ink = ink
     }
 }
 
@@ -118,7 +123,10 @@ public enum TextMatcher {
                 points: points, bold: best.bold, font: best.font,
                 alignment: centred ? .centered : .left),
             color: .sampled(fittedColor(color, to: best.drawn, in: buffer, ink: ink)),
-            ground: ground)
+            ground: ground,
+            ink: CGRect(
+                x: ink.columns.lowerBound, y: ink.rows.lowerBound, width: ink.columns.count,
+                height: ink.rows.count))
     }
 
     /// The run's ink colour fitted to `drawn`'s coverage by least squares, each pixel the ground
@@ -237,8 +245,9 @@ public enum TextMatcher {
         /// How far each pixel of the box goes from the ground toward the ink, 0 to 1, top row
         /// first, measured on the channel where the two differ most.
         let cover: [Double]
-        /// The columns holding ink, in the buffer's pixels.
+        /// The columns and rows holding ink, in the buffer's pixels.
         let columns: Range<Int>
+        let rows: Range<Int>
         /// The ink's top, to sub-pixel precision.
         let top: Double
         /// The bottom of the non-descending glyphs' ink, to sub-pixel precision: the lowest row
@@ -308,6 +317,7 @@ public enum TextMatcher {
             self.ys = ys
             self.cover = cover
             columns = (xs.lowerBound + firstColumn)..<(xs.lowerBound + lastColumn + 1)
+            rows = (ys.lowerBound + topRow)..<(ys.lowerBound + bottoms.values.max()! + 1)
             top = Double(ys.lowerBound + topRow) + 1 - topCover
             baseline = Double(ys.lowerBound + baseRow) + baseCover
             func peak(_ column: Int) -> Double { (0..<ys.count).map { at(column, $0) }.max()! }

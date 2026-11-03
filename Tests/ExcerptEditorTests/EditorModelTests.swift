@@ -8,10 +8,12 @@ import Testing
 @Suite struct ToolTests {
     @Test func everyToolHasItsKey() {
         #expect(
-            Tool.allCases.map(\.key) == ["v", "a", "r", "p", "t", "n", "h", "b", "e", "k", "c"])
+            Tool.allCases.map(\.key) == [
+                "v", "a", "r", "p", "t", "n", "h", "b", "e", "x", "k", "c",
+            ])
         #expect(Tool(key: "K") == .crop)
         #expect(Tool(key: "P") == .path)
-        #expect(Tool(key: "x") == nil)
+        #expect(Tool(key: "q") == nil)
         #expect(Tool.path.draws(.path(points: [], closed: false, fill: false)))
     }
 }

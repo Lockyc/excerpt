@@ -362,9 +362,9 @@ Capture…, several files handed over at once by Finder or another app — open 
 
 Tools: `V` select · `A` arrow · `R` rectangle · `P` path · `T` text · `N` step · `H` highlight ·
 `B` blur · `E` patch (a solid fill in the colour around its edge, edges snapped to gridlines
-within the patch's own span) · `K` crop · `C` cut, each key shown on its toolbar button. The toolbar is one row: tools
+within the patch's own span) · `X` replace · `K` crop · `C` cut, each key shown on its toolbar button. The toolbar is one row: tools
 and Border centred while there is room, the actions at the right; the editor's notes (snapping,
-the cut limit, annotations hidden by cuts) are the window's subtitle. A new editor starts on the
+the cut limit, a Replace that found no text, annotations hidden by cuts) are the window's subtitle. A new editor starts on the
 arrow. Over the canvas the pointer is
 the arrow under select, the I-beam under text, and otherwise a crosshair badged with the tool's
 toolbar glyph (`ToolGlyph`); where a press would take hold of something instead (`Grab`, the one
@@ -393,6 +393,12 @@ is what saves. Return commits; ⌥Return adds a line. New text started on a run 
 capture's own text (`CaptureText.runs`, read once as the editor opens) takes that text's look
 from `TextMatcher` — size, weight, font, alignment and colour, background off; anywhere else it
 takes the style last chosen. A click before the reading finishes waits for it under a busy cursor.
+
+**Replace** (`X`): a click or drag over recognised lines makes, for each line touched, a patch
+over its ink and matched text holding its string — one undo step — and types into the first in
+reading order with its string selected (`EditorModel.replace(in:)`). Over no line it makes a
+patch over the drag and empty text in the last style, and the subtitle says no text was found.
+Like text, it waits for the reading under a busy cursor.
 
 **Steps** (`N`): each click places a numbered circle in its colour, the number in
 `Palette.contrastingInk`, ringed in white. The number is not stored: it is the document's first

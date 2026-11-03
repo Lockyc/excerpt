@@ -35,6 +35,7 @@ final class EditorModel {
                 endTyping()
                 cancelDrag()
                 pickingColor = false
+                replaceNote = ""
                 // Pressing the current tool's key again is not a switch: the path carries on.
                 if tool != oldValue { finishPath() }
                 selection = nil
@@ -82,6 +83,15 @@ final class EditorModel {
     private var pendingBegin: Pointer? {
         didSet { if pendingBegin != nil || oldValue != nil { changed() } }
     }
+    /// Where a Replace was asked for before `textRuns` were read: performed once they are.
+    private var pendingReplace: CGRect? {
+        didSet { if pendingReplace != nil || oldValue != nil { changed() } }
+    }
+    /// Whether the text being typed opens with its whole string selected: a Replace's pre-fill,
+    /// so typing replaces it.
+    private(set) var selectsTypedString = false
+    /// The line the editor shows after a Replace that found no text; empty otherwise.
+    private(set) var replaceNote = "" { didSet { if replaceNote != oldValue { changed() } } }
 
     /// A document without a margin colour takes `marginColor` where that leaves its render
     /// unchanged (`EditDocument.adoptMarginColor`), so the picture can grow from here on; that
@@ -477,28 +487,109 @@ final class EditorModel {
         }
     }
 
-    /// New text was asked for and waits on the text runs being read.
-    var isTypingPending: Bool { pendingBegin != nil }
+    /// New text or a Replace was asked for and waits on the text runs being read.
+    var isTypingPending: Bool { pendingBegin != nil || pendingReplace != nil }
 
     /// Whether `textRuns` are being read.
     var isLoadingTextRuns: Bool { runsLoad != nil && readText == nil }
 
     /// Empty text at `pointer`, matched to the run under it when there is one.
     private func newText(at pointer: Pointer) -> Annotation {
-        let id = document.nextAnnotationID
-        if let matched = readText?.first(where: { $0.run.bounds.contains(pointer.original) })?
-            .match
-        {
+        newText(
+            id: document.nextAnnotationID, at: pointer.original,
+            matched: readText?.first(where: { $0.run.bounds.contains(pointer.original) })?.match)
+    }
+
+    /// Text holding `string`: in `matched`'s look, background off, else at `point` in the
+    /// current style.
+    private func newText(id: Int, at point: CGPoint, matched: MatchedText?, string: String = "")
+        -> Annotation
+    {
+        if let matched {
             return Annotation(
                 id: id,
                 shape: .text(
-                    origin: matched.origin, string: "", background: false, style: matched.style),
+                    origin: matched.origin, string: string, background: false,
+                    style: matched.style),
                 color: matched.color, width: style.width)
         }
         return Annotation(
-            id: id,
-            shape: .text(origin: pointer.original, string: "", background: style.background),
+            id: id, shape: .text(origin: point, string: string, background: style.background),
             color: style.color, width: style.width)
+    }
+
+    /// Replaces the recognised lines `rect` (original pixels; a click is a zero-size rect at
+    /// its point) touches: for each, a patch over its ink and text matched to it, holding its
+    /// string — all one undoable step — then types into the first in reading order, its string
+    /// selected. Where no line is touched, a patch over `rect` (none for a click) and empty
+    /// text at its left edge in the current style, and `replaceNote` says so. While the runs
+    /// are still being read it waits for them, as new text does.
+    func replace(in rect: CGRect) {
+        batch {
+            endTyping()
+            selection = nil
+            replaceNote = ""
+            if isLoadingTextRuns {
+                pendingReplace = rect
+                return
+            }
+            let touched = Self.readingOrder(
+                (readText ?? []).filter {
+                    $0.run.bounds.intersects(rect) || $0.run.bounds.contains(rect.origin)
+                })
+            guard !touched.isEmpty else {
+                if rect.width > 0, rect.height > 0 {
+                    let id = document.nextAnnotationID
+                    apply { $0.annotations.append(groundPatch(id: id, over: rect)) }
+                }
+                typing = newText(
+                    id: document.nextAnnotationID, at: rect.origin, matched: nil)
+                replaceNote = "No text found"
+                return
+            }
+            var first: Annotation?
+            apply { doc in
+                for (run, match) in touched {
+                    doc.annotations.append(
+                        groundPatch(id: doc.nextAnnotationID, over: patchRect(over: run, match)))
+                    let text = newText(
+                        id: doc.nextAnnotationID, at: run.bounds.origin, matched: match,
+                        string: run.string)
+                    doc.annotations.append(text)
+                    if first == nil { first = text }
+                }
+            }
+            guard let first else { return }
+            selection = .annotation(first.id)
+            typing = first
+            selectsTypedString = true
+        }
+    }
+
+    /// The patch hiding `run`: its ink (its box when it held none to match) grown by a point's
+    /// pixel, each edge snapped as a dragged patch's is, within the run's flat region.
+    private func patchRect(over run: RecognizedText, _ match: MatchedText?) -> CGRect {
+        let grown = (match?.ink ?? run.bounds).insetBy(dx: -document.scale, dy: -document.scale)
+        return Gestures.patch(
+            from: grown.origin, to: CGPoint(x: grown.maxX, y: grown.maxY),
+            width: original.width, height: original.height, minimum: 1, snapping: pixels,
+            radius: snapRadius)?.cgRect ?? grown
+    }
+
+    /// `read` top to bottom by line, a line being the runs starting above the middle of its
+    /// first, then left to right within each.
+    private static func readingOrder(_ read: [(run: RecognizedText, match: MatchedText?)])
+        -> [(run: RecognizedText, match: MatchedText?)]
+    {
+        var lines: [[(run: RecognizedText, match: MatchedText?)]] = []
+        for entry in read.sorted(by: { $0.run.bounds.minY < $1.run.bounds.minY }) {
+            if let head = lines.last?.first, entry.run.bounds.minY < head.run.bounds.midY {
+                lines[lines.count - 1].append(entry)
+            } else {
+                lines.append([entry])
+            }
+        }
+        return lines.flatMap { $0.sorted { $0.run.bounds.minX < $1.run.bounds.minX } }
     }
 
     /// Reads the original's runs of text into `textRuns`, and matches each, off the main
@@ -550,7 +641,8 @@ final class EditorModel {
         var origin = matched.origin
         origin.y += ascent(matched.style) - ascent(style)
         return MatchedText(
-            origin: origin, style: style, color: matched.color, ground: matched.ground)
+            origin: origin, style: style, color: matched.color, ground: matched.ground,
+            ink: matched.ink)
     }
 
     /// The step of the text size control, in points.
@@ -566,6 +658,10 @@ final class EditorModel {
     private func finishLoading(_ read: [(run: RecognizedText, match: MatchedText?)]) {
         batch {
             readText = read
+            if let rect = pendingReplace {
+                pendingReplace = nil
+                replace(in: rect)
+            }
             guard let pointer = pendingBegin else { return }
             pendingBegin = nil
             typing = newText(at: pointer)
@@ -583,9 +679,11 @@ final class EditorModel {
 
     /// Ends typing as one undoable step: new text is added, retyped text replaced, and text
     /// emptied removed. The text stays selected. New text still waiting on the text runs is
-    /// dropped.
+    /// dropped, as is a Replace waiting on them.
     func endTyping() {
         pendingBegin = nil
+        pendingReplace = nil
+        selectsTypedString = false
         guard let typed = typing else { return }
         batch {
             typing = nil
@@ -605,6 +703,7 @@ final class EditorModel {
     /// Drops the text being typed, removing it from the document if it was already there.
     func deleteTyping() {
         guard let typed = typing else { return }
+        selectsTypedString = false
         batch {
             typing = nil
             apply { $0.annotations.removeAll { $0.id == typed.id } }

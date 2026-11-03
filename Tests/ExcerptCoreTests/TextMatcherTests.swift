@@ -52,6 +52,10 @@ import Testing
         let f = fixture(
             string, style: style, color: color, at: origin, scale: scale, ground: ground)
         let matched = try #require(TextMatcher.match(f.run, in: f.buffer, scale: scale))
+        // The ink's box: within what the renderer changed, short of it by at most a faint edge.
+        let drawn = f.run.bounds.insetBy(dx: 2, dy: 2)
+        #expect(drawn.contains(matched.ink), "ink \(matched.ink) vs \(drawn)")
+        #expect(matched.ink.insetBy(dx: -2, dy: -2).contains(drawn), "ink \(matched.ink)")
         #expect(abs(matched.style.points - style.points) <= 0.5, "points \(matched.style.points)")
         #expect(matched.style.bold == style.bold)
         #expect(matched.style.font == style.font)

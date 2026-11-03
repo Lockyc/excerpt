@@ -11,6 +11,7 @@ public enum Tool: CaseIterable {
     case highlight
     case blur
     case patch
+    case replace
     case crop
     case cut
 
@@ -25,6 +26,7 @@ public enum Tool: CaseIterable {
         case .highlight: "h"
         case .blur: "b"
         case .patch: "e"
+        case .replace: "x"
         case .crop: "k"
         case .cut: "c"
         }
@@ -41,6 +43,7 @@ public enum Tool: CaseIterable {
         case .highlight: "Highlight"
         case .blur: "Blur"
         case .patch: "Patch"
+        case .replace: "Replace"
         case .crop: "Crop"
         case .cut: "Cut"
         }
@@ -59,6 +62,7 @@ public enum Tool: CaseIterable {
         case .highlight: nil
         case .blur: "square.grid.3x3.fill"
         case .patch: "square.fill"
+        case .replace: "character.cursor.ibeam"
         case .crop: "crop"
         case .cut: "scissors"
         }
