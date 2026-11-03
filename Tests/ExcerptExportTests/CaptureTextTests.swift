@@ -101,6 +101,24 @@ import Testing
         #expect(CaptureText.compose(runs) == "kept\n")
     }
 
+    /// A barcode's payload stays one, and Capture Text still reads it.
+    @Test func aBarcodePayloadKeepsItsKindAndIsRead() throws {
+        struct Code: TextRecognizer {
+            func recognize(_ image: CGImage) throws -> [RecognizedText] {
+                [
+                    RecognizedText(
+                        "https://example.com", CGRect(x: 2, y: 2, width: 40, height: 40),
+                        isBarcode: true)
+                ]
+            }
+        }
+        let image = Fixtures.sheet(width: 100, height: 100)
+        let runs = try CaptureText.runs(of: image, using: Code(), scale: 1)
+        #expect(runs.map(\.isBarcode) == [true])
+        #expect(
+            try CaptureText.read(image, scale: 1, recognizer: Code()) == "https://example.com\n")
+    }
+
     @Test func aRegionFlatterThanTheAspectIsPaddedOnItsShortSide() {
         let strip = CaptureText.Canvas(width: 2980, height: 76)
         #expect(strip.width == 2980 && strip.height == 373)

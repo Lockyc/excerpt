@@ -588,8 +588,9 @@ final class EditorModel {
     }
 
     /// Reads the original's runs of text into `textRuns`, and matches each, off the main
-    /// thread, once per model: a second call hands back the first's task. A recogniser that
-    /// throws leaves them empty. New text asked for meanwhile begins when they are read.
+    /// thread, once per model: a second call hands back the first's task. Barcode payloads are
+    /// left out: they are not text on the capture. A recogniser that throws leaves the runs
+    /// empty. New text asked for meanwhile begins when they are read.
     @MainActor @discardableResult
     func startLoadingTextRuns(using recognizer: any TextRecognizer) -> Task<Void, Never> {
         if let runsLoad { return runsLoad }
@@ -598,7 +599,8 @@ final class EditorModel {
         let load = Task { @MainActor [weak self] in
             let read = await Task.detached(priority: .userInitiated) {
                 () -> [(run: RecognizedText, match: MatchedText?)] in
-                let runs = (try? CaptureText.runs(of: original, using: recognizer, scale: scale))
+                let runs = (try? CaptureText.runs(of: original, using: recognizer, scale: scale))?
+                    .filter { !$0.isBarcode }
                 guard let runs, !runs.isEmpty else { return [] }
                 let buffer = PixelBuffer(original)
                 return runs.map { run in

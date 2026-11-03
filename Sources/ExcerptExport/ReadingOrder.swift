@@ -139,7 +139,7 @@ public enum ReadingOrder {
             guard !string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 return nil
             }
-            return RecognizedText(string, b)
+            return RecognizedText(string, b, isBarcode: run.isBarcode)
         }
     }
 

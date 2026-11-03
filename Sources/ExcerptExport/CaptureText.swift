@@ -112,7 +112,7 @@ public enum CaptureText {
                     dx: CGFloat(region.rect.x - canvas.content.x),
                     dy: CGFloat(region.rect.y - canvas.content.y))
                 if usable(bounds), region.owned.contains(Int(bounds.midY)) {
-                    runs.append(RecognizedText(run.string, bounds))
+                    runs.append(RecognizedText(run.string, bounds, isBarcode: run.isBarcode))
                 }
             }
         }

@@ -6,10 +6,14 @@ import Foundation
 public struct RecognizedText: Equatable, Sendable {
     public let string: String
     public let bounds: CGRect
+    /// A barcode's payload at the code's bounds, not text drawn there: Capture Text reads it in
+    /// place, the editor neither matches nor replaces it.
+    public let isBarcode: Bool
 
-    public init(_ string: String, _ bounds: CGRect) {
+    public init(_ string: String, _ bounds: CGRect, isBarcode: Bool = false) {
         self.string = string
         self.bounds = bounds
+        self.isBarcode = isBarcode
     }
 }
 

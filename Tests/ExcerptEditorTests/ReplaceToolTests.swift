@@ -176,6 +176,20 @@ import Testing
         #expect(m.replaceNote == "")
     }
 
+    /// A QR code's payload is a run for Capture Text, not text on the capture: the editor
+    /// neither matches nor replaces it.
+    @Test func aBarcodePayloadIsNotText() async throws {
+        let code = RecognizedText(
+            "https://example.com/a/very/long/payload", CGRect(x: 660, y: 90, width: 60, height: 60),
+            isBarcode: true)
+        let m = await model(runs: [Self.you, code])
+        #expect(m.textRuns == [Self.you])
+        m.replace(in: CGRect(x: 690, y: 120, width: 0, height: 0))
+        #expect(m.document.annotations.isEmpty)
+        #expect(m.typedString == "")
+        #expect(m.replaceNote == "No text found")
+    }
+
     @Test func replaceWaitsForRuns() async throws {
         let m = EditorModel(
             original: Self.image, document: EditDocument(scale: Self.scale, salt: 5))

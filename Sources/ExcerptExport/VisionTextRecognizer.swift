@@ -30,7 +30,8 @@ public struct VisionTextRecognizer: TextRecognizer {
             guard let payload = observation.payloadStringValue, !payload.isEmpty else {
                 return nil
             }
-            return ExcerptCore.RecognizedText(payload, pixelRect(observation.boundingBox, image))
+            return ExcerptCore.RecognizedText(
+                payload, pixelRect(observation.boundingBox, image), isBarcode: true)
         }
         return lines + payloads
     }
