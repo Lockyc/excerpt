@@ -111,6 +111,29 @@ import Testing
         #expect(origin == CGPoint(x: 5, y: 6) && string == "a" && background == nil)
     }
 
+    func textDocument(points: String) -> Data {
+        Data(
+            """
+            {"version":9,"scale":1,"cuts":[],"salt":1,"annotations":[
+            {"id":1,"color":"red","width":"medium","shape":{"text":{"origin":[5,6],"string":"a",\
+            "style":{"points":\(points),"bold":true,"font":"sans","alignment":"left"}}}}]}
+            """.utf8)
+    }
+
+    @Test func rejectsTextSizeOutOfRange() {
+        for points in ["0", "-3", "1e9", "3.9", "200.5"] {
+            #expect(throws: EditDocumentError.invalidGeometry, "\(points)") {
+                try EditDocument.decode(textDocument(points: points))
+            }
+        }
+    }
+
+    @Test func acceptsTextSizeAtTheBounds() throws {
+        for points in ["4", "200"] {
+            #expect(try EditDocument.decode(textDocument(points: points)).annotations.count == 1)
+        }
+    }
+
     @Test func rejectsAStepOutOfRange() {
         let json = Data(
             #"""

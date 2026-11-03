@@ -22,6 +22,9 @@ public enum TextAlign: String, Codable, Sendable {
 /// Text without one (`Shape.text`'s `style` nil) is legacy: `StrokeWidth.textPoints`, bold,
 /// sans, left.
 public struct TextStyle: Codable, Equatable, Sendable {
+    /// The sizes a text may have: what a decoded document is held to and what the editor offers.
+    public static let pointsRange: ClosedRange<Double> = 4...200
+
     /// Text size in points.
     public var points: Double
     public var bold: Bool
