@@ -157,9 +157,10 @@ final class CanvasView: NSView, NSTextViewDelegate {
         cursor(at: pointer(at: location)).set()
     }
 
-    /// A hand over what a press would move, closed while it moves; a resize arrow on a seam's
-    /// edge; a pointing hand on a seam or the first vertex that closes the path being built;
-    /// otherwise the tool's own.
+    /// The eyedropper while picking a colour, the busy cursor while a click waits on the text
+    /// runs; else a hand over what a press would move, closed while it moves; a resize arrow on a
+    /// seam's edge; a pointing hand on a seam or the first vertex that closes the path being
+    /// built; otherwise the tool's own.
     private func cursor(at p: Pointer) -> NSCursor {
         func resize(_ seam: Seam) -> NSCursor {
             seam.axis == .horizontal ? .rowResize : .columnResize

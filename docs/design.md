@@ -22,11 +22,11 @@ build in Swift 6 language mode; the AppKit / ScreenCaptureKit targets build in S
 
 | Module | Owns | Depends on |
 |---|---|---|
-| `ExcerptCore` | The capture document (original image, cuts, annotations) as values; the pure algorithms — render, cut geometry, the original→rendered coordinate map, stitching, gap detection, tiling; the recording's edit document, its frame renderer, the shortcut filter and the GIF encoder | CoreGraphics, ImageIO |
+| `ExcerptCore` | The capture document (original image, cuts, annotations) as values; the pure algorithms — render, cut geometry, the original→rendered coordinate map, stitching, gap detection, tiling; the recording's edit document, its frame renderer, the shortcut filter and the GIF encoder; colour sampling, text matching, and the `TextRecognizer` / `RecognizedText` seam an OCR engine plugs into | CoreGraphics, ImageIO |
 | `ExcerptCapture` | ScreenCaptureKit capture, the multi-display selection overlay, the auto-scroll driver that feeds frames to Core's stitcher, the recorder that feeds the stream to Recording's master writer and its key and click log, the hotkey bindings and the rules that judge a rebinding | Core, Recording |
 | `ExcerptRecording` | The recording's master file (writing, pause retiming, its log and edits), frame reading, the GIF / MP4 export and its budget fallback | Core, AVFoundation |
-| `ExcerptEditor` | Canvas, tools, undo; edits Core's document; the recording editor | Core, Recording |
-| `ExcerptExport` | Vision OCR, QR decoding and Capture Text's reading order, with no UI | Core, Vision |
+| `ExcerptEditor` | Canvas, tools, undo; edits Core's document; the recording editor | Core, Recording, Export |
+| `ExcerptExport` | Vision OCR (Core's `TextRecognizer`), QR decoding and Capture Text's reading order, with no UI | Core, Vision |
 | `Excerpt` (app) | Menu bar, hotkey registration, preview thumbnail, settings, export UI, file I/O | all |
 
 The hard logic lives in Core as pure functions over values, so it is tested without UI or
@@ -366,7 +366,8 @@ button. The toolbar is one row: tools and Border centred while there is room, th
 right; the editor's notes (snapping, the cut limit, a Replace that found no text, annotations
 hidden by cuts) are the window's subtitle. A new editor starts on the arrow. Over the canvas the pointer is
 the arrow under select, the I-beam under text, and otherwise a crosshair badged with the tool's
-toolbar glyph (`ToolGlyph`); where a press would take hold of something instead (`Grab`, the one
+toolbar glyph (`ToolGlyph`) — badged with an eyedropper while picking a colour, and an hourglass
+while a click waits on the capture's text being read; where a press would take hold of something instead (`Grab`, the one
 hit-test the press follows), it shows that: an open hand on what would move, closed while it
 moves, a resize arrow on a selected seam's edge, a pointing hand on a seam or on the first vertex
 that closes the path being built, which then previews closed. A drawing tool pressed on an annotation it
@@ -377,7 +378,8 @@ own. Crop snaps using the same gap detection as cuts.
 
 **The item bar** floats above whatever is selected (below it when there is no room, kept on the
 canvas, hidden during a drag) and carries that item's options and nothing else: delete for every
-item, and colour (six, a seventh swatch holding the last sampled colour, and an eyedropper that
+item, and colour (six, a seventh swatch holding the item's own colour when sampled, else the last
+sample, and an eyedropper that
 samples any pixel of the capture), size (three; one control sets stroke, text and step size) and the
 kind's own options where they apply — text adds a free size (`TextStyle.pointsRange`), bold,
 font (sans, mono, serif), alignment (left, centred) and its background, a step adds Move earlier / Move
@@ -387,14 +389,17 @@ last chosen, remembered across launches, and stays selected after it is drawn so
 showing.
 
 **Text** is drawn either plain in its colour or on a **background**: a rounded pill in its colour
-with the text in `Palette.contrastingInk` (black on yellow, white otherwise). Typing previews through Core's renderer on every keystroke — the text view
+with the text in its contrasting ink (`AnnotationColor.contrastingInk`: the palette's own
+choice, else black or white by a sampled colour's luminance). Typing previews through Core's renderer on every keystroke — the text view
 under it supplies only input, caret and selection, its own glyphs transparent — so what is typed
 is what saves. Return commits; ⌥Return adds a line. New text started on a run of the
 capture's own text (`CaptureText.runs`, read once as the editor opens) takes that text's look
 from `TextMatcher` — size, weight, font, alignment and colour, background off; anywhere else it
 takes the style last chosen. A click before the reading finishes waits for it under a busy cursor.
 
-**Patch** (`E`) is a solid fill that conceals what is under it. Its colour is sampled from the
+**Patch** (`E`) is a solid fill, drawn fully opaque, that conceals what is under it — in the
+flattened primary only: unlike blur, it leaves the original's pixels as they are in the master
+(`… original.png`). Its colour is sampled from the
 ring of capture pixels around it and re-sampled as it moves until a colour is set by hand. Its
 edges snap to gaps within the patch's own width or height; `⌥` disables snapping.
 
