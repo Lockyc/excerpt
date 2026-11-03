@@ -287,8 +287,9 @@ final class EditorModel {
     func setBackground(_ on: Bool) {
         style.background = on
         restyleSelection { annotation in
-            if case .text(let origin, let string, _) = annotation.shape {
-                annotation.shape = .text(origin: origin, string: string, background: on)
+            if case .text(let origin, let string, _, let textStyle) = annotation.shape {
+                annotation.shape = .text(
+                    origin: origin, string: string, background: on, style: textStyle)
             }
         }
     }
@@ -387,10 +388,9 @@ final class EditorModel {
     var typedString: String { typing.map(Self.string(of:)) ?? "" }
 
     func updateTyping(_ string: String) {
-        guard var typed = typing, case .text(let origin, _, let background) = typed.shape else {
-            return
-        }
-        typed.shape = .text(origin: origin, string: string, background: background)
+        guard var typed = typing, case .text(let origin, _, let background, let style) = typed.shape
+        else { return }
+        typed.shape = .text(origin: origin, string: string, background: background, style: style)
         typing = typed
     }
 
@@ -424,7 +424,7 @@ final class EditorModel {
     }
 
     private static func string(of annotation: Annotation) -> String {
-        guard case .text(_, let string, _) = annotation.shape else { return "" }
+        guard case .text(_, let string, _, _) = annotation.shape else { return "" }
         return string
     }
 

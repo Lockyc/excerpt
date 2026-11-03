@@ -75,8 +75,10 @@ public enum Shape: Codable, Equatable, Sendable {
     case rectangle(rect: CGRect)
     /// `origin` is the top-left of the first line, with or without a background. `background`
     /// true sets the text on a pill of its colour; nil, which text saved before backgrounds
-    /// has, draws plain like false.
-    case text(origin: CGPoint, string: String, background: Bool? = nil)
+    /// has, draws plain like false. `style` nil is legacy text (`TextStyle`); with one,
+    /// `origin` is the top of the first line and its left edge or horizontal centre by the
+    /// style's alignment.
+    case text(origin: CGPoint, string: String, background: Bool? = nil, style: TextStyle? = nil)
     case highlight(rect: CGRect)
     /// Destructive: pixelated over noise in the render, before crop and cuts.
     case blur(rect: CGRect)
@@ -97,8 +99,8 @@ public enum Shape: Codable, Equatable, Sendable {
         switch self {
         case .arrow(let tail, let head): return .arrow(tail: move(tail), head: move(head))
         case .rectangle(let rect): return .rectangle(rect: move(rect))
-        case .text(let origin, let string, let background):
-            return .text(origin: move(origin), string: string, background: background)
+        case .text(let origin, let string, let background, let style):
+            return .text(origin: move(origin), string: string, background: background, style: style)
         case .highlight(let rect): return .highlight(rect: move(rect))
         case .blur(let rect): return .blur(rect: move(rect))
         case .patch(let rect, let autoColor): return .patch(rect: move(rect), autoColor: autoColor)

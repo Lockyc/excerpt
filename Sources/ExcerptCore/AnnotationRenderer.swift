@@ -57,13 +57,15 @@ public enum AnnotationRenderer {
                     context.setFillColor(color)
                     context.fill(flip.rect(placed))
                 }
-            case .text(let origin, let string, let background):
+            case .text(let origin, _, let background, let style):
                 let pixelSize = AnnotationGeometry.textPixelSize(annotation, scale: scale)
                 let onPill = background == true
-                let layout = TextLayout(
-                    string, pixelSize: pixelSize,
-                    color: onPill ? annotation.color.contrastingInk.cgColor : color)
-                let topLeft = map.point(origin, bias: .after)
+                let layout = AnnotationGeometry.textLayout(
+                    of: annotation, scale: scale,
+                    color: onPill ? annotation.color.contrastingInk.cgColor : color)!
+                var topLeft = map.point(origin, bias: .after)
+                let centred = style?.alignment == .centered
+                if centred { topLeft.x -= layout.size.width / 2 }
                 if onPill {
                     let pill = AnnotationGeometry.pill(
                         around: CGRect(origin: topLeft, size: layout.size), pixelSize: pixelSize)
@@ -82,7 +84,9 @@ public enum AnnotationRenderer {
                     let baseline =
                         Double(topLeft.y) + Double(layout.ascent)
                         + Double(index) * Double(layout.lineHeight)
-                    context.textPosition = flip.point(CGPoint(x: Double(topLeft.x), y: baseline))
+                    let indent = centred ? (layout.size.width - layout.widths[index]) / 2 : 0
+                    context.textPosition = flip.point(
+                        CGPoint(x: Double(topLeft.x + indent), y: baseline))
                     CTLineDraw(line, context)
                 }
             case .step(let center):

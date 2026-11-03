@@ -64,7 +64,7 @@ extension EditorModel {
             ]
         case .highlight, .patch:
             return [color, .delete]
-        case .text(_, _, let background):
+        case .text(_, _, let background, _):
             return [color, size, .background(background == true), .delete]
         case .step:
             return [

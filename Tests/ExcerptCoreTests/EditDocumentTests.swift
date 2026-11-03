@@ -82,6 +82,20 @@ import Testing
         #expect(try EditDocument.decode(doc.encoded()) == doc)
     }
 
+    @Test func readsAVersion8TextWithoutAStyle() throws {
+        let json = Data(
+            #"""
+            {"version":8,"scale":2,"cuts":[],"salt":1,"annotations":[
+            {"id":1,"color":"blue","width":"thin","shape":{"text":{"origin":[5,6],"string":"a","background":true}}}]}
+            """#.utf8)
+        #expect(
+            try EditDocument.decode(json).annotations == [
+                Annotation(
+                    id: 1, shape: .text(origin: CGPoint(x: 5, y: 6), string: "a", background: true),
+                    color: .palette(.blue), width: .thin)
+            ])
+    }
+
     @Test func readsVersion3TextAsPlain() throws {
         let json = Data(
             #"""
@@ -89,7 +103,7 @@ import Testing
             {"id":1,"color":"red","width":"medium","shape":{"text":{"origin":[5,6],"string":"a"}}}]}
             """#.utf8)
         let doc = try EditDocument.decode(json)
-        guard case .text(let origin, let string, let background) = doc.annotations.first?.shape
+        guard case .text(let origin, let string, let background, _) = doc.annotations.first?.shape
         else {
             Issue.record("not text")
             return

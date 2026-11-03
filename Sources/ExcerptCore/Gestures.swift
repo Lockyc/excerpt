@@ -59,7 +59,7 @@ public enum HitTest {
             return map.rect(rect.standardized)?.insetBy(dx: -w / 2, dy: -w / 2)
         case .highlight(let rect), .blur(let rect), .patch(let rect, _):
             return map.rect(rect.standardized)
-        case .text(let origin, _, _):
+        case .text(let origin, _, _, _):
             let bounds = AnnotationGeometry.bounds(of: annotation, scale: scale)
             let topLeft = map.point(origin, bias: .after)
             return bounds.offsetBy(dx: topLeft.x - origin.x, dy: topLeft.y - origin.y)

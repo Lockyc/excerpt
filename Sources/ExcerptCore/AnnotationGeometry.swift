@@ -43,17 +43,31 @@ public enum AnnotationGeometry {
 
     /// Text size in pixels.
     public static func textPixelSize(_ annotation: Annotation, scale: Double) -> Double {
-        annotation.width.textPoints * scale
+        var points = annotation.width.textPoints
+        if case .text(_, _, _, let style?) = annotation.shape { points = style.points }
+        return points * scale
+    }
+
+    /// A text annotation's lines laid out in `color` in its font; nil for other kinds.
+    public static func textLayout(of annotation: Annotation, scale: Double, color: CGColor)
+        -> TextLayout?
+    {
+        guard case .text(_, let string, _, let style) = annotation.shape else { return nil }
+        return TextLayout(
+            string, pixelSize: textPixelSize(annotation, scale: scale), color: color,
+            font: style?.font ?? .sans, bold: style?.bold ?? true)
     }
 
     /// Where a text annotation's lines sit, in original pixels, without its background; nil
-    /// for other kinds.
+    /// for other kinds. A centred text is centred on `origin.x`.
     public static func textRect(of annotation: Annotation, scale: Double) -> CGRect? {
-        guard case .text(let origin, let string, _) = annotation.shape else { return nil }
-        let size = TextLayout(
-            string, pixelSize: textPixelSize(annotation, scale: scale), color: .black
-        ).size
-        return CGRect(origin: origin, size: size)
+        guard case .text(let origin, _, _, let style) = annotation.shape,
+            let layout = textLayout(of: annotation, scale: scale, color: .black)
+        else { return nil }
+        let size = layout.size
+        let centred = style?.alignment == .centered
+        let left = Double(origin.x) - (centred ? Double(size.width) / 2 : 0)
+        return CGRect(origin: CGPoint(x: left, y: Double(origin.y)), size: size)
     }
 
     /// The background pill around text occupying `text`.
@@ -102,7 +116,7 @@ public enum AnnotationGeometry {
             return rect.standardized.insetBy(dx: -w / 2, dy: -w / 2)
         case .highlight(let rect), .blur(let rect), .patch(let rect, _):
             return rect.standardized
-        case .text(_, _, let background):
+        case .text(_, _, let background, _):
             let text = textRect(of: annotation, scale: scale)!
             return background == true
                 ? pill(around: text, pixelSize: textPixelSize(annotation, scale: scale)) : text
@@ -176,24 +190,31 @@ public struct TextLayout: @unchecked Sendable {
     /// The one text font: annotation text is measured, drawn and typed in it. `pixelSize` is the
     /// text size in points times the capture scale (times the editor zoom when typing).
     /// Memoised by size in `TextCache`.
-    public static func font(pixelSize: Double) -> CTFont {
-        TextCache.shared.font(pixelSize: pixelSize) {
-            let size = CGFloat(pixelSize)
-            return CTFontCreateUIFontForLanguage(.emphasizedSystem, size, nil)
-                ?? CTFontCreateWithName(".AppleSystemUIFont" as CFString, size, nil)
+    public static func font(pixelSize: Double, font: TextFont = .sans, bold: Bool = true) -> CTFont
+    {
+        TextCache.shared.font(pixelSize: pixelSize, font: font, bold: bold) {
+            makeFont(pixelSize: pixelSize, font: font, bold: bold)
         }
     }
 
-    /// Memoised in `TextCache` by string, size and colour: a repaint measures each text from
-    /// its bounds, hit test, margin and hidden count as well as drawing it.
-    init(_ string: String, pixelSize: Double, color: CGColor) {
-        self = TextCache.shared.layout(string, pixelSize: pixelSize, color: color) {
-            TextLayout(laying: string, pixelSize: pixelSize, color: color)
+    /// Memoised in `TextCache` by string, size, colour, font and weight: a repaint measures each
+    /// text from its bounds, hit test, margin and hidden count as well as drawing it.
+    init(
+        _ string: String, pixelSize: Double, color: CGColor, font: TextFont = .sans,
+        bold: Bool = true
+    ) {
+        self = TextCache.shared.layout(
+            string, pixelSize: pixelSize, color: color, font: font, bold: bold
+        ) {
+            TextLayout(laying: string, pixelSize: pixelSize, color: color, font: font, bold: bold)
         }
     }
 
-    private init(laying string: String, pixelSize: Double, color: CGColor) {
-        let font = Self.font(pixelSize: pixelSize)
+    private init(
+        laying string: String, pixelSize: Double, color: CGColor, font textFont: TextFont,
+        bold: Bool
+    ) {
+        let font = Self.font(pixelSize: pixelSize, font: textFont, bold: bold)
         let attributes: [NSAttributedString.Key: Any] = [
             NSAttributedString.Key(kCTFontAttributeName as String): font,
             NSAttributedString.Key(kCTForegroundColorAttributeName as String): color,
@@ -226,29 +247,39 @@ final class TextCache: @unchecked Sendable {
         let string: String
         let pixelSize: Double
         let color: CGColor
+        let font: TextFont
+        let bold: Bool
+    }
+
+    private struct FontKey: Hashable {
+        let pixelSize: Double
+        let font: TextFont
+        let bold: Bool
     }
 
     private let lock = NSLock()
-    private var fonts: [Double: CTFont] = [:]
+    private var fonts: [FontKey: CTFont] = [:]
     private var layouts: [Key: TextLayout] = [:]
 
     /// The number of layouts held, for tests.
     var layoutCount: Int { lock.withLock { layouts.count } }
 
-    func font(pixelSize: Double, make: () -> CTFont) -> CTFont {
-        if let font = lock.withLock({ fonts[pixelSize] }) { return font }
-        let font = make()
+    func font(pixelSize: Double, font: TextFont, bold: Bool, make: () -> CTFont) -> CTFont {
+        let key = FontKey(pixelSize: pixelSize, font: font, bold: bold)
+        if let cached = lock.withLock({ fonts[key] }) { return cached }
+        let made = make()
         lock.withLock {
             if fonts.count >= Self.limit { fonts.removeAll(keepingCapacity: true) }
-            fonts[pixelSize] = font
+            fonts[key] = made
         }
-        return font
+        return made
     }
 
     func layout(
-        _ string: String, pixelSize: Double, color: CGColor, make: () -> TextLayout
+        _ string: String, pixelSize: Double, color: CGColor, font: TextFont = .sans,
+        bold: Bool = true, make: () -> TextLayout
     ) -> TextLayout {
-        let key = Key(string: string, pixelSize: pixelSize, color: color)
+        let key = Key(string: string, pixelSize: pixelSize, color: color, font: font, bold: bold)
         if let layout = lock.withLock({ layouts[key] }) { return layout }
         let layout = make()
         lock.withLock {

@@ -239,7 +239,7 @@ public struct EditDocument: Codable, Equatable, Sendable {
             let ok: Bool
             switch note.shape {
             case .arrow(let tail, let head): ok = inRange(tail.x, tail.y, head.x, head.y)
-            case .text(let origin, _, _): ok = inRange(origin.x, origin.y)
+            case .text(let origin, _, _, _): ok = inRange(origin.x, origin.y)
             case .step(let center): ok = inRange(center.x, center.y)
             case .rectangle(let r), .highlight(let r), .blur(let r), .patch(let r, _):
                 ok = rectOK(r)
