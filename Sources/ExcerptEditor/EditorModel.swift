@@ -1,5 +1,6 @@
 import CoreGraphics
 import ExcerptCore
+import ExcerptExport
 
 /// What is selected: an annotation by id, or a seam by the band it removes (original pixels).
 enum Selection: Equatable {
@@ -68,6 +69,15 @@ final class EditorModel {
     private(set) var building: PathBuild? { didSet { changed() } }
     /// The original's pixels, for snapping; read on first use.
     private(set) lazy var pixels = PixelBuffer(original)
+    /// The runs of text in the original, in its pixels, that new text matches; nil until read
+    /// (`startLoadingTextRuns`), empty when reading failed.
+    private(set) var textRuns: [RecognizedText]?
+    /// The one read of `textRuns`, once started.
+    private var runsLoad: Task<Void, Never>?
+    /// Where new text was asked for before `textRuns` were read: begun once they are.
+    private var pendingBegin: Pointer? {
+        didSet { if pendingBegin != nil || oldValue != nil { changed() } }
+    }
 
     /// A document without a margin colour takes `marginColor` where that leaves its render
     /// unchanged (`EditDocument.adoptMarginColor`), so the picture can grow from here on; that
@@ -307,10 +317,55 @@ final class EditorModel {
         }
     }
 
-    /// Sets the size new annotations get, and resizes the selected annotation.
+    /// Sets the size new annotations get, and resizes the selected annotation: text with its
+    /// own style takes the preset's text size.
     func setWidth(_ width: StrokeWidth) {
         style.width = width
-        restyleSelection { $0.width = width }
+        restyleSelection { annotation in
+            annotation.width = width
+            if case .text(let origin, let string, let background, var textStyle?) =
+                annotation.shape
+            {
+                textStyle.points = width.textPoints
+                annotation.shape = .text(
+                    origin: origin, string: string, background: background, style: textStyle)
+            }
+        }
+    }
+
+    /// Sizes the text being typed or selected, held to `TextStyle.pointsRange`.
+    func setTextSize(_ points: Double) {
+        let range = TextStyle.pointsRange
+        restyleText { $0.points = min(max(points, range.lowerBound), range.upperBound) }
+    }
+
+    func setBold(_ on: Bool) { restyleText { $0.bold = on } }
+
+    func setFont(_ font: TextFont) { restyleText { $0.font = font } }
+
+    /// Realigns the text being typed or selected, its lines staying where they start.
+    func setAlignment(_ alignment: TextAlign) { restyleText { $0.alignment = alignment } }
+
+    /// Changes the text style of the text being typed or selected; legacy text takes its
+    /// implicit style first. A change of alignment moves the origin so the text's left edge
+    /// stays put.
+    private func restyleText(_ change: (inout TextStyle) -> Void) {
+        let scale = document.scale
+        restyleSelection { annotation in
+            guard case .text(var origin, let string, let background, let current) = annotation.shape
+            else { return }
+            let before = AnnotationGeometry.textRect(of: annotation, scale: scale)
+            var textStyle = current ?? .implicit(annotation.width)
+            change(&textStyle)
+            annotation.shape = .text(
+                origin: origin, string: string, background: background, style: textStyle)
+            guard textStyle.alignment != (current?.alignment ?? .left), let before,
+                let after = AnnotationGeometry.textRect(of: annotation, scale: scale)
+            else { return }
+            origin.x += before.minX - after.minX
+            annotation.shape = .text(
+                origin: origin, string: string, background: background, style: textStyle)
+        }
     }
 
     /// Sets whether new text gets a background, and sets it on the selected text.
@@ -395,8 +450,10 @@ final class EditorModel {
         return id
     }
 
-    /// Starts typing into the text under `pointer`, or new text there in the current style.
-    /// Whatever was being typed commits first.
+    /// Starts typing into the text under `pointer`, or new text there: matched to the run of
+    /// recognised text under it (`TextMatcher`), else in the current style. Whatever was being
+    /// typed commits first. While the runs are still being read, new text waits for them
+    /// (`isTypingPending`) and begins when they are.
     func beginTyping(at pointer: Pointer, map: RenderMap) {
         batch {
             endTyping()
@@ -408,10 +465,68 @@ final class EditorModel {
                 return
             }
             selection = nil
-            typing = Annotation(
-                id: document.nextAnnotationID,
-                shape: .text(origin: pointer.original, string: "", background: style.background),
-                color: style.color, width: style.width)
+            if isLoadingTextRuns {
+                pendingBegin = pointer
+            } else {
+                typing = newText(at: pointer)
+            }
+        }
+    }
+
+    /// New text was asked for and waits on the text runs being read.
+    var isTypingPending: Bool { pendingBegin != nil }
+
+    /// Whether `textRuns` are being read.
+    var isLoadingTextRuns: Bool { runsLoad != nil && textRuns == nil }
+
+    /// Empty text at `pointer`, matched to the run under it when there is one.
+    private func newText(at pointer: Pointer) -> Annotation {
+        let id = document.nextAnnotationID
+        if let run = textRuns?.first(where: { $0.bounds.contains(pointer.original) }),
+            let matched = TextMatcher.match(run, in: pixels, scale: document.scale)
+        {
+            return Annotation(
+                id: id,
+                shape: .text(
+                    origin: matched.origin, string: "", background: false, style: matched.style),
+                color: matched.color, width: style.width)
+        }
+        return Annotation(
+            id: id,
+            shape: .text(origin: pointer.original, string: "", background: style.background),
+            color: style.color, width: style.width)
+    }
+
+    /// Reads the original's runs of text into `textRuns` off the main thread, once per model:
+    /// a second call hands back the first's task. A recogniser that throws leaves them empty.
+    /// New text asked for meanwhile begins when they are read.
+    @MainActor @discardableResult
+    func startLoadingTextRuns(using recognizer: any TextRecognizer) -> Task<Void, Never> {
+        if let runsLoad { return runsLoad }
+        let original = original
+        let scale = document.scale
+        let load = Task { @MainActor [weak self] in
+            let runs = await Task.detached(priority: .userInitiated) {
+                (try? CaptureText.runs(of: original, using: recognizer, scale: scale)) ?? []
+            }.value
+            self?.finishLoading(runs)
+        }
+        runsLoad = load
+        return load
+    }
+
+    /// `startLoadingTextRuns`, awaited to its end.
+    @MainActor
+    func loadTextRuns(using recognizer: any TextRecognizer) async {
+        await startLoadingTextRuns(using: recognizer).value
+    }
+
+    private func finishLoading(_ runs: [RecognizedText]) {
+        batch {
+            textRuns = runs
+            guard let pointer = pendingBegin else { return }
+            pendingBegin = nil
+            typing = newText(at: pointer)
         }
     }
 
@@ -425,8 +540,10 @@ final class EditorModel {
     }
 
     /// Ends typing as one undoable step: new text is added, retyped text replaced, and text
-    /// emptied removed. The text stays selected. Does nothing when nothing is being typed.
+    /// emptied removed. The text stays selected. New text still waiting on the text runs is
+    /// dropped.
     func endTyping() {
+        pendingBegin = nil
         guard let typed = typing else { return }
         batch {
             typing = nil
@@ -538,4 +655,9 @@ final class EditorModel {
         default: return "\(count) annotations hidden by cuts"
         }
     }
+}
+
+extension TextStyle {
+    /// The style legacy text of `width` (its `style` nil) is drawn in.
+    static func implicit(_ width: StrokeWidth) -> TextStyle { TextStyle(points: width.textPoints) }
 }

@@ -379,7 +379,8 @@ own. Crop snaps using the same gap detection as cuts.
 **The item bar** floats above whatever is selected (below it when there is no room, kept on the
 canvas, hidden during a drag) and carries that item's options and nothing else: delete for every
 item, and colour (six), size (three; one control sets stroke, text and step size) and the
-kind's own options where they apply — text adds its background, a step adds Move earlier / Move
+kind's own options where they apply — text adds a free size (`TextStyle.pointsRange`), bold,
+font (sans, mono, serif), alignment (left, centred) and its background, a step adds Move earlier / Move
 later (disabled at either end of the sequence), a path adds Closed (disabled under three points) and Fill (disabled while open). The options per kind are one pure mapping. The
 crop under `K` gets a bar with delete. A new annotation takes the colour, size and text background
 last chosen, remembered across launches, and stays selected after it is drawn so its bar is
@@ -388,7 +389,10 @@ showing.
 **Text** is drawn either plain in its colour or on a **background**: a rounded pill in its colour
 with the text in `Palette.contrastingInk` (black on yellow, white otherwise). Typing previews through Core's renderer on every keystroke — the text view
 under it supplies only input, caret and selection, its own glyphs transparent — so what is typed
-is what saves. Return commits; ⌥Return adds a line.
+is what saves. Return commits; ⌥Return adds a line. New text started on a run of the
+capture's own text (`CaptureText.runs`, read once as the editor opens) takes that text's look
+from `TextMatcher` — size, weight, font, alignment and colour, background off; anywhere else it
+takes the style last chosen. A click before the reading finishes waits for it under a busy cursor.
 
 **Steps** (`N`): each click places a numbered circle in its colour, the number in
 `Palette.contrastingInk`, ringed in white. The number is not stored: it is the document's first

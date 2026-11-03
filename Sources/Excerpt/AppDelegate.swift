@@ -235,7 +235,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             rememberBorder: { [weak self] in self?.preferences.editorBorder = $0 },
             annotationStyle: preferences.editorStyle,
             rememberStyle: { [weak self] in self?.preferences.editorStyle = $0 },
-            marginColor: preferences.backdropColor,
+            marginColor: preferences.backdropColor, recognizer: VisionTextRecognizer(),
             onClose: { [weak self] in
                 // The window is still mid-close; release it on the next turn, not under itself.
                 DispatchQueue.main.async {

@@ -101,15 +101,18 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
     /// `borderStyle` is the border a capture without one gets when turned on, and
     /// `rememberBorder` is told each colour or width the user picks; `annotationStyle` is what
     /// new annotations start with, and `rememberStyle` is told each colour, size or background
-    /// the user picks; `marginColor` fills the margin of a capture that has none yet; `onClose`
-    /// runs once the window has closed.
+    /// the user picks; `marginColor` fills the margin of a capture that has none yet;
+    /// `recognizer` reads each capture's text as the window opens, so new text placed on it
+    /// matches it (none: new text always takes the current style); `onClose` runs once the
+    /// window has closed.
     public init(
         captures: [LoadedCapture],
         save: @escaping (LoadedCapture, EditDocument) async throws -> Data,
         copy: @escaping (() throws -> [Data]) -> Bool,
         borderStyle: Border, rememberBorder: @escaping (Border) -> Void,
         annotationStyle: AnnotationStyle, rememberStyle: @escaping (AnnotationStyle) -> Void,
-        marginColor: RGBA? = nil, onClose: @escaping () -> Void
+        marginColor: RGBA? = nil, recognizer: (any TextRecognizer)? = nil,
+        onClose: @escaping () -> Void
     ) {
         precondition(!captures.isEmpty, "an editor needs a capture")
         self.save = save
@@ -121,6 +124,7 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
                 style: annotationStyle, marginColor: marginColor)
             model.onBorderStyleChange = rememberBorder
             model.onStyleChange = rememberStyle
+            if let recognizer { model.startLoadingTextRuns(using: recognizer) }
             return Page(capture: capture, model: model)
         }
         filmstrip = captures.count > 1 ? Filmstrip(count: captures.count) : nil

@@ -38,6 +38,24 @@ import Testing
         tools.sendAction(tools.action, to: tools.target)
     }
 
+    @Test func openingReadsEachCapturesTextWithTheRecognizer() async {
+        let run = RecognizedText("probe", CGRect(x: 10, y: 10, width: 40, height: 12))
+        let capture = LoadedCapture(
+            primary: URL(fileURLWithPath: "/tmp/probe.png"),
+            original: Fixtures.sheet(width: 360, height: 400), edits: EditDocument(scale: 1),
+            supersedesMaster: false)
+        let editor = EditorWindowController(
+            captures: [capture], save: { _, _ in Data() }, copy: { _ in true },
+            borderStyle: .initial, rememberBorder: { _ in }, annotationStyle: .initial,
+            rememberStyle: { _ in }, recognizer: FixedRecognizer(runs: [run]), onClose: {})
+        defer { editor.window?.orderOut(nil) }
+        let model = editor.model(at: 0)
+        #expect(model.isLoadingTextRuns)
+        // The load the window started, not a second one with this recogniser.
+        await model.startLoadingTextRuns(using: FailingRecognizer()).value
+        #expect(model.textRuns == [run])
+    }
+
     @Test func aToolCanBeChosenWhileAPathIsBuilt() throws {
         let editor = editor()
         defer { editor.window?.orderOut(nil) }

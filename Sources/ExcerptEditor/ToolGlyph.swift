@@ -69,6 +69,11 @@ enum ToolGlyph {
         NSImage(systemSymbolName: "eyedropper", accessibilityDescription: nil)?
             .withSymbolConfiguration(.init(pointSize: 11, weight: .regular)))
 
+    /// The cursor while new text waits on the capture's text being read.
+    static let busyCursor = badgedCrosshair(
+        NSImage(systemSymbolName: "hourglass", accessibilityDescription: nil)?
+            .withSymbolConfiguration(.init(pointSize: 11, weight: .regular)))
+
     /// A white-edged crosshair centred on the hot spot, the glyph below and right of it.
     private static func badgedCrosshair(_ tool: Tool) -> NSCursor {
         badgedCrosshair(image(tool, pointSize: 11))

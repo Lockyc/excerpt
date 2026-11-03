@@ -67,6 +67,10 @@ final class CanvasView: NSView, NSTextViewDelegate {
             if model.pickingColor { model.cancelPickingColor() } else { model.beginPickingColor() }
         }
         itemBar.onSize = { [weak self] in self?.model.setWidth($0) }
+        itemBar.onTextSize = { [weak self] in self?.model.setTextSize($0) }
+        itemBar.onBold = { [weak self] in self?.model.setBold($0) }
+        itemBar.onFont = { [weak self] in self?.model.setFont($0) }
+        itemBar.onAlignment = { [weak self] in self?.model.setAlignment($0) }
         itemBar.onBackground = { [weak self] in self?.model.setBackground($0) }
         itemBar.onClosed = { [weak self] in self?.model.setClosed($0) }
         itemBar.onFill = { [weak self] in self?.model.setFill($0) }
@@ -135,6 +139,10 @@ final class CanvasView: NSView, NSTextViewDelegate {
             resize()
         }
         needsDisplay = true
+        if isAwaitingText, !model.isTypingPending {
+            isAwaitingText = false
+            if model.typing != nil { openTextView() }
+        }
         syncTextView()
         placeItemBar()
         updateCursor()
@@ -157,6 +165,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
             seam.axis == .horizontal ? .rowResize : .columnResize
         }
         if model.pickingColor { return ToolGlyph.eyedropperCursor }
+        if model.isTypingPending { return ToolGlyph.busyCursor }
         switch model.drag {
         case .move?, .vertex?: return .closedHand
         case .edge(let seam, _, _)?: return resize(seam)
@@ -602,20 +611,31 @@ final class CanvasView: NSView, NSTextViewDelegate {
 
     // MARK: Text
 
+    /// Whether a click asked for new text that waits on the capture's text being read: its text
+    /// view opens once typing begins.
+    private(set) var isAwaitingText = false
+
     func beginText(at p: Pointer) {
         commitInProgress()
         model.beginTyping(at: p, map: map)
+        if model.isTypingPending {
+            isAwaitingText = true
+            updateCursor()
+        } else {
+            openTextView()
+        }
+    }
+
+    /// Takes the keys for the text being typed.
+    private func openTextView() {
         typingUndo = UndoManager()
         let view = NSTextView(frame: .zero)
         view.drawsBackground = false
         view.isRichText = false
         view.allowsUndo = true
-        view.isHorizontallyResizable = true
         view.textContainerInset = .zero
         view.textContainer?.lineFragmentPadding = 0
-        view.textContainer?.widthTracksTextView = false
-        view.textContainer?.containerSize = CGSize(
-            width: CGFloat.greatestFiniteMagnitude, height: .greatestFiniteMagnitude)
+        // `syncTextView` sizes the view and its container for the text's alignment.
         view.string = model.typedString
         view.delegate = self
         addSubview(view)
@@ -638,10 +658,15 @@ final class CanvasView: NSView, NSTextViewDelegate {
                 pixelSize: pixelSize, font: textStyle?.font ?? .sans, bold: textStyle?.bold ?? true)
             as NSFont
         let lineHeight = font.ascender - font.descender + font.leading
-        if view.typingAttributes[.font] as? NSFont != font {
+        let centred = textStyle?.alignment == .centered
+        let alignment: NSTextAlignment = centred ? .center : .left
+        let shownAlignment =
+            (view.typingAttributes[.paragraphStyle] as? NSParagraphStyle)?.alignment
+        if view.typingAttributes[.font] as? NSFont != font || shownAlignment != alignment {
             let paragraph = NSMutableParagraphStyle()
             paragraph.minimumLineHeight = lineHeight
             paragraph.maximumLineHeight = lineHeight
+            paragraph.alignment = alignment
             let attributes: [NSAttributedString.Key: Any] = [
                 .font: font, .foregroundColor: NSColor.clear, .paragraphStyle: paragraph,
             ]
@@ -651,10 +676,19 @@ final class CanvasView: NSView, NSTextViewDelegate {
         }
         let ink = background == true ? typing.color.contrastingInk : typing.color.rgba
         view.insertionPointColor = NSColor(cgColor: ink.cgColor) ?? .textColor
+        // Room for the caret past the end of a line: on the right of left-aligned text, on both
+        // sides of centred text, whose lines centre in a container exactly as wide as the view.
+        let room = CGFloat(pixelSize) * (centred ? 2 : 1)
         let topLeft = viewPoint(map.point(rect.origin, bias: .after))
+        view.isHorizontallyResizable = !centred
+        view.textContainer?.widthTracksTextView = centred
+        if !centred {
+            view.textContainer?.containerSize = CGSize(
+                width: CGFloat.greatestFiniteMagnitude, height: .greatestFiniteMagnitude)
+        }
         view.frame = CGRect(
-            x: topLeft.x, y: topLeft.y,
-            width: rect.width * zoom + CGFloat(pixelSize),  // room for the caret past the end
+            x: topLeft.x - (centred ? room / 2 : 0), y: topLeft.y,
+            width: rect.width * zoom + room,
             height: max(rect.height * zoom, lineHeight))
     }
 

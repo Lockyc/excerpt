@@ -20,7 +20,7 @@ let package = Package(
         ),
         .target(
             name: "ExcerptEditor",
-            dependencies: ["ExcerptCore", "ExcerptRecording"],
+            dependencies: ["ExcerptCore", "ExcerptExport", "ExcerptRecording"],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .target(name: "ExcerptExport", dependencies: ["ExcerptCore"]),

@@ -324,6 +324,43 @@ import Testing
         #expect(window.firstResponder is NSTextView)
     }
 
+    @Test func centredTextIsTypedCentredOnItsOrigin() throws {
+        let text = Annotation(
+            id: 1,
+            shape: .text(
+                origin: CGPoint(x: 150, y: 60), string: "ab\nabcdefgh",
+                style: TextStyle(points: 20, alignment: .centered)),
+            color: .palette(.red))
+        let (window, _, canvas) = editor(EditDocument(scale: 1, annotations: [text]))
+        canvas.model.tool = .text
+        canvas.beginText(at: Pointer(rendered: CGPoint(x: 150, y: 70), map: canvas.map))
+        let view = try #require(window.firstResponder as? NSTextView)
+        let paragraph = view.typingAttributes[.paragraphStyle] as? NSParagraphStyle
+        #expect(paragraph?.alignment == .center)
+        // Each line's caret and selection sit where the render centres that line.
+        let layout = try #require(view.layoutManager)
+        layout.ensureLayout(for: view.textContainer!)
+        let centre = 150 + CanvasView.gutter
+        for glyph in [0, 3] {
+            let used = layout.lineFragmentUsedRect(forGlyphAt: glyph, effectiveRange: nil)
+            let midX = used.midX + view.textContainerOrigin.x + view.frame.minX
+            #expect(abs(midX - centre) < 1, "line at glyph \(glyph): \(midX) vs \(centre)")
+        }
+    }
+
+    @Test func aClickBeforeTheTextIsReadOpensTypingOnceItIs() async {
+        let (window, _, canvas) = editor(EditDocument(scale: 1, salt: 7))
+        canvas.model.tool = .text
+        let load = canvas.model.startLoadingTextRuns(using: FixedRecognizer(runs: []))
+        canvas.beginText(at: Pointer(rendered: CGPoint(x: 40, y: 60), map: canvas.map))
+        #expect(canvas.isAwaitingText)
+        #expect(!(window.firstResponder is NSTextView))
+        await load.value
+        #expect(!canvas.isAwaitingText)
+        #expect(window.firstResponder is NSTextView)
+        #expect(canvas.model.typing != nil)
+    }
+
     @Test func typingLeavesNothingOnTheWindowsUndo() {
         let (window, _, canvas) = editor(EditDocument(scale: 1, salt: 7))
         canvas.model.tool = .text

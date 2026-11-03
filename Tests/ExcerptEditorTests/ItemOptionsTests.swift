@@ -26,12 +26,33 @@ import Testing
         #expect(options(.rectangle(rect: r)) == [.color(.palette(.blue)), .size(.thick), .delete])
         #expect(options(.highlight(rect: r)) == [.color(.palette(.blue)), .delete])
         #expect(options(.blur(rect: r)) == [.delete])
+        // Legacy text shows its implicit style: the preset's size, bold sans, left.
         #expect(
             options(.text(origin: .zero, string: "a", background: true))
-                == [.color(.palette(.blue)), .size(.thick), .background(true), .delete])
+                == [
+                    .color(.palette(.blue)), .size(.thick), .textSize(45), .bold(true),
+                    .font(.sans), .alignment(.left), .background(true), .delete,
+                ])
         #expect(
             options(.text(origin: .zero, string: "a"))
-                == [.color(.palette(.blue)), .size(.thick), .background(false), .delete])
+                == [
+                    .color(.palette(.blue)), .size(.thick), .textSize(45), .bold(true),
+                    .font(.sans), .alignment(.left), .background(false), .delete,
+                ])
+        // Styled text lights the preset of its size, or none.
+        let free = TextStyle(points: 17.5, bold: false, font: .serif, alignment: .centered)
+        #expect(
+            options(.text(origin: .zero, string: "a", background: false, style: free))
+                == [
+                    .color(.palette(.blue)), .size(nil), .textSize(17.5), .bold(false),
+                    .font(.serif), .alignment(.centered), .background(false), .delete,
+                ])
+        #expect(
+            options(.text(origin: .zero, string: "a", style: TextStyle(points: 30)))
+                == [
+                    .color(.palette(.blue)), .size(.medium), .textSize(30), .bold(true),
+                    .font(.sans), .alignment(.left), .background(false), .delete,
+                ])
         #expect(
             options(.step(center: .zero))
                 == [
@@ -75,6 +96,10 @@ import Testing
         m.tool = .text
         let map = Renderer.renderBase(m.original, edits: m.baseDocument).map
         m.beginTyping(at: Pointer(rendered: CGPoint(x: 40, y: 40), map: map), map: map)
-        #expect(m.itemOptions == [.color(.initial), .size(.initial), .background(true), .delete])
+        #expect(
+            m.itemOptions == [
+                .color(.initial), .size(.initial), .textSize(StrokeWidth.initial.textPoints),
+                .bold(true), .font(.sans), .alignment(.left), .background(true), .delete,
+            ])
     }
 }

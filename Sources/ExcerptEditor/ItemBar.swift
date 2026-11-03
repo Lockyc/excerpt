@@ -37,6 +37,39 @@ extension StrokeWidth {
     }
 }
 
+extension TextStyle {
+    /// A text size as the bar shows it: "17.5 pt", "30 pt".
+    static func label(points: Double) -> String {
+        "\(points.formatted(.number.precision(.fractionLength(0...1)))) pt"
+    }
+}
+
+extension TextFont {
+    var label: String {
+        switch self {
+        case .sans: "Sans"
+        case .mono: "Mono"
+        case .serif: "Serif"
+        }
+    }
+}
+
+extension TextAlign {
+    var label: String {
+        switch self {
+        case .left: "Align left"
+        case .centered: "Centre"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .left: "text.alignleft"
+        case .centered: "text.aligncenter"
+        }
+    }
+}
+
 /// The selected item's own controls, floating beside it, built from `EditorModel.itemOptions`.
 /// Every control refuses first responder, so clicking one leaves typed text in its field.
 @MainActor
@@ -44,6 +77,10 @@ final class ItemBar: NSVisualEffectView {
     var onColor: (AnnotationColor) -> Void = { _ in }
     var onEyedropper: () -> Void = {}
     var onSize: (StrokeWidth) -> Void = { _ in }
+    var onTextSize: (Double) -> Void = { _ in }
+    var onBold: (Bool) -> Void = { _ in }
+    var onFont: (TextFont) -> Void = { _ in }
+    var onAlignment: (TextAlign) -> Void = { _ in }
     var onBackground: (Bool) -> Void = { _ in }
     var onClosed: (Bool) -> Void = { _ in }
     var onFill: (Bool) -> Void = { _ in }
@@ -144,6 +181,59 @@ final class ItemBar: NSVisualEffectView {
             return wire(control) { [weak self] in
                 self?.onSize(StrokeWidth.allCases[($0 as! NSSegmentedControl).selectedSegment])
             }
+        case .textSize(let points):
+            let range = TextStyle.pointsRange
+            let label = NSTextField(labelWithString: TextStyle.label(points: points))
+            label.font = .monospacedDigitSystemFont(
+                ofSize: NSFont.smallSystemFontSize, weight: .regular)
+            label.toolTip = "Text size"
+            let stepper = NSStepper()
+            stepper.minValue = range.lowerBound
+            stepper.maxValue = range.upperBound
+            stepper.increment = 0.5
+            stepper.valueWraps = false
+            stepper.autorepeat = true
+            stepper.doubleValue = points
+            stepper.toolTip =
+                "Text size, \(TextStyle.label(points: range.lowerBound)) to "
+                + TextStyle.label(points: range.upperBound)
+            let step = wire(stepper) { [weak self, weak label] in
+                let points = $0.doubleValue
+                label?.stringValue = TextStyle.label(points: points)
+                self?.onTextSize(points)
+            }
+            let row = NSStackView(views: [label, step])
+            row.orientation = .horizontal
+            row.spacing = 2
+            return row
+        case .bold(let on):
+            let button = symbolButton("bold", label: "Bold")
+            button.setButtonType(.pushOnPushOff)
+            button.state = on ? .on : .off
+            button.toolTip = "Bold"
+            return wire(button) { [weak self] in self?.onBold(($0 as! NSButton).state == .on) }
+        case .font(let selected):
+            let menu = NSPopUpButton(frame: .zero, pullsDown: false)
+            for font in TextFont.allCases { menu.addItem(withTitle: font.label) }
+            menu.selectItem(at: TextFont.allCases.firstIndex(of: selected) ?? 0)
+            menu.toolTip = "Font"
+            return wire(menu) { [weak self] in
+                let i = ($0 as! NSPopUpButton).indexOfSelectedItem
+                if TextFont.allCases.indices.contains(i) { self?.onFont(TextFont.allCases[i]) }
+            }
+        case .alignment(let selected):
+            let alignments: [TextAlign] = [.left, .centered]
+            let control = segments(alignments, selected: selected) { control, i, alignment in
+                control.setImage(
+                    NSImage(
+                        systemSymbolName: alignment.symbol,
+                        accessibilityDescription: alignment.label),
+                    forSegment: i)
+                control.setToolTip(alignment.label, forSegment: i)
+            }
+            return wire(control) { [weak self] in
+                self?.onAlignment(alignments[($0 as! NSSegmentedControl).selectedSegment])
+            }
         case .background(let on):
             let button = symbolButton("character.textbox", label: "Background")
             button.setButtonType(.pushOnPushOff)
@@ -200,8 +290,9 @@ final class ItemBar: NSVisualEffectView {
         }
     }
 
+    /// One segment per value, `selected` lit; none when it is nil.
     private func segments<Value: Equatable>(
-        _ values: [Value], selected: Value,
+        _ values: [Value], selected: Value?,
         configure: (NSSegmentedControl, Int, Value) -> Void
     ) -> NSSegmentedControl {
         let control = NSSegmentedControl()
@@ -211,7 +302,7 @@ final class ItemBar: NSVisualEffectView {
             configure(control, i, value)
             control.setWidth(28, forSegment: i)
         }
-        control.selectedSegment = values.firstIndex(of: selected) ?? 0
+        control.selectedSegment = selected.flatMap { values.firstIndex(of: $0) } ?? -1
         return control
     }
 

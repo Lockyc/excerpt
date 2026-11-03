@@ -5,7 +5,13 @@ enum ItemOption: Equatable {
     /// The palette, the last eyedropper sample (nil until there is one) and the eyedropper
     /// itself, lit while it is picking.
     case color(AnnotationColor, lastSampled: RGBA? = nil, picking: Bool = false)
-    case size(StrokeWidth)
+    /// The size presets, the one lit; none when styled text is between them.
+    case size(StrokeWidth?)
+    /// Text's own size in points, set freely within `TextStyle.pointsRange`.
+    case textSize(Double)
+    case bold(Bool)
+    case font(TextFont)
+    case alignment(TextAlign)
     case background(Bool)
     /// Whether a path is closed; disabled on an open path of two points, which has no shape to
     /// close.
@@ -72,8 +78,18 @@ extension EditorModel {
             ]
         case .highlight, .patch:
             return [color, .delete]
-        case .text(_, _, let background, _):
-            return [color, size, .background(background == true), .delete]
+        case .text(_, _, let background, let textStyle):
+            // Legacy text shows the style it is drawn in.
+            let shown = textStyle ?? .implicit(annotation.width)
+            let preset =
+                textStyle == nil
+                ? annotation.width
+                : StrokeWidth.allCases.first { $0.textPoints == shown.points }
+            return [
+                color, .size(preset), .textSize(shown.points), .bold(shown.bold),
+                .font(shown.font), .alignment(shown.alignment), .background(background == true),
+                .delete,
+            ]
         case .step:
             return [
                 color, size, .moveEarlier(enabled: canMoveEarlier),
