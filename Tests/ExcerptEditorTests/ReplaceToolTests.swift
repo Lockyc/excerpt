@@ -167,6 +167,15 @@ import Testing
         #expect(m.replaceNote == "No text found")
     }
 
+    @Test func committingTheTypedTextClearsTheNote() async throws {
+        let m = await model(runs: [])
+        m.replace(in: CGRect(x: 40, y: 120, width: 0, height: 0))
+        m.updateTyping("Lachlan")
+        m.endTyping()
+        #expect(texts(m) == ["Lachlan"])
+        #expect(m.replaceNote == "")
+    }
+
     @Test func replaceWaitsForRuns() async throws {
         let m = EditorModel(
             original: Self.image, document: EditDocument(scale: Self.scale, salt: 5))

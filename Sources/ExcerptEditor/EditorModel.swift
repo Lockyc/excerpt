@@ -576,20 +576,14 @@ final class EditorModel {
             radius: snapRadius)?.cgRect ?? grown
     }
 
-    /// `read` top to bottom by line, a line being the runs starting above the middle of its
-    /// first, then left to right within each.
+    /// `read` in `ReadingOrder.lines`'s order, each run with its match.
     private static func readingOrder(_ read: [(run: RecognizedText, match: MatchedText?)])
         -> [(run: RecognizedText, match: MatchedText?)]
     {
-        var lines: [[(run: RecognizedText, match: MatchedText?)]] = []
-        for entry in read.sorted(by: { $0.run.bounds.minY < $1.run.bounds.minY }) {
-            if let head = lines.last?.first, entry.run.bounds.minY < head.run.bounds.midY {
-                lines[lines.count - 1].append(entry)
-            } else {
-                lines.append([entry])
-            }
+        var unordered = read
+        return ReadingOrder.lines(read.map(\.run)).flatMap(\.runs).compactMap { run in
+            unordered.firstIndex { $0.run.bounds == run.bounds }.map { unordered.remove(at: $0) }
         }
-        return lines.flatMap { $0.sorted { $0.run.bounds.minX < $1.run.bounds.minX } }
     }
 
     /// Reads the original's runs of text into `textRuns`, and matches each, off the main
@@ -684,6 +678,7 @@ final class EditorModel {
         pendingBegin = nil
         pendingReplace = nil
         selectsTypedString = false
+        replaceNote = ""
         guard let typed = typing else { return }
         batch {
             typing = nil
