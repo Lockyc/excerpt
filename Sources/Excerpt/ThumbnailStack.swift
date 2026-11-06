@@ -175,6 +175,8 @@ final class ThumbnailPanel: NSPanel {
         let isGIF = isRecording && url.pathExtension.lowercased() == "gif"
         let shown = (isGIF ? NSImage(contentsOf: url) : nil) ?? NSImage(cgImage: image, size: .zero)
         let preview = DragImageView(url: url, image: shown) { [weak self] in self?.dismiss() }
+        preview.onClick = { [weak self] _ in self?.openTapped() }
+        preview.toolTip = "Click to open · drag to take the file"
         preview.animates = isGIF
         preview.frame = CGRect(x: 0, y: below, width: width, height: imageHeight)
         container.addSubview(preview)
@@ -249,6 +251,12 @@ final class ThumbnailPanel: NSPanel {
     }
 
     override func mouseExited(with event: NSEvent) { if !held { startTimer() } }
+
+    /// Opens the capture in its default app.
+    private func openTapped() {
+        NSWorkspace.shared.open(url)
+        dismiss()
+    }
 
     @objc private func editTapped() {
         onEdit(url)

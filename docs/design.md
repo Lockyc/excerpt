@@ -120,7 +120,8 @@ holding one.
   mode on the same stills.
 - Stills exclude desktop icons and excerpt's own windows through the `SCContentFilter`.
 - **After every capture that makes a file** it is saved, copied to the clipboard, and shown as
-  a large thumbnail (Edit · Close, draggable; while two or more captures have
+  a large thumbnail (Edit · Close; a click on the preview opens the capture in its default
+  app, a drag takes the file; while two or more captures have
   landed since the stack was last empty, the newest also carries **Edit All**, opening all of
   them as a series, including any whose thumbnail has already gone) that closes after 15s (paused
   while the pointer is over it), or on drag-out. Shutter sound on. With *Show thumbnail at the
