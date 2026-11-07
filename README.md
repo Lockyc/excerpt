@@ -8,7 +8,7 @@
 
 A macOS screenshot tool that can **cut the middle out of a screenshot**. Keep a spreadsheet's
 header rows and its totals, drop the thousand rows between, and the join is marked with a torn
-seam that says how much was removed. It works across columns too, and on long scrolling
+seam. It works across columns too, and on long scrolling
 captures of web pages and forms.
 
 ![A 64-row invoice sheet in Excerpt's editor: rows 8 to 60 cut out, the header and totals joined by a torn seam](docs/screenshots/cut.png)
@@ -68,11 +68,14 @@ after that it belongs to the app you're recording, so Discard is how to throw a 
 A recording stops at 5 minutes, and quitting Excerpt stops and saves one in progress.
 
 Each capture is saved to `~/Documents/Screenshots/` (a setting), copied to the clipboard and
-shown as a thumbnail with **Edit** and **Close**. Files in that folder older
+shown as a thumbnail with **Edit** and **Close**; clicking the thumbnail opens the capture. Files in that folder older
 than 30 days move into `YYYY/MM-Month/` folders, names unchanged (also a setting). The editor has
 arrow, rectangle, path (click or freehand lines and outlines, optionally filled), text (plain or
 on a background of its colour), numbered steps, highlight, blur,
-crop and **cut** (`C`); a selected item's colour, size and options float beside it. To conceal
+crop and **cut** (`C`); a selected item's colour, size and options float beside it, and the
+colour control's eyedropper samples any colour from the capture. Text takes any size, bold,
+Sans, Mono or Serif and an alignment, and text placed on the capture's own text matches its
+size, weight, font and colour. To conceal
 text, **patch** (`E`) it with the colour around it; to change it, **Replace** (`X`) patches a
 line and lets you retype it in the same size, weight and colour. To cut,
 drag across the rows or columns to remove; the join becomes a torn seam. Cut and blurred
