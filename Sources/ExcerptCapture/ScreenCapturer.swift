@@ -1,4 +1,5 @@
 import AppKit
+import ExcerptCore
 import ScreenCaptureKit
 
 public struct DisplayStill {
@@ -156,10 +157,17 @@ public final class ScreenCapturer {
             contentFilter: filter, configuration: configuration)
     }
 
-    /// Every window of `list` a capture can pick, each by itself as it shows now, frontmost
-    /// first: the window stills, taken with the display stills so they keep hover states and
-    /// the menus that activating Excerpt closes. A window that closes meanwhile is left out.
-    public func windowStills(of list: WindowList) async -> [WindowStill] {
+    /// Window stills in flight at once. replayd takes stills one at a time; this many queued
+    /// keep it as busy as asking for every window at once (measured: 29 windows in ~540 ms
+    /// either way, three displays), while a still asked for next answers in tens of
+    /// milliseconds rather than behind the whole list.
+    static let windowStillsInFlight = 8
+
+    /// Every window of `list` a capture can pick, each by itself as it shows now, taken
+    /// frontmost first from `start()`: the window stills, begun with the display stills so
+    /// they keep hover states and the menus that activating Excerpt closes. A window that
+    /// closes meanwhile has no still.
+    public func windowStills(of list: WindowList) -> WindowStills {
         let (content, all, pickable) = (list.content, list.all, list.pickable)
         let stacked = all.map {
             StackedWindow(
@@ -175,22 +183,23 @@ public final class ScreenCapturer {
                 for: window, overlays: overlays.compactMap { byID[$0.id] },
                 reach: WindowStack.frame(of: target, with: overlays), displays: content.displays)
         }
-        return await withTaskGroup(of: (Int, CGImage?).self) { group in
-            for (index, request) in requests.enumerated() {
-                group.addTask {
-                    let image = try? await SCScreenshotManager.captureImage(
-                        contentFilter: request.filter, configuration: request.configuration)
-                    return (index, image)
-                }
-            }
-            var images: [Int: CGImage] = [:]
-            for await (index, image) in group { images[index] = image }
-            return requests.enumerated().compactMap { index, request in
-                images[index].map {
-                    WindowStill(window: request.window, image: $0, scale: request.scale)
-                }
-            }
+        let byWindow = Dictionary(
+            requests.map { ($0.window.window.windowID, $0) },
+            uniquingKeysWith: { first, _ in first })
+        let work = QueuedWork<CGWindowID, WindowStill>(
+            keys: requests.map(\.window.window.windowID), width: Self.windowStillsInFlight
+        ) { id in
+            guard let request = byWindow[id],
+                let image = try? await SCScreenshotManager.captureImage(
+                    contentFilter: request.filter, configuration: request.configuration)
+            else { return nil }
+            return WindowStill(window: request.window, image: image, scale: request.scale)
         }
+        return WindowStills(
+            work: work,
+            owners: requests.map {
+                ($0.window.window.windowID, $0.window.window.owningApplication?.processID)
+            })
     }
 
     /// One window's still, as asked for on the main actor before the captures start.
@@ -245,8 +254,36 @@ public struct WindowList {
     public let pickable: [CapturableWindow]
 }
 
+/// The pickable windows' stills, taken a few at a time, frontmost first; the one a caller
+/// waits on is taken next.
+public final class WindowStills: Sendable {
+    private let work: QueuedWork<CGWindowID, WindowStill>
+    /// Each pickable window and the process that owns it.
+    private let owners: [(CGWindowID, pid_t?)]
+
+    init(work: QueuedWork<CGWindowID, WindowStill>, owners: [(CGWindowID, pid_t?)]) {
+        self.work = work
+        self.owners = owners
+    }
+
+    public func start() async { await work.start() }
+
+    /// The still of window `id`; nil when the window closed before it was taken.
+    public func still(of id: CGWindowID) async -> WindowStill? { await work.value(for: id) }
+
+    /// Returns once every window of the app `pid` has its still: what activating Excerpt would
+    /// change, by closing its menus and dimming its windows.
+    public func taken(ofApp pid: pid_t?) async {
+        guard let pid else { return }
+        for (id, owner) in owners where owner == pid { _ = await work.value(for: id) }
+    }
+
+    /// Takes no more stills.
+    public func cancel() async { await work.cancel() }
+}
+
 /// A window as it showed when the capture started, with its app's menus and popovers over it.
-public struct WindowStill {
+public struct WindowStill: @unchecked Sendable {
     public let window: CapturableWindow
     public let image: CGImage
     public let scale: CGFloat

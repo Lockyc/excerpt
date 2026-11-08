@@ -95,7 +95,7 @@ public final class SelectionOverlay {
     /// The outcome when the overlay finished before `run` waited on it.
     private var result: SelectionResult?
     /// What `run` waits for before activating Excerpt, which closes the frontmost app's menus:
-    /// the window stills, still being taken while the overlay shows.
+    /// the frontmost app's window stills, still being taken while the overlay shows.
     public var activatesAfter: (() async -> Void)?
 
     public init() {}

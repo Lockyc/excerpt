@@ -108,17 +108,23 @@ final class CaptureCoordinator {
         if requested.selects { overlay.cover() }
         // Every selecting mode can switch to Window, so each takes the window stills; the
         // overlay shows without waiting for them, and Window mode highlights from the list,
-        // waiting on the images only once a window is picked.
+        // waiting only on the picked window's image once it is picked. Excerpt activates once
+        // the frontmost app's windows are taken, before activating changes them.
         let windowList = Task { requested.selects ? try await capturer.windowList() : nil }
-        let windowStills = Task {
-            guard let list = try await windowList.value else { return [WindowStill]() }
-            return await capturer.windowStills(of: list)
+        let windowStills = Task { () -> WindowStills? in
+            guard let list = try await windowList.value else { return nil }
+            let stills = capturer.windowStills(of: list)
+            await stills.start()
+            return stills
         }
         defer {
             windowList.cancel()
-            windowStills.cancel()
+            Task { await (try? windowStills.value)??.cancel() }
         }
-        overlay.activatesAfter = { _ = await windowStills.result }
+        let frontmostPID = frontmostAtStart?.processIdentifier
+        overlay.activatesAfter = {
+            await (try? windowStills.value)??.taken(ofApp: frontmostPID)
+        }
         do {
             let stills = try await capturer.stills()
             var action = requested
@@ -160,7 +166,7 @@ final class CaptureCoordinator {
     /// Runs `action` on the stills already taken.
     private func capture(
         _ action: HotKeyAction, stills: [DisplayStill],
-        windowList: Task<WindowList?, Error>, windowStills: Task<[WindowStill], Error>,
+        windowList: Task<WindowList?, Error>, windowStills: Task<WindowStills?, Error>,
         overlay: SelectionOverlay
     ) async throws {
         switch action {
@@ -174,9 +180,7 @@ final class CaptureCoordinator {
             let windows = try await windowList.value?.pickable ?? []
             if case .window(let window) = await select(
                 .window(windows: windows), for: action, overlay: overlay, stills: stills),
-                let shot = try await windowStills.value.first(where: {
-                    $0.window.window.windowID == window.window.windowID
-                })
+                let shot = try await windowStills.value?.still(of: window.window.windowID)
             {
                 // The display holding most of the window sets its wallpaper.
                 let still = stills.filter { $0.frame.intersects(window.frame) }.max {
