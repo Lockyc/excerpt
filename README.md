@@ -29,8 +29,7 @@ curl -fsSL https://raw.githubusercontent.com/lockyc/excerpt/main/install.sh | ba
 
 The installer downloads the latest release, checks that it is signed by Excerpt's developer and
 notarized by Apple, then installs `/Applications/Excerpt.app` and starts it in the menu bar. It
-asks for your password only when `/Applications` isn't writable. From a clone of this repo,
-Claude Code's `/excerpt:install` runs the same install.
+asks for your password only when `/Applications` isn't writable.
 
 **Updates** install themselves: Excerpt checks daily, and **Check for Updates…** in its menu
 checks now. Running the installer again also updates.
