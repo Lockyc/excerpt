@@ -97,7 +97,7 @@ final class CaptureCoordinator {
         }
         running = true
         defer { running = false }
-        // Read before the overlay or an alert activates Excerpt.
+        // Read before an alert activates Excerpt.
         frontmostAtStart = NSWorkspace.shared.frontmostApplication
         started += 1
         guard ensurePermission() else { return }
@@ -108,8 +108,8 @@ final class CaptureCoordinator {
         if requested.selects { overlay.cover() }
         // Every selecting mode can switch to Window, so each takes the window stills; the
         // overlay shows without waiting for them, and Window mode highlights from the list,
-        // waiting only on the picked window's image once it is picked. Excerpt activates once
-        // the frontmost app's windows are taken, before activating changes them.
+        // waiting only on the picked window's image once it is picked. The overlay takes the
+        // keys once the frontmost app's windows are taken, before taking them changes them.
         let windowList = Task { requested.selects ? try await capturer.windowList() : nil }
         let windowStills = Task { () -> WindowStills? in
             guard let list = try await windowList.value else { return nil }
@@ -122,7 +122,7 @@ final class CaptureCoordinator {
             Task { await (try? windowStills.value)??.cancel() }
         }
         let frontmostPID = frontmostAtStart?.processIdentifier
-        overlay.activatesAfter = {
+        overlay.takesKeysAfter = {
             await (try? windowStills.value)??.taken(ofApp: frontmostPID)
         }
         do {

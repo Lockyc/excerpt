@@ -98,7 +98,9 @@ holding one.
 
 - **Area:** the screen freezes when selection starts (a still of every display is taken first,
   and the selection is cut from it), so hover states and open menus survive. Crosshair, loupe,
-  W×H readout; `Space` moves the selection, `Esc` cancels.
+  W×H readout; `Space` moves the selection, `Esc` cancels. Every selecting mode's overlay takes
+  the keys without activating Excerpt, so the app in front keeps focus; another app activating
+  cancels the selection.
 - **Window:** hover-highlight, click; the window as it showed when selection started, taken
   with the stills, so hover states and its app's open menus, popovers and tooltips survive (a
   menu hanging past its edge widens the shot). Placed on a padded backdrop, its display's
