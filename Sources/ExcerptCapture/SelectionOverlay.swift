@@ -272,6 +272,10 @@ final class OverlayWindow: NSPanel {
             contentRect: frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered,
             defer: false)
         hidesOnDeactivate = false
+        // Gone the moment it is ordered out: a panel otherwise fades out over about 300 ms,
+        // still on top and taking events, so it would swallow the first wheel event a
+        // scrolling capture posts at the page beneath.
+        animationBehavior = .none
         level = .screenSaver
         // Clear until the still arrives; set explicitly, so the clear window still takes clicks.
         isOpaque = false
