@@ -92,6 +92,7 @@ public final class SelectionOverlay {
     private var windows: [OverlayWindow] = []
     private var continuation: CheckedContinuation<SelectionResult, Never>?
     private var observers: [NSObjectProtocol] = []
+    private var workspaceObservers: [NSObjectProtocol] = []
     /// The outcome when the overlay finished before `run` waited on it.
     private var result: SelectionResult?
     /// What `run` waits for before activating Excerpt, which closes the frontmost app's menus:
@@ -117,19 +118,24 @@ public final class SelectionOverlay {
             window.orderFrontRegardless()
         }
         NSCursor.crosshair.push()
-        // Losing activation (Esc would never arrive) or a display change (the stills no
-        // longer match the screens) must not strand the full-screen overlay.
-        for name in [
-            NSApplication.didResignActiveNotification,
-            NSApplication.didChangeScreenParametersNotification,
-        ] {
-            observers.append(
-                NotificationCenter.default.addObserver(
-                    forName: name, object: nil, queue: .main
-                ) { [weak self] _ in
-                    MainActor.assumeIsolated { self?.finish(.cancelled) }
-                })
-        }
+        // Another app activating (it takes the keys, so Esc would never arrive) or a display
+        // change (the stills no longer match the screens) must not strand the full-screen overlay.
+        observers.append(
+            NotificationCenter.default.addObserver(
+                forName: NSApplication.didChangeScreenParametersNotification, object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.finish(.cancelled) }
+            })
+        workspaceObservers.append(
+            NSWorkspace.shared.notificationCenter.addObserver(
+                forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
+            ) { [weak self] note in
+                let app =
+                    note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+                guard app != .current else { return }
+                MainActor.assumeIsolated { self?.finish(.cancelled) }
+            })
     }
 
     /// Fills the overlay with `stills`, covering first if `cover` wasn't called, and waits for
@@ -165,7 +171,6 @@ public final class SelectionOverlay {
     private func activate(keying settled: OverlayWindow?) async {
         await activatesAfter?()
         guard continuation != nil else { return }
-        NSApp.activate()
         let mouse = NSEvent.mouseLocation
         (settled ?? windows.first { $0.frame.contains(mouse) } ?? windows.first)?.makeKey()
         showPointer()
@@ -238,13 +243,17 @@ public final class SelectionOverlay {
         if !windows.isEmpty { NSCursor.pop() }
         for observer in observers { NotificationCenter.default.removeObserver(observer) }
         observers.removeAll()
+        for observer in workspaceObservers {
+            NSWorkspace.shared.notificationCenter.removeObserver(observer)
+        }
+        workspaceObservers.removeAll()
         if case .scrolledArea = result {} else { dismiss() }
         continuation?.resume(returning: result)
         continuation = nil
     }
 }
 
-final class OverlayWindow: NSWindow {
+final class OverlayWindow: NSPanel {
     let displayID: CGDirectDisplayID
     let overlayView: OverlayView
 
@@ -257,7 +266,11 @@ final class OverlayWindow: NSWindow {
         self.displayID = displayID
         overlayView = OverlayView(
             size: frame.size, finish: finish, beginDrag: beginDrag, wholeDisplay: wholeDisplay)
-        super.init(contentRect: frame, styleMask: .borderless, backing: .buffered, defer: false)
+        // Non-activating: it takes the keys while the app in front stays active.
+        super.init(
+            contentRect: frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered,
+            defer: false)
+        hidesOnDeactivate = false
         level = .screenSaver
         // Clear until the still arrives; set explicitly, so the clear window still takes clicks.
         isOpaque = false
