@@ -89,7 +89,7 @@ Input Monitoring in System Settings → Privacy & Security. Your captures stay w
 - **A series.** Captures taken in a row open together from the newest thumbnail's **Edit All**, or
   by choosing several in **Open Capture…**: one editor, a filmstrip along the bottom, `⌘[` / `⌘]`
   between them. Save writes them all and copies every image, in order.
-- **Recording** starts after a 3-2-1 countdown. A bar below the area has **Pause**, **Stop** and
+- **Recording** starts after a 3-2-1 countdown. A bar at the bottom of the area has **Pause**, **Stop** and
   **Discard**. A recording stops at 5 minutes, and is saved as a GIF fitted to GitHub's 10 MB
   limit or as an MP4 (a setting; one too long for the GIF is saved as MP4). The full-resolution
   `… original.mov` is kept beside it. Its **Edit** trims, blurs the whole clip or a span of it,
