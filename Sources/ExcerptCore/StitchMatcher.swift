@@ -44,6 +44,9 @@ public enum StitchMatcher {
     /// The most of the frame's height, above the footer, that something staying in place over
     /// the page may cover when the plain move doesn't convince: those rows count as footer.
     public static let maximumOverlayShare = 0.25
+    /// The longest run of rows taken as evidence when no single row convinces, as a share of the
+    /// rows between the sticky bars (`candidate`).
+    public static let longestRunShare = 0.25
 
     /// The right-edge columns left out of matching for a region `width` pixels wide: the scroll
     /// bar strip at `scale`, never more than an eighth of the width.
@@ -182,6 +185,13 @@ public enum StitchMatcher {
     /// `header`, when given, is taken as the sticky rows at the top instead of the rows the two
     /// frames share there. With an `overlayLimit`, each offset may leave out up to that many rows
     /// at its overlap's end (`overlayRows`), and they join the footer.
+    ///
+    /// Evidence is unique rows; when they convince no offset, unique runs of rows, the run
+    /// doubling up to `longestRunShare` of the content. A list whose every line recurs (each name
+    /// heading several cards, each slot under every name) has no unique row, but the run from a
+    /// card's first line to its last is unique. Rows that repeat as a run (stripes, identical
+    /// form boxes) stay no evidence at any length. Single rows' candidate stands unless a run's
+    /// convinces.
     static func candidate(
         _ a: RowSignatures, _ b: RowSignatures, height: Int, header given: Int? = nil,
         overlayLimit: Int = 0
@@ -196,10 +206,34 @@ public enum StitchMatcher {
         {
             footer += 1
         }
-        let content = height - header - footer
+        let rows = scored(
+            a, b, header: header, footer: footer, run: 1, overlayLimit: overlayLimit)
+        guard !rows.convincing else { return rows }
+        let longest = Int(Double(height - header - footer) * longestRunShare)
+        var runA = a
+        var runB = b
+        var run = 1
+        while run * 2 <= longest {
+            runA = runA.doubled(from: run)
+            runB = runB.doubled(from: run)
+            run *= 2
+            let runs = scored(
+                runA, runB, header: header, footer: footer, run: run, overlayLimit: overlayLimit)
+            if runs.convincing { return runs }
+        }
+        return rows
+    }
+
+    /// `candidate` with evidence the unique runs of `run` rows, `a` and `b` being the runs'
+    /// signatures.
+    private static func scored(
+        _ a: RowSignatures, _ b: RowSignatures, header: Int, footer: Int, run: Int,
+        overlayLimit: Int
+    ) -> Candidate {
+        let content = a.hashes.count - header - footer
         let contentRows = header..<(header + content)
-        let uniqueA = uniqueRows(a, in: contentRows)
-        let uniqueB = uniqueRows(b, in: contentRows)
+        let uniqueA = uniqueRows(a, in: contentRows, run: run)
+        let uniqueB = uniqueRows(b, in: contentRows, run: run)
         var best: (offset: Int, score: Double)?
         var bestOverlay = 0
         var runnerUp = -1.0
@@ -545,12 +579,16 @@ public enum StitchMatcher {
     }
 
     /// Which rows of `rows` have a signature no other row of `rows` shares; rows outside it are
-    /// false.
-    static func uniqueRows(_ signatures: RowSignatures, in rows: Range<Int>) -> [Bool] {
+    /// false. With `signatures` of runs of `run` rows (`RowSignatures.doubled(from:)`), only runs
+    /// that end inside `rows` are considered.
+    static func uniqueRows(_ signatures: RowSignatures, in rows: Range<Int>, run: Int = 1)
+        -> [Bool]
+    {
+        let starts = rows.lowerBound..<max(rows.lowerBound, rows.upperBound - run + 1)
         var seen: [UInt64: Int] = [:]
-        for y in rows { seen[signatures.hashes[y], default: 0] += 1 }
+        for y in starts { seen[signatures.hashes[y], default: 0] += 1 }
         var unique = [Bool](repeating: false, count: signatures.hashes.count)
-        for y in rows { unique[y] = seen[signatures.hashes[y]] == 1 }
+        for y in starts { unique[y] = seen[signatures.hashes[y]] == 1 }
         return unique
     }
 

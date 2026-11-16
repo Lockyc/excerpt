@@ -259,6 +259,18 @@ import Testing
         #expect(StitchMatcher.match(a, b, ignoringRightColumns: 0) == .uncertain)
     }
 
+    @Test func cardsWhoseEveryLineRepeatsMatchOnTheirRunOfLines() {
+        // Each name heads several cards and each slot recurs under every name: no single row is
+        // unique in a frame, but the run from a card's name to its slot is.
+        let cards = ScrollFixtures.cards(width: 90, count: 40)
+        let a = ScrollFixtures.frame(cards, offset: 0, viewport: 680)
+        let b = ScrollFixtures.frame(cards, offset: 408, viewport: 680)
+        let rows = RowSignatures(a, columns: 0..<90)
+        let unique = StitchMatcher.uniqueRows(rows, in: 0..<680)
+        #expect(!unique.indices.contains { unique[$0] && !rows.uniform[$0] })
+        #expect(offset(StitchMatcher.match(a, b, ignoringRightColumns: 0)) == 408)
+    }
+
     @Test func zeroWidthFramesAreUncertain() {
         let empty = PixelBuffer(width: 0, height: 5, bytes: [])
         #expect(StitchMatcher.match(empty, empty, ignoringRightColumns: 0) == .uncertain)

@@ -24,6 +24,28 @@ public struct RowSignatures: Equatable, Sendable {
         self.uniform = uniform
     }
 
+    init(hashes: [UInt64], uniform: [Bool]) {
+        self.hashes = hashes
+        self.uniform = uniform
+    }
+
+    /// Signatures of runs of `2 × length` rows, from these of runs of `length` rows: row `y`
+    /// stands for rows `y..<y + 2 × length`. A run is uniform when every row in it is the same
+    /// single colour. Rows whose run passes the end keep their own signature; they are no
+    /// evidence (`StitchMatcher.uniqueRows(_:in:run:)` leaves them out).
+    func doubled(from length: Int) -> RowSignatures {
+        let prime: UInt64 = 0x100_0000_01B3
+        var hashes = self.hashes
+        var uniform = self.uniform
+        for y in 0..<max(0, hashes.count - length) {
+            hashes[y] = ((self.hashes[y] &* prime) ^ self.hashes[y + length]) &* prime
+            uniform[y] =
+                self.uniform[y] && self.uniform[y + length]
+                && self.hashes[y] == self.hashes[y + length]
+        }
+        return RowSignatures(hashes: hashes, uniform: uniform)
+    }
+
     /// FNV-1a over the row's pixels two at a time, in four lanes that take every fourth pair:
     /// the lanes' multiplies don't wait on each other, so a row hashes several times faster than
     /// through one chain. Each step is a bijection of the lane's state, so rows that differ in

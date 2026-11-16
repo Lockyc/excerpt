@@ -149,7 +149,8 @@ holding one.
    or `ScrollCapture.settleTime` (300ms)).
 3. **Stitching** (Core): frames reduce to row signatures; the offset from the previous frame is
    the one with the highest share of matching evidence rows (unique, non-uniform) in the overlap,
-   clearly ahead of the others; a row redrawn at most one level off per channel (a browser
+   clearly ahead of the others; when no single row settles it (a list whose every line recurs),
+   unique runs of rows are the evidence; a row redrawn at most one level off per channel (a browser
    re-dithering an image) counts as matching. A faint wallpaper fixed behind the page (a chat's
    doodles) is matched as plain background, within `StitchMatcher.faintLevels` of the frame's
    commonest colour, when nothing matches otherwise; the stitch keeps its pixels, so the
