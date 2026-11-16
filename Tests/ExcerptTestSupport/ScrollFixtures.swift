@@ -51,19 +51,19 @@ public enum ScrollFixtures {
         -> PixelBuffer
     {
         precondition(period >= 30, "a card needs two lines and a gap: 30 rows")
+        let pink = RGBA(r: 252, g: 232, b: 232, a: 255)
         return paint(width: width, height: count * period) { x, y in
             let card = y / period
             let row = y % period
             guard row < period - 6 else { return paper }
-            guard x >= 8, x < width - 4 else { return x < 4 ? ink : RGBA(r: 252, g: 232, b: 232, a: 255) }
+            guard x >= 8, x < width - 4 else { return x < 4 ? ink : pink }
             let line: UInt64
             switch row {
             case 4..<12: line = UInt64(card / perName)
             case 16..<24: line = 1000 + UInt64(card % perName)
-            default: return RGBA(r: 252, g: 232, b: 232, a: 255)
+            default: return pink
             }
-            return mix(line, UInt64(row % 4), UInt64(x / 3)) % 3 == 0
-                ? ink : RGBA(r: 252, g: 232, b: 232, a: 255)
+            return mix(line, UInt64(row % 4), UInt64(x / 3)) % 3 == 0 ? ink : pink
         }
     }
 
