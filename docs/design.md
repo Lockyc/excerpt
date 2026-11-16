@@ -159,7 +159,11 @@ holding one.
    from the last. A bar from the page that pins under the header during a move joins the header;
    something over the page's bottom that stays in place (a floating button, a composer, a fade
    or shadow above the footer), up to `StitchMatcher.maximumOverlayShare` of the height, joins
-   the footer. A scroll bar inside the region (a panel beside it) has its thumb, a narrow run of
+   the footer. A **hover overlay** — a chat message's reaction toolbar, which follows the
+   message under the pointer, so it leaves one and appears on another as the page moves — is
+   left out of a move's evidence when its rows differ in one span of at most
+   `StitchMatcher.hoverWidthShare` of the width, in at most `StitchMatcher.hoverRuns` runs; the
+   stitch keeps it where each frame showed it. A scroll bar inside the region (a panel beside it) has its thumb, a narrow run of
    changed columns set off from the page's, left out of matching and filled in the stitch.
    **Side panels**: when the changed columns don't move as one (sticky panels still pinning,
    split panes), the widest run of column strips that does, at least

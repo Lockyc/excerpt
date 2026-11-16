@@ -21,8 +21,9 @@ public enum StitchMatcher {
     public static let confidenceThreshold = 0.8
     /// An offset with more than this many mismatching rows whose differing pixels span more than
     /// a quarter of the changed columns is different content, not animation, however high its
-    /// share. It also halts an honest move with an animation wider than that, or several
-    /// animations on the same rows: that fails safe as uncertain, never a wrong seam.
+    /// share, unless they are one hover overlay (`isHoverOverlay`). It also halts an honest move
+    /// with an animation wider than that, or several animations on the same rows: that fails
+    /// safe as uncertain, never a wrong seam.
     public static let maximumContradictions = 2
     /// An offset is believed only if every other offset scores at least this much lower.
     public static let ambiguityMargin = 0.02
@@ -311,26 +312,89 @@ public enum StitchMatcher {
         a: RowSignatures, b: RowSignatures
     ) -> FrameMatch? {
         if let moved = verified(c, previous, next, columns: columns, a: a, b: b) { return moved }
-        guard !c.overlaid else { return nil }
-        let overlaid = candidate(
-            a, b, height: previous.height, header: c.header,
-            overlayLimit: Int(Double(previous.height) * maximumOverlayShare))
-        return verified(overlaid, previous, next, columns: columns, a: a, b: b)
+        if !c.overlaid {
+            let overlaid = candidate(
+                a, b, height: previous.height, header: c.header,
+                overlayLimit: Int(Double(previous.height) * maximumOverlayShare))
+            if let moved = verified(overlaid, previous, next, columns: columns, a: a, b: b) {
+                return moved
+            }
+        }
+        return verified(c, previous, next, columns: columns, a: a, b: b, hover: true)
     }
 
+    /// With `hover`, contradicting rows that are one hover overlay (`isHoverOverlay`) are left
+    /// out instead of halting: the last resort, after an overlay that stays in place has had the
+    /// chance to join the footer.
     static func verified(
         _ c: Candidate, _ previous: PixelBuffer, _ next: PixelBuffer, columns: Range<Int>,
-        a: RowSignatures, b: RowSignatures
+        a: RowSignatures, b: RowSignatures, hover allowHover: Bool = false
     ) -> FrameMatch? {
-        let c = c.convincing ? c : rescored(c, previous, next, columns: columns, a: a, b: b)
-        guard c.convincing, let best = c.best else { return nil }
+        var c = c.convincing ? c : rescored(c, previous, next, columns: columns, a: a, b: b)
+        guard let best = c.best else { return nil }
         let content = previous.height - c.header - c.footer
         let found = contradictions(
             previous, next, columns: columns, previousStart: c.header + best.offset,
             nextStart: c.header, count: content - best.offset, previousUnique: c.uniqueA,
             nextUnique: c.uniqueB)
-        guard found <= maximumContradictions else { return nil }
+        let hover =
+            allowHover && found.count > maximumContradictions
+            && isHoverOverlay(found, columns: columns)
+        if !c.convincing && hover {
+            c = withoutHover(c, rows: found.count, a: a, b: b)
+        }
+        guard c.convincing, found.count <= maximumContradictions || hover else { return nil }
         return .moved(offset: best.offset, header: c.header, footer: c.footer, columns: columns)
+    }
+
+    /// `c` with its best offset scored again leaving out `rows` mismatching evidence pairs, a hover
+    /// overlay's (`isHoverOverlay`): the page under them moved by the offset, but they can't show
+    /// it. The other offsets keep their scores, so the best must still be clearly ahead of them.
+    static func withoutHover(_ c: Candidate, rows: Int, a: RowSignatures, b: RowSignatures)
+        -> Candidate
+    {
+        guard let best = c.best else { return c }
+        let content = a.hashes.count - c.header - c.footer
+        let (matches, evidence) = counts(
+            a, b, previousStart: c.header + best.offset, nextStart: c.header,
+            count: content - best.offset, previousUnique: c.uniqueA, nextUnique: c.uniqueB)
+        let left = evidence - rows
+        guard left >= minimumEvidenceRows else { return c }
+        return Candidate(
+            header: c.header, footer: c.footer,
+            best: (best.offset, max(best.score, Double(matches) / Double(left))),
+            runnerUp: c.runnerUp, uniqueA: c.uniqueA, uniqueB: c.uniqueB, overlaid: c.overlaid)
+    }
+
+    /// The most separate runs of rows a hover overlay's contradictions may fall in: where it
+    /// left and where it appeared.
+    public static let hoverRuns = 2
+    /// The widest a hover overlay may be, as a share of the matched columns.
+    public static let hoverWidthShare = 0.5
+    /// Evidence rows skipped inside one run of a hover overlay's rows: rows between that aren't
+    /// unique carry no verdict either way.
+    static let hoverRunGap = minimumEvidenceRows
+
+    /// Whether contradicting rows are one overlay the pointer's hover moved between frames (a chat
+    /// message's reaction toolbar shows on whichever message is under the pointer, so it leaves
+    /// one and appears on another as the page scrolls under it), not other content: all of them
+    /// differ inside one span of at most `hoverWidthShare` of `columns`, in at most `hoverRuns`
+    /// runs of rows. Content at a wrong offset differs across the width, or on rows spread down
+    /// the overlap.
+    static func isHoverOverlay(_ found: [(row: Int, columns: Range<Int>)], columns: Range<Int>)
+        -> Bool
+    {
+        guard let first = found.first else { return true }
+        let left = found.map(\.columns.lowerBound).min()!
+        let right = found.map(\.columns.upperBound).max()!
+        guard Double(right - left) <= Double(columns.count) * hoverWidthShare else { return false }
+        var runs = 1
+        var last = first.row
+        for f in found.dropFirst() {
+            if f.row - last > hoverRunGap { runs += 1 }
+            last = f.row
+        }
+        return runs <= hoverRuns
     }
 
     /// The widest run of `span`'s columns that moved as one when the span as a whole didn't: a
@@ -491,15 +555,16 @@ public enum StitchMatcher {
         return (matches, evidence)
     }
 
-    /// Evidence row pairs that differ across more than a quarter of `columns`. An animation or a
-    /// caret differs in a patch; text that differs across the width is other content. A row whose
-    /// pixels all differ by at most one level per channel is the same content re-rasterised (a
-    /// browser dithering a filtered image afresh at each scroll position).
+    /// Evidence row pairs that differ across more than a quarter of `columns`, each with its row in
+    /// `next` and the columns its differing pixels span. An animation or a caret differs in a
+    /// patch; text that differs across the width is other content. A row whose pixels all differ
+    /// by at most one level per channel is the same content re-rasterised (a browser dithering a
+    /// filtered image afresh at each scroll position).
     static func contradictions(
         _ previous: PixelBuffer, _ next: PixelBuffer, columns: Range<Int>, previousStart: Int,
         nextStart: Int, count: Int, previousUnique: [Bool], nextUnique: [Bool]
-    ) -> Int {
-        var found = 0
+    ) -> [(row: Int, columns: Range<Int>)] {
+        var found: [(row: Int, columns: Range<Int>)] = []
         previous.bytes.withUnsafeBytes { pa in
             next.bytes.withUnsafeBytes { pb in
                 for i in 0..<count {
@@ -521,7 +586,7 @@ public enum StitchMatcher {
                     if (last - first + 1) * 4 > columns.count,
                         !nearlySame(rowA, rowB, bytes: columns.count * 4)
                     {
-                        found += 1
+                        found.append((n, first..<(last + 1)))
                     }
                 }
             }

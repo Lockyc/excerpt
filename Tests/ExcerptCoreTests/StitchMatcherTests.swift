@@ -205,6 +205,27 @@ import Testing
             offset(StitchMatcher.match(a, b, ignoringRightColumns: 0)) == 120)
     }
 
+    /// `frame(offset)` with a hover toolbar (the same block each time, 16 rows tall and `width`
+    /// wide) on the page at `pageRow`: a chat shows it on whichever message is under the pointer.
+    func hovered(_ offset: Int, pageRow: Int, width: Int) -> PixelBuffer {
+        ScrollFixtures.animated(
+            frame(offset), x: 20, y: pageRow - offset, width: width, height: 16, phase: 7)
+    }
+
+    @Test func aHoverToolbarThatMovesToTheNextMessageDoesNotHaltTheMove() {
+        // Wider than a quarter of the frame, it leaves the message it was on and appears on the
+        // next one, both near the top of the overlap, clear of anything the footer could take.
+        let a = hovered(0, pageRow: 125, width: 36)
+        let b = hovered(120, pageRow: 145, width: 36)
+        #expect(offset(StitchMatcher.match(a, b, ignoringRightColumns: 0)) == 120)
+    }
+
+    @Test func aHoverOverlayWiderThanHalfTheFrameIsUncertain() {
+        let a = hovered(0, pageRow: 125, width: 60)
+        let b = hovered(120, pageRow: 145, width: 60)
+        #expect(StitchMatcher.match(a, b, ignoringRightColumns: 0) == .uncertain)
+    }
+
     @Test func aVideoThatScrollsWithThePageIsUncertain() {
         let a = ScrollFixtures.animated(frame(0), x: 4, y: 120, width: 80, height: 70, phase: 1)
         let b = ScrollFixtures.animated(frame(120), x: 4, y: 0, width: 80, height: 70, phase: 2)
