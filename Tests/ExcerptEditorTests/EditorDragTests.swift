@@ -176,7 +176,35 @@ import Testing
             ])
         m.tool = .crop
         drag(m, CGPoint(x: 63, y: 18), CGPoint(x: 300, y: 239), snap: true)
-        #expect(m.document.crop == PixelRect(x: 60, y: 20, width: 240, height: 220))
+        #expect(m.document.crop == PixelRect(x: 61, y: 20, width: 239, height: 220))
+    }
+
+    @Test func aCropsHandlesMoveOnlyTheirSides() {
+        let m = model(
+            EditDocument(scale: 1, crop: PixelRect(x: 60, y: 40, width: 200, height: 200), salt: 7))
+        m.tool = .crop
+        #expect(m.grab(at: pointer(m, 262, 150), map: map(m), option: false) == .cropEdges(.right))
+        #expect(
+            m.grab(at: pointer(m, 58, 238), map: map(m), option: false)
+                == .cropEdges([.left, .bottom]))
+        // A press beside the right edge drags it without jumping it to the pointer.
+        drag(m, CGPoint(x: 263, y: 150), CGPoint(x: 313, y: 10))
+        #expect(m.document.crop == PixelRect(x: 60, y: 40, width: 250, height: 200))
+        drag(m, CGPoint(x: 60, y: 40), CGPoint(x: 30, y: 25))
+        #expect(m.document.crop == PixelRect(x: 30, y: 25, width: 280, height: 215))
+        m.undo()
+        #expect(m.document.crop == PixelRect(x: 60, y: 40, width: 250, height: 200))
+        // A press inside, away from every side, draws a new crop.
+        drag(m, CGPoint(x: 100, y: 100), CGPoint(x: 200, y: 180))
+        #expect(m.document.crop == PixelRect(x: 100, y: 100, width: 100, height: 80))
+    }
+
+    @Test func aHandleDraggedNowhereChangesNothing() {
+        let m = model(
+            EditDocument(scale: 1, crop: PixelRect(x: 60, y: 40, width: 200, height: 200), salt: 7))
+        m.tool = .crop
+        drag(m, CGPoint(x: 260, y: 150), CGPoint(x: 260, y: 150))
+        #expect(!m.canUndo && m.pending == nil && m.drag == nil)
     }
 
     @Test func selectingAndMovingAnAnnotationIsOneStep() {

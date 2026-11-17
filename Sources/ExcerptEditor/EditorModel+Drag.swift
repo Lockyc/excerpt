@@ -28,12 +28,16 @@ enum Pending: Equatable {
     case region(CGRect)
     /// A seam handle being dragged: the edge's new position in original pixels.
     case edge(Seam, SeamEdge, Int)
+    /// A crop being drawn or resized, and the sides that sit on an edge in the picture.
+    case crop(PixelRect, guides: CropEdges)
 }
 
 /// What a press takes hold of rather than drawing something new.
 enum Grab: Equatable {
     /// An edge of the selected seam, dragged to resize its cut.
     case seamEdge(Seam, SeamEdge)
+    /// A side or corner of the crop under the crop tool, dragged to move just those sides.
+    case cropEdges(CropEdges)
     /// A vertex of the selected arrow or path: dragged to reshape, or with ⌥ a path's deleted.
     case vertex(id: Int, index: Int)
     /// With ⌥, segment `index` of the selected path, where a vertex is inserted and dragged.
@@ -52,6 +56,9 @@ enum Drag {
     case region(start: CGPoint)
     case move(id: Int, last: CGPoint, before: EditDocument)
     case edge(Seam, SeamEdge, start: CGPoint)
+    /// The crop's `edges` held `offset` from the pointer where they were grabbed (original
+    /// pixels), so a press beside an edge doesn't jump it to the pointer.
+    case cropEdges(CropEdges, offset: CGPoint)
     /// A press under the path tool: the path's vertices from index `from` on are `raw`.
     case freehand(id: Int, from: Int, raw: [CGPoint])
     /// A selected arrow's or path's vertex being dragged, held `offset` from the pointer where it was
@@ -96,7 +103,11 @@ extension EditorModel {
             return vertexHandle(at: p, map: map, option: option) ?? ownAnnotation(at: p, map: map)
         case .rectangle, .highlight, .step, .blur, .patch:
             return ownAnnotation(at: p, map: map)
-        case .crop, .text, .replace:
+        case .crop:
+            guard let crop = document.crop, let rect = map.rect(crop.cgRect) else { return nil }
+            let edges = Gestures.cropEdges(of: rect, near: p.rendered, slop: slop)
+            return edges.isEmpty ? nil : .cropEdges(edges)
+        case .text, .replace:
             return nil
         }
     }
@@ -118,6 +129,15 @@ extension EditorModel {
             setDrag(.edge(seam, edge, start: p.rendered))
             setPending(
                 .edge(seam, edge, edge == .before ? seam.band.lowerBound : seam.band.upperBound))
+        case .cropEdges(let edges):
+            guard let crop = document.crop else { return }
+            let x = edges.contains(.left) ? crop.x : crop.x + crop.width
+            let y = edges.contains(.top) ? crop.y : crop.y + crop.height
+            let offset = CGPoint(
+                x: edges.isDisjoint(with: [.left, .right]) ? 0 : Double(x) - p.original.x,
+                y: edges.isDisjoint(with: [.top, .bottom]) ? 0 : Double(y) - p.original.y)
+            setDrag(.cropEdges(edges, offset: offset))
+            setPending(.crop(crop, guides: Gestures.cropGuides(crop, in: pixels)))
         case .vertex(let id, let index):
             let points = vertices(id)
             if option, case .path? = document.annotations.first(where: { $0.id == id })?.shape {
@@ -228,6 +248,14 @@ extension EditorModel {
                     seam.axis == .horizontal ? p.rendered.y - start.y : p.rendered.x - start.x
                 let from = edge == .before ? seam.band.lowerBound : seam.band.upperBound
                 setPending(.edge(seam, edge, from + Int(Double(delta).rounded())))
+            case .cropEdges(let edges, let offset):
+                guard let crop = document.crop else { break }
+                let moved = Gestures.adjustingCrop(
+                    crop, edges: edges,
+                    to: CGPoint(x: p.original.x + offset.x, y: p.original.y + offset.y),
+                    width: original.width, height: original.height, minimum: minimumDrag,
+                    snapping: snap ? pixels : nil, radius: snapRadius)
+                setPending(.crop(moved, guides: snap ? Gestures.cropGuides(moved, in: pixels) : []))
             case .freehand(let id, let from, let raw):
                 dragFreehand(id: id, from: from, raw: raw, to: p)
             case .vertex(let id, let index, let offset, _):
@@ -296,14 +324,14 @@ extension EditorModel {
                     replace(in: rect)
                 case (.replace, nil):
                     replace(in: CGRect(origin: p.original, size: .zero))
-                case (.crop, .region(let rect)?):
-                    let crop = PixelRect(
-                        x: Int(rect.minX), y: Int(rect.minY), width: Int(rect.width),
-                        height: Int(rect.height))
+                case (.crop, .crop(let crop, _)?):
                     apply { $0.setCrop(crop, width: original.width, height: original.height) }
                 default:
                     break
                 }
+            case .cropEdges:
+                guard case .crop(let crop, _)? = shown, crop != document.crop else { return }
+                apply { $0.setCrop(crop, width: original.width, height: original.height) }
             case .edge(let seam, let edge, _):
                 guard case .edge(_, _, let position)? = shown,
                     position != (edge == .before ? seam.band.lowerBound : seam.band.upperBound)
@@ -393,7 +421,7 @@ extension EditorModel {
             return Gestures.crop(
                 from: start, to: end, width: original.width, height: original.height,
                 minimum: minimumDrag, snapping: snap ? pixels : nil, radius: snapRadius
-            ).map { .region($0.cgRect) }
+            ).map { .crop($0, guides: snap ? Gestures.cropGuides($0, in: pixels) : []) }
         case .patch, .replace:
             return Gestures.patch(
                 from: start, to: end, width: original.width, height: original.height,

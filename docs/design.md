@@ -382,7 +382,12 @@ that closes the path being built, which then previews closed. A drawing tool pre
 draws selects and moves it rather than drawing over it; other kinds are drawn over. Under cut, a
 drag always cuts and a click selects the annotation under it, whose handles then drag. The arrow drag
 **starts at the head**; a selected arrow shows its head and tail as handles, each dragged on its
-own. Crop snaps using the same gap detection as cuts.
+own. A crop's edges snap first to an edge in the picture — a boundary that steps sharply along
+most of the crop's side (`EdgeSnapper`), such as a panel's border or a window's frame — and
+otherwise to the gap detection cuts use; while a crop is drawn or resized, a dashed guide runs
+across the picture along each side that sits on an edge. A crop at rest shows a handle on each
+corner and side: dragging one moves only those sides, snapping the same way; a drag anywhere
+else draws a new crop.
 
 **The item bar** floats above whatever is selected (below it when there is no room, kept on the
 canvas, hidden during a drag) and carries that item's options and nothing else: delete for every

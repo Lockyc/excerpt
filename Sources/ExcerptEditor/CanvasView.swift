@@ -170,6 +170,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
         switch model.drag {
         case .move?, .vertex?: return .closedHand
         case .edge(let seam, _, _)?: return resize(seam)
+        case .cropEdges(let edges, _)?: return Self.cropCursor(edges)
         case nil: break
         default: return ToolGlyph.cursor(model.tool)
         }
@@ -177,10 +178,30 @@ final class CanvasView: NSView, NSTextViewDelegate {
         switch model.grab(at: p, map: map, option: option) {
         case .annotation?, .vertex?: return .openHand
         case .seamEdge(let seam, _)?: return resize(seam)
+        case .cropEdges(let edges)?: return Self.cropCursor(edges)
         case .segment?: return .crosshair
         case .seam?, .closePath?: return .pointingHand
         case nil: return ToolGlyph.cursor(model.tool)
         }
+    }
+
+    /// The frame-resize cursor for the crop side or corner `edges` moves.
+    static func cropCursor(_ edges: CropEdges) -> NSCursor {
+        let position: NSCursor.FrameResizePosition =
+            switch (
+                edges.contains(.left), edges.contains(.right), edges.contains(.top),
+                edges.contains(.bottom)
+            ) {
+            case (true, _, true, _): .topLeft
+            case (true, _, _, true): .bottomLeft
+            case (_, true, true, _): .topRight
+            case (_, true, _, true): .bottomRight
+            case (true, _, _, _): .left
+            case (_, true, _, _): .right
+            case (_, _, true, _): .top
+            default: .bottom
+            }
+        return NSCursor.frameResize(position: position, directions: .all)
     }
 
     override func cursorUpdate(with event: NSEvent) { updateCursor() }
@@ -332,16 +353,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
         let accent = Self.accent
         context.setLineWidth(2 * line)
 
-        if model.tool == .crop, let crop = model.document.crop, let rect = map.rect(crop.cgRect) {
-            let path = CGMutablePath()
-            path.addRect(CGRect(origin: .zero, size: pictureSize))
-            path.addRect(rect)
-            context.addPath(path)
-            context.setFillColor(CGColor(gray: 0, alpha: 0.45))
-            context.fillPath(using: .evenOdd)
-            context.setStrokeColor(CGColor(gray: 1, alpha: 1))
-            context.stroke(rect)
-        }
+        if model.tool == .crop { drawCrop(in: context) }
 
         switch model.selection {
         case .annotation(let id) where model.typing == nil:
@@ -369,6 +381,8 @@ final class CanvasView: NSView, NSTextViewDelegate {
                 context.setStrokeColor(accent)
                 strokeDashed(rect, in: context)
             }
+        case .crop?:
+            break  // drawCrop shades and outlines it
         case .edge(let seam, _, let position)?:
             let point = map.point(
                 seam.axis == .horizontal
@@ -388,6 +402,60 @@ final class CanvasView: NSView, NSTextViewDelegate {
         }
 
         drawVertexHandles(in: context)
+    }
+
+    /// Under the crop tool: the crop being drawn or resized, else the document's, with the
+    /// picture outside it shaded. A crop at rest shows a handle on each corner and side; one in
+    /// a drag shows a guide across the picture along each side that sits on an edge.
+    private func drawCrop(in context: CGContext) {
+        let line = 1 / zoom
+        let shown: PixelRect
+        var guides: CropEdges = []
+        if case .crop(let crop, let found)? = model.pending {
+            shown = crop
+            guides = found
+        } else if let crop = model.document.crop {
+            shown = crop
+        } else {
+            return
+        }
+        guard let rect = map.rect(shown.cgRect) else { return }
+        let path = CGMutablePath()
+        path.addRect(CGRect(origin: .zero, size: pictureSize))
+        path.addRect(rect)
+        context.addPath(path)
+        context.setFillColor(CGColor(gray: 0, alpha: 0.45))
+        context.fillPath(using: .evenOdd)
+        context.setStrokeColor(CGColor(gray: 1, alpha: 1))
+        context.stroke(rect)
+        if !guides.isEmpty {
+            var segments: [CGPoint] = []
+            let full = CGRect(origin: .zero, size: pictureSize)
+            if guides.contains(.left) {
+                segments += [CGPoint(x: rect.minX, y: full.minY), CGPoint(x: rect.minX, y: full.maxY)]
+            }
+            if guides.contains(.right) {
+                segments += [CGPoint(x: rect.maxX, y: full.minY), CGPoint(x: rect.maxX, y: full.maxY)]
+            }
+            if guides.contains(.top) {
+                segments += [CGPoint(x: full.minX, y: rect.minY), CGPoint(x: full.maxX, y: rect.minY)]
+            }
+            if guides.contains(.bottom) {
+                segments += [CGPoint(x: full.minX, y: rect.maxY), CGPoint(x: full.maxX, y: rect.maxY)]
+            }
+            context.setStrokeColor(Self.accent)
+            context.setLineDash(phase: 0, lengths: [4 * line, 3 * line])
+            context.strokeLineSegments(between: segments)
+            context.setLineDash(phase: 0, lengths: [])
+        }
+        guard model.drag == nil, model.pending == nil else { return }
+        let xs = [rect.minX, rect.midX, rect.maxX]
+        let ys = [rect.minY, rect.midY, rect.maxY]
+        for x in xs {
+            for y in ys where !(x == rect.midX && y == rect.midY) {
+                drawKnob(at: CGPoint(x: x, y: y), radius: 5 * line, in: context)
+            }
+        }
     }
 
     private func strokeDashed(_ rect: CGRect, in context: CGContext) {
