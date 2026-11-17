@@ -446,6 +446,12 @@ final class AnimatedPage: FrameSource, Scroller {
         #expect(partial == nil)
     }
 
+    @Test func aWindowChangeSaysSo() {
+        #expect(
+            ScrollCaptureError.windowChanged.localizedDescription
+                == "The window moved or changed size.")
+    }
+
     @Test func escBeforeTheFirstFrameCancels() async {
         let fake = FakePage(page: page, viewport: 200)
         fake.fresh = 0

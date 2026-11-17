@@ -39,6 +39,9 @@ final class CaptureCoordinator {
     private var scrollEnd: ScrollEnd?
     /// The last scrolling capture's region, for the next to open on; held for this launch.
     private var lastScrollRegion: ScrollRegion?
+    /// The window the last scrolling capture followed, for the next to open on; nil after an
+    /// area.
+    private var lastScrollWindow: CGWindowID?
     /// The area last picked from the mode bar, for the next to open on; held for this launch.
     private var lastModeBarRegion: ScrollRegion?
     /// Counts captures started; a text read copies only while no capture has started since it.
@@ -182,25 +185,8 @@ final class CaptureCoordinator {
                 .window(windows: windows), for: action, overlay: overlay, stills: stills),
                 let shot = try await windowStills.value?.still(of: window.window.windowID)
             {
-                // The display holding most of the window sets its wallpaper.
-                let still = stills.filter { $0.frame.intersects(window.frame) }.max {
-                    Self.overlap($0.frame, window.frame) < Self.overlap($1.frame, window.frame)
-                }
-                let scale = shot.scale
-                var image = shot.image
-                if preferences.windowBackdrop {
-                    var fill = Backdrop.Fill.color(preferences.backdropColor)
-                    if preferences.backdropStyle == .wallpaper, let still,
-                        let wallpaper = try? await capturer.wallpaper(
-                            displayID: still.displayID, scale: scale)
-                    {
-                        fill = .image(wallpaper)
-                    }
-                    image = Backdrop.compose(
-                        image, padding: Int(preferences.windowPaddingPoints * scale),
-                        fill: fill)
-                }
-                await deliver(image, scale: scale)
+                let image = await windowBackdrop(shot.image, scale: shot.scale, frame: window.frame)
+                await deliver(image, scale: shot.scale)
             }
         case .fullscreen:
             let mouse = NSEvent.mouseLocation
@@ -209,15 +195,27 @@ final class CaptureCoordinator {
             }
         case .scrolling:
             let windows = try await capturer.windowsFrontToBack()
+            // The last window reopens only while it is on a screen; else its last area does.
+            let previousWindow = windows.first { $0.window.windowID == lastScrollWindow }
+                .flatMap { window in
+                    let centre = CGPoint(x: window.frame.midX, y: window.frame.midY)
+                    return NSScreen.screens.contains { $0.frame.contains(centre) }
+                        ? window.window.windowID : nil
+                }
             switch await select(
-                .scrollingArea(previous: lastScrollRegion, previousWindow: nil, windows: windows),
+                .scrollingArea(
+                    previous: lastScrollRegion, previousWindow: previousWindow, windows: windows),
                 for: action, overlay: overlay, stills: stills)
             {
-            case .area(let still, let rect), .windowArea(_, let still, let rect):
+            case .area(let still, let rect):
                 try await use(action, still: still, pixelRect: rect, overlay: overlay)
-            case .scrolledArea(let still, let rect, _):
+            case .windowArea(let window, let still, let rect):
                 try await captureScrolling(
-                    still: still, pixelRect: rect, start: .manual, overlay: overlay)
+                    still: still, pixelRect: rect, start: .auto, overlay: overlay, window: window)
+            case .scrolledArea(let still, let rect, let window):
+                try await captureScrolling(
+                    still: still, pixelRect: rect, start: .manual, overlay: overlay,
+                    window: window)
             default:
                 break
             }
@@ -258,7 +256,7 @@ final class CaptureCoordinator {
                     displayID: still.displayID, displayFrame: still.frame, scale: still.scale,
                     pixelRect: rect, primaryHeight: NSScreen.primaryHeight)
                 try await captureScrolling(
-                    still: still, pixelRect: rect, start: .manual, overlay: overlay)
+                    still: still, pixelRect: rect, start: .manual, overlay: overlay, window: nil)
             case .chosen(let id):
                 switchedTo = HotKeyAction(rawValue: id)
             default:
@@ -283,7 +281,7 @@ final class CaptureCoordinator {
             Task { await copyText(of: image, scale: still.scale) }
         case .scrolling:
             try await captureScrolling(
-                still: still, pixelRect: rect, start: .auto, overlay: overlay)
+                still: still, pixelRect: rect, start: .auto, overlay: overlay, window: nil)
         case .record:
             guard !promptedForInputMonitoring(overlay: overlay) else { return }
             await record(still: still, pixelRect: rect, window: nil, overlay: overlay)
@@ -453,15 +451,29 @@ final class CaptureCoordinator {
     /// Streams the selected region while the page scrolls under it, stitching as it goes, with
     /// the HUD over it and the live preview beside it. Saves like any capture. The region is
     /// kept for the next scrolling capture to open on. A capture the user started by scrolling
-    /// keeps `overlay` up until its first frame.
+    /// keeps `overlay` up until its first frame. With `window`, wholly on the still's display,
+    /// it follows that window: brought to the front, streamed alone, its shape fixed as chrome,
+    /// ended when it moves or resizes, and saved on the window backdrop. A window that isn't
+    /// wholly on that display is captured as the area it covers.
     private func captureScrolling(
-        still: DisplayStill, pixelRect: CGRect, start: ScrollStart, overlay: SelectionOverlay
+        still: DisplayStill, pixelRect: CGRect, start: ScrollStart, overlay: SelectionOverlay,
+        window picked: CapturableWindow?
     ) async throws {
         defer { overlay.dismiss() }
-        let region = ScrollRegion(
-            displayID: still.displayID, displayFrame: still.frame, scale: still.scale,
-            pixelRect: pixelRect, primaryHeight: NSScreen.primaryHeight)
+        let window = picked.flatMap { picked in
+            ScrollRegion.followsWindow(windowFrame: picked.frame, displayFrame: still.frame)
+                ? picked : nil
+        }
+        let region =
+            window.flatMap {
+                ScrollRegion(window: $0, still: still, primaryHeight: NSScreen.primaryHeight)
+            }
+            ?? ScrollRegion(
+                displayID: still.displayID, displayFrame: still.frame, scale: still.scale,
+                pixelRect: pixelRect, primaryHeight: NSScreen.primaryHeight)
         lastScrollRegion = region
+        lastScrollWindow = window?.window.windowID
+        if let window { Self.bringToFront(window) }
         let source = StreamFrameSource()
         scrollEnd = nil
         let visible =
@@ -473,7 +485,8 @@ final class CaptureCoordinator {
             size: ScrollChromeLayout.hudSize, beside: point, visible: visible)
         let capture = ScrollCapture(
             source: source, scroller: EventScroller(region: region, point: point, hud: hud),
-            stepPoints: region.stepPoints, scale: Double(region.scale), start: start)
+            stepPoints: region.stepPoints, scale: Double(region.scale), start: start,
+            chrome: window == nil ? { _ in .none } : { ScrollChrome.window(shapeOf: $0) })
         let windows = ScrollWindows(
             region: region.appKitFrame, hud: hud, visible: visible,
             onDone: { [weak self, weak capture] in
@@ -487,7 +500,11 @@ final class CaptureCoordinator {
             onOpenAccessibility: { Self.open(.accessibility) })
         // `start` needs a window of Excerpt's open: the HUD and preview.
         do {
-            try await source.start(region: region)
+            if let window {
+                try await source.start(window: window, region: region)
+            } else {
+                try await source.start(region: region)
+            }
         } catch {
             overlay.dismiss()
             await windows.explain(.couldNotStart(error))
@@ -524,7 +541,24 @@ final class CaptureCoordinator {
                 capture?.finish()
             }
         }
+        // The window moving, resizing or going away ends the capture as a display change does.
+        let watch = window.map { window in
+            let id = window.window.windowID
+            let bounds = Self.bounds(ofWindow: id)
+            return Task { [weak self, weak capture] in
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: Self.windowPoll)
+                    guard !Task.isCancelled else { return }
+                    if bounds == nil || Self.bounds(ofWindow: id) != bounds {
+                        self?.endScrolling(.stopped(ScrollCaptureError.windowChanged))
+                        capture?.finish()
+                        return
+                    }
+                }
+            }
+        }
         let outcome = await capture.run()
+        watch?.cancel()
         NotificationCenter.default.removeObserver(observer)
         if let wheel { NSEvent.removeMonitor(wheel) }
         source.onFailure = nil
@@ -550,7 +584,13 @@ final class CaptureCoordinator {
         // The HUD stays up only to say why the capture ended early.
         if stopped == nil && stopFailure == nil { windows.close() }
         var saved = false
-        if let image { saved = await deliver(image.makeImage(), scale: region.scale) }
+        if let image {
+            var cgImage = image.makeImage()
+            if let window {
+                cgImage = await windowBackdrop(cgImage, scale: region.scale, frame: window.frame)
+            }
+            saved = await deliver(cgImage, scale: region.scale)
+        }
         if let stopped { await windows.explain(.stopped(stopped, savedPartial: saved)) }
         if let stopFailure {
             await windows.explain(.recordingNotStopped(stopFailure, saved: saved))
@@ -560,6 +600,71 @@ final class CaptureCoordinator {
 
     private func endScrolling(_ end: ScrollEnd) {
         if scrollEnd == nil { scrollEnd = end }
+    }
+
+    /// How often a followed window's bounds are read again.
+    static let windowPoll: Duration = .milliseconds(250)
+
+    /// Window `id`'s bounds in Quartz points; nil once it is gone or off screen.
+    private static func bounds(ofWindow id: CGWindowID) -> CGRect? {
+        guard
+            let info =
+                (CGWindowListCopyWindowInfo([.optionIncludingWindow], id)
+                as? [[CFString: Any]])?.first,
+            info[kCGWindowIsOnscreen] as? Bool == true,
+            let bounds = info[kCGWindowBounds] as? NSDictionary
+        else { return nil }
+        return CGRect(dictionaryRepresentation: bounds as CFDictionary)
+    }
+
+    /// Activates `window`'s app and, with Accessibility, raises the window itself, so the
+    /// scroll events posted at the pointer reach it.
+    private static func bringToFront(_ window: CapturableWindow) {
+        guard let pid = window.window.owningApplication?.processID else { return }
+        NSRunningApplication(processIdentifier: pid)?.activate()
+        guard EventScroller.isTrusted else { return }
+        let app = AXUIElementCreateApplication(pid)
+        var value: CFTypeRef?
+        guard
+            AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &value)
+                == .success,
+            let axWindows = value as? [AXUIElement]
+        else { return }
+        let frame = window.window.frame
+        let match = axWindows.first { axWindow in
+            var position = CGPoint.zero
+            var size = CGSize.zero
+            var positionValue: CFTypeRef?
+            var sizeValue: CFTypeRef?
+            guard
+                AXUIElementCopyAttributeValue(
+                    axWindow, kAXPositionAttribute as CFString, &positionValue) == .success,
+                AXUIElementCopyAttributeValue(
+                    axWindow, kAXSizeAttribute as CFString, &sizeValue) == .success,
+                let positionValue, let sizeValue,
+                AXValueGetValue(positionValue as! AXValue, .cgPoint, &position),
+                AXValueGetValue(sizeValue as! AXValue, .cgSize, &size)
+            else { return false }
+            return CGRect(origin: position, size: size) == frame
+        }
+        if let match { AXUIElementPerformAction(match, kAXRaiseAction as CFString) }
+    }
+
+    /// `image` of a window on the window backdrop when that setting is on, its fill the
+    /// wallpaper of the display holding most of `frame` (AppKit points) or the backdrop colour.
+    private func windowBackdrop(_ image: CGImage, scale: CGFloat, frame: CGRect) async -> CGImage {
+        guard preferences.windowBackdrop else { return image }
+        var fill = Backdrop.Fill.color(preferences.backdropColor)
+        let screen = NSScreen.screens.filter { $0.frame.intersects(frame) }.max {
+            Self.overlap($0.frame, frame) < Self.overlap($1.frame, frame)
+        }
+        if preferences.backdropStyle == .wallpaper, let displayID = screen?.displayID,
+            let wallpaper = try? await capturer.wallpaper(displayID: displayID, scale: scale)
+        {
+            fill = .image(wallpaper)
+        }
+        return Backdrop.compose(
+            image, padding: Int(preferences.windowPaddingPoints * scale), fill: fill)
     }
 
     /// Without Accessibility, asks how to go on before the stills are taken, or once the overlay

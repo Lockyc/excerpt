@@ -36,9 +36,11 @@ public enum ScrollCaptureError: Error, Equatable, LocalizedError {
     case cannotExcludeExcerpt
     case streamStalled
     case windowNotOnOneDisplay
+    case windowChanged
 
     public var errorDescription: String? {
         switch self {
+        case .windowChanged: "The window moved or changed size."
         case .noFrames: "The screen sent no picture of the region."
         case .displayGone: "The display the region was on is no longer connected."
         case .displayChanged: "The displays changed during the capture."
@@ -88,6 +90,10 @@ public final class ScrollCapture {
     private let scale: Double
     private let maximumHeight: Int
     private let start: ScrollStart
+    /// The rows sticky in every frame, worked out from the first.
+    private let chromeOf: (PixelBuffer) -> ScrollChrome
+    /// The first frame's chrome, which every match is made with.
+    private var chrome = ScrollChrome.none
     /// The user scrolled since the loop last looked.
     private var tookOver = false
     private var request: Request?
@@ -102,7 +108,8 @@ public final class ScrollCapture {
 
     public init(
         source: FrameSource, scroller: Scroller, stepPoints: Double, scale: Double,
-        maximumHeight: Int = Stitcher.defaultMaximumHeight, start: ScrollStart = .auto
+        maximumHeight: Int = Stitcher.defaultMaximumHeight, start: ScrollStart = .auto,
+        chrome: @escaping (PixelBuffer) -> ScrollChrome = { _ in .none }
     ) {
         self.source = source
         self.scroller = scroller
@@ -110,6 +117,7 @@ public final class ScrollCapture {
         self.scale = scale
         self.maximumHeight = maximumHeight
         self.start = start
+        chromeOf = chrome
     }
 
     /// The user scrolled the page (a wheel event over the region that Excerpt didn't post): they
@@ -159,8 +167,10 @@ public final class ScrollCapture {
         } catch {
             return request == .cancel ? .cancelled : .failed(error, partial: nil)
         }
+        chrome = chromeOf(first)
         var session = ScrollSession(
-            first: first, scale: scale, canAutoScroll: true, maximumHeight: maximumHeight)
+            first: first, scale: scale, canAutoScroll: true, maximumHeight: maximumHeight,
+            chrome: chrome)
         if start == .manual {
             session.takeOver()
         } else if let blocker = scroller.blocker {
@@ -288,6 +298,7 @@ public final class ScrollCapture {
     func settledFrame(after previous: PixelBuffer) async throws -> PixelBuffer {
         let clock = ContinuousClock()
         let ignored = StitchMatcher.ignoredRightColumns(width: previous.width, scale: scale)
+        let chrome = chrome
         let posted = clock.now
         let answered = posted + Self.responseWait(after: slowestAnswer)
         var newest: PixelBuffer?
@@ -297,7 +308,8 @@ public final class ScrollCapture {
             else { return newest ?? previous }
             newest = frame
             let match = await Self.offMain {
-                StitchMatcher.match(previous, frame, ignoringRightColumns: ignored)
+                StitchMatcher.match(
+                    previous, frame, ignoringRightColumns: ignored, chrome: chrome)
             }
             if match != .still {
                 slowestAnswer = max(slowestAnswer ?? .zero, clock.now - posted)
