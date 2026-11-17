@@ -201,8 +201,9 @@ Window mode; a click with no drag selects it, as its area, and a drag draws an a
 Started (`Return`, Start, or a scroll over it) with that selection unmoved and unresized, the
 capture follows the window itself rather than the screen:
 
-- The window is brought to the front first, so Excerpt's scroll events, posted at the pointer,
-  reach it.
+- The window is raised first, with Accessibility, without activating its app, so the HUD keeps
+  `Return` and `Esc`. Auto-scroll's events land at the window's centre, not the pointer, which
+  usually sits on the title bar it was picked by; the HUD sits beside that point.
 - The stream holds the window alone, filtered as its still is (`ScreenCapturer.windowFilter`:
   the window by itself on its display, over its frame there), so nothing behind its rounded
   corners and nothing passing over it is in a frame. Windows that open during the capture —

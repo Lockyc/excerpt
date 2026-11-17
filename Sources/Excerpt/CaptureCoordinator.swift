@@ -452,7 +452,7 @@ final class CaptureCoordinator {
     /// the HUD over it and the live preview beside it. Saves like any capture. The region is
     /// kept for the next scrolling capture to open on. A capture the user started by scrolling
     /// keeps `overlay` up until its first frame. With `window`, wholly on the still's display,
-    /// it follows that window: brought to the front, streamed alone, its shape fixed as chrome,
+    /// it follows that window: raised, auto-scrolled at its centre, streamed alone, its shape fixed as chrome,
     /// ended by its moving, resizing or closing, and saved on the window backdrop. A window that isn't
     /// wholly on that display is captured as the area it covers.
     private func captureScrolling(
@@ -479,8 +479,13 @@ final class CaptureCoordinator {
         let visible =
             NSScreen.screens.first { $0.displayID == region.displayID }?.visibleFrame
             ?? region.appKitFrame
+        // A followed window's auto-scroll lands at its centre: the pointer that picked it
+        // usually sits on its title bar, which doesn't scroll.
+        let frame = region.appKitFrame
         let point = ScrollChromeLayout.scrollPoint(
-            pointer: NSEvent.mouseLocation, region: region.appKitFrame)
+            pointer: window != nil && start == .auto
+                ? CGPoint(x: frame.midX, y: frame.midY) : NSEvent.mouseLocation,
+            region: frame)
         let hud = ScrollChromeLayout.hud(
             size: ScrollChromeLayout.hudSize, beside: point, visible: visible)
         let capture = ScrollCapture(
@@ -617,12 +622,13 @@ final class CaptureCoordinator {
         return CGRect(dictionaryRepresentation: bounds as CFDictionary)
     }
 
-    /// Activates `window`'s app and, with Accessibility, raises the window itself, so the
-    /// scroll events posted at the pointer reach it.
+    /// With Accessibility, raises `window` over the others so the scroll events posted on it
+    /// reach it, without activating its app: Excerpt stays active, so the HUD keeps Return and
+    /// Esc. The window is the frontmost of its app's whose frame is within a point of
+    /// `SCWindow.frame` on every edge, since the two APIs may round it differently.
     private static func bringToFront(_ window: CapturableWindow) {
-        guard let pid = window.window.owningApplication?.processID else { return }
-        NSRunningApplication(processIdentifier: pid)?.activate()
-        guard EventScroller.isTrusted else { return }
+        guard let pid = window.window.owningApplication?.processID, EventScroller.isTrusted
+        else { return }
         let app = AXUIElementCreateApplication(pid)
         var value: CFTypeRef?
         guard
@@ -645,7 +651,9 @@ final class CaptureCoordinator {
                 AXValueGetValue(positionValue as! AXValue, .cgPoint, &position),
                 AXValueGetValue(sizeValue as! AXValue, .cgSize, &size)
             else { return false }
-            return CGRect(origin: position, size: size) == frame
+            let found = CGRect(origin: position, size: size)
+            return abs(found.minX - frame.minX) <= 1 && abs(found.minY - frame.minY) <= 1
+                && abs(found.maxX - frame.maxX) <= 1 && abs(found.maxY - frame.maxY) <= 1
         }
         if let match { AXUIElementPerformAction(match, kAXRaiseAction as CFString) }
     }
