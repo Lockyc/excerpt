@@ -229,7 +229,9 @@ import Testing
         let crop = Gestures.crop(
             from: CGPoint(x: 400, y: -30), to: CGPoint(x: 64, y: 236), width: 360, height: 400,
             minimum: 8, snapping: sheet, radius: 12)
-        #expect(crop == PixelRect(x: 60, y: 0, width: 300, height: 240))
+        // Each edge lands on the nearer side of a gridline: the column after the line at 60,
+        // the row before the line at 240.
+        #expect(crop == PixelRect(x: 61, y: 0, width: 299, height: 240))
         #expect(
             Gestures.crop(
                 from: CGPoint(x: 10, y: 10), to: CGPoint(x: 14, y: 200), width: 360, height: 400,

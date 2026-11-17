@@ -235,8 +235,8 @@ public enum Gestures {
         return points.indices.filter { keep[$0] }.map { points[$0] }
     }
 
-    /// The crop a drag makes: the dragged rect clamped to the image, its edges snapped to
-    /// uniform lines. nil when either side ends up shorter than `minimum`.
+    /// The crop a drag makes: the dragged rect clamped to the image, each edge snapped
+    /// (`snapCropEdge`). nil when either side ends up shorter than `minimum`.
     public static func crop(
         from start: CGPoint, to end: CGPoint, width: Int, height: Int, minimum: Double,
         snapping buffer: PixelBuffer?, radius: Int
@@ -246,11 +246,14 @@ public enum Gestures {
         var right = clamp(max(start.x, end.x), width)
         var top = clamp(min(start.y, end.y), height)
         var bottom = clamp(max(start.y, end.y), height)
-        let l = snapEdge(left, axis: .vertical, extent: width, snapping: buffer, radius: radius)
-        let r = snapEdge(right, axis: .vertical, extent: width, snapping: buffer, radius: radius)
-        let t = snapEdge(top, axis: .horizontal, extent: height, snapping: buffer, radius: radius)
-        let b = snapEdge(
-            bottom, axis: .horizontal, extent: height, snapping: buffer, radius: radius)
+        func snap(_ v: Int, _ axis: Axis, _ extent: Int, _ span: Range<Int>) -> Int {
+            snapCropEdge(
+                v, axis: axis, extent: extent, span: span, snapping: buffer, radius: radius)
+        }
+        let l = snap(left, .vertical, width, top..<bottom)
+        let r = snap(right, .vertical, width, top..<bottom)
+        let t = snap(top, .horizontal, height, left..<right)
+        let b = snap(bottom, .horizontal, height, left..<right)
         if l < r {
             left = l
             right = r
