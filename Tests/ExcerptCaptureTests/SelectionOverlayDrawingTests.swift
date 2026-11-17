@@ -29,7 +29,9 @@ import Testing
         let previous = ScrollRegion(
             displayID: 1, displayFrame: Self.still.frame, scale: 1,
             pixelRect: CGRect(x: 100, y: 50, width: 200, height: 200), primaryHeight: 300)
-        window.present(still: Self.still, mode: .scrollingArea(previous: previous))
+        window.present(
+            still: Self.still,
+            mode: .scrollingArea(previous: previous, previousWindow: nil, windows: []))
         window.displayIfNeeded()
         CATransaction.flush()
         let bitmap = NSBitmapImageRep(

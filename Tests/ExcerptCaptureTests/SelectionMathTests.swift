@@ -180,6 +180,19 @@ import Testing
                 == CGRect(x: 200, y: 300, width: 200, height: 100))
     }
 
+    @Test func aReopenedWindowIsSelectedOnTheDisplayHoldingItsCentre() {
+        let left = CGRect(x: 0, y: 0, width: 400, height: 300)
+        let right = Self.rightDisplay.frame
+        // Spanning both, mostly on the right.
+        let spanning = CGRect(x: 300, y: 100, width: 300, height: 100)
+        #expect(!SelectionMath.reopensWindow(spanning, on: left))
+        #expect(SelectionMath.reopensWindow(spanning, on: right))
+        // Wholly on the left.
+        let inside = CGRect(x: 50, y: 50, width: 100, height: 100)
+        #expect(SelectionMath.reopensWindow(inside, on: left))
+        #expect(!SelectionMath.reopensWindow(inside, on: right))
+    }
+
     @Test func windowAreaOffDisplayIsNil() {
         #expect(
             SelectionMath.windowArea(

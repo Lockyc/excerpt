@@ -130,6 +130,12 @@ extension SelectionMath {
         return grip(at: point, on: selection) == nil
     }
 
+    /// Whether a window reopened as the selection is selected on this display: the one holding
+    /// its frame's centre, so a window spanning displays is selected once (both AppKit points).
+    public static func reopensWindow(_ windowFrame: CGRect, on displayFrame: CGRect) -> Bool {
+        displayFrame.contains(CGPoint(x: windowFrame.midX, y: windowFrame.midY))
+    }
+
     /// The part of `still`'s display a window covers, as a pixel rect of the still: its AppKit
     /// `windowFrame` clipped to the display. Nil when it covers none of it.
     public static func windowArea(_ windowFrame: CGRect, in still: DisplayStill) -> CGRect? {

@@ -2,10 +2,14 @@ import AppKit
 
 public enum SelectionMode {
     case area
-    /// An area that stays on screen after the drag until Return, Enter or the start button
-    /// confirms it, or a new drag replaces it: the region a scrolling capture follows. It opens
-    /// on `previous`, the last scrolling capture's region, already waiting to be started.
-    case scrollingArea(previous: ScrollRegion?)
+    /// An area that stays on screen after the drag until Return, Enter, the start button or a
+    /// scroll over it confirms it, or a new drag replaces it: the region a scrolling capture
+    /// follows. The window under the pointer is highlighted, and a click with no drag selects
+    /// the area it covers. It opens on the area `previousWindow` covers now, as a window
+    /// selection, while that window is among `windows`; otherwise on `previous`, the last
+    /// scrolling capture's region; either way already waiting to be started.
+    case scrollingArea(
+        previous: ScrollRegion?, previousWindow: CGWindowID?, windows: [CapturableWindow])
     case window(windows: [CapturableWindow])
     /// An area that stays on screen, with a bar of `choices` over it, until one is picked. It
     /// opens on `previous`, the area last picked from the bar.
@@ -34,8 +38,18 @@ public enum SelectionMode {
     /// The windows a press can pick, highlighted under the pointer.
     var windows: [CapturableWindow] {
         switch self {
-        case .window(let windows), .recordingArea(_, let windows): windows
-        case .area, .scrollingArea, .modeBar: []
+        case .window(let windows), .recordingArea(_, let windows),
+            .scrollingArea(_, _, let windows):
+            windows
+        case .area, .modeBar: []
+        }
+    }
+
+    /// Modes where a click with no drag selects the area of the window under it.
+    var picksWindows: Bool {
+        switch self {
+        case .scrollingArea, .recordingArea: true
+        case .area, .window, .modeBar: false
         }
     }
 }
@@ -62,11 +76,14 @@ public struct ModeChoice: Sendable {
 
 public enum SelectionResult {
     case area(DisplayStill, pixelRect: CGRect)
-    /// Recording-area mode, confirmed on the area a click on `window` selected, unmoved and
-    /// unresized: a window recording. Any other recording area finishes as `area`.
+    /// Recording-area or scrolling-area mode, confirmed by Return, Enter or the start button on
+    /// the area a click on `window` selected, unmoved and unresized: a window recording or a
+    /// scrolling window. Any other area there finishes as `area`.
     case windowArea(CapturableWindow, DisplayStill, pixelRect: CGRect)
-    /// Scrolling-area mode, started by the user scrolling over the selection: they scroll.
-    case scrolledArea(DisplayStill, pixelRect: CGRect)
+    /// Scrolling-area or mode-bar mode, started by the user scrolling over the selection: they
+    /// scroll. `window` is the window whose area a click selected, while the selection is still
+    /// exactly that area; nil for a drawn, moved or resized area, and always from the mode bar.
+    case scrolledArea(DisplayStill, pixelRect: CGRect, window: CapturableWindow?)
     case window(CapturableWindow)
     /// A choice from the mode bar that runs on the selected area.
     case chosenArea(id: UInt32, DisplayStill, pixelRect: CGRect)
@@ -77,8 +94,9 @@ public enum SelectionResult {
 }
 
 /// One borderless window per display showing that display's frozen still. Area mode drags a
-/// rectangle (Space held moves it); scrolling-area mode keeps the rectangle until Return, Enter
-/// or its start button; mode-bar mode keeps it under a bar of capture modes until one is picked;
+/// rectangle (Space held moves it); scrolling-area mode keeps the rectangle until Return, Enter,
+/// its start button or a scroll over it, and highlights the window a click would select; mode-bar
+/// mode keeps it under a bar of capture modes until one is picked;
 /// window mode highlights the window under the cursor; recording-area mode keeps the rectangle
 /// until Return, Enter or its Record button, and highlights the window a click would select. A
 /// rectangle kept on screen moves when dragged from inside and resizes when dragged by an edge or
@@ -319,8 +337,8 @@ final class OverlayView: NSView {
     private var cursor: CGPoint?
     private var moving = false
     private var hovered: CapturableWindow?
-    /// Recording-area mode: the window whose area a click selected, while the selection is
-    /// still exactly that area.
+    /// A mode that picks windows: the window whose area a click (or reopening on it) selected,
+    /// while the selection is still exactly that area.
     private var clickedWindow: CapturableWindow?
     /// A settling mode's drag is over: the selection waits to be used, moved or resized.
     private var settled = false
@@ -425,7 +443,15 @@ final class OverlayView: NSView {
             endDrag()
         } else if earlyPress == nil {
             switch mode {
-            case .scrollingArea(let previous?), .modeBar(let previous?, _),
+            case .scrollingArea(_, let id?, let windows)
+            where windows.contains(where: { $0.window.windowID == id }):
+                // The window where it is now, on the display holding its centre only.
+                if let reopened = windows.first(where: { $0.window.windowID == id }),
+                    SelectionMath.reopensWindow(reopened.frame, on: still.frame)
+                {
+                    selectWindow(reopened)
+                }
+            case .scrollingArea(let previous?, _, _), .modeBar(let previous?, _),
                 .recordingArea(let previous?, _):
                 settle(previous, on: still)
             default: break
@@ -480,11 +506,11 @@ final class OverlayView: NSView {
         mode?.windows.first { $0.frame.contains(global) }
     }
 
-    /// The area a click would select in recording-area mode: the window under the pointer as
-    /// its rect in this view, while nothing is selected or while the pointer is where a press
+    /// The area a click would select in a mode that picks windows: the window under the pointer
+    /// as its rect in this view, while nothing is selected or while the pointer is where a press
     /// starts a new selection rather than using the settled one; nil otherwise.
     private var hoveredArea: CGRect? {
-        guard case .recordingArea = mode, reshaping == nil, let still, let hovered else {
+        guard mode?.picksWindows == true, reshaping == nil, let still, let hovered else {
             return nil
         }
         if anchor != nil {
@@ -497,18 +523,25 @@ final class OverlayView: NSView {
         return DisplayGeometry.localPoints(forPixelRect: pixels, scale: still.scale)
     }
 
-    /// Recording-area mode's click with no drag: the area the window under `press` covers
-    /// becomes the selection, settled. False when there is no window there.
+    /// A click with no drag in a mode that picks windows: the area the window under `press`
+    /// covers becomes the selection, settled. False when there is no window there.
     private func selectWindow(at press: CGPoint) -> Bool {
         guard let still,
             let hit = window(
                 at: DisplayGeometry.appKitRect(
                     forLocalPoints: CGRect(origin: press, size: .zero), displayFrame: still.frame
-                ).origin),
-            let pixels = SelectionMath.windowArea(hit.frame, in: still),
+                ).origin)
+        else { return false }
+        return selectWindow(hit)
+    }
+
+    /// Settles the area `window` covers on this display as the selection, remembered as that
+    /// window's; false when too little of it is on the display.
+    @discardableResult private func selectWindow(_ window: CapturableWindow) -> Bool {
+        guard let still, let pixels = SelectionMath.windowArea(window.frame, in: still),
             settle(DisplayGeometry.localPoints(forPixelRect: pixels, scale: still.scale))
         else { return false }
-        clickedWindow = hit
+        clickedWindow = window
         return true
     }
 
@@ -675,7 +708,7 @@ final class OverlayView: NSView {
                 let press = anchor
                 clearSelection()
                 idlePoint = press
-            } else if case .recordingArea = mode, let press = anchor, selectWindow(at: press) {
+            } else if mode.picksWindows, let press = anchor, selectWindow(at: press) {
                 // A click on a window selects the area it covers, settled.
             } else if pressClearedSelection, mode.settles {
                 clearSelection()  // a click on a settled selection clears it
@@ -707,13 +740,14 @@ final class OverlayView: NSView {
     /// Finishes with the selection cropped from the still.
     private func confirm(scrolled: Bool = false) {
         guard let picked = selectedPixels else { return }
+        if scrolled {
+            return finish(
+                .scrolledArea(picked.still, pixelRect: picked.rect, window: clickedWindow))
+        }
         if let clickedWindow {
             return finish(.windowArea(clickedWindow, picked.still, pixelRect: picked.rect))
         }
-        finish(
-            scrolled
-                ? .scrolledArea(picked.still, pixelRect: picked.rect)
-                : .area(picked.still, pixelRect: picked.rect))
+        finish(.area(picked.still, pixelRect: picked.rect))
     }
 
     // MARK: Mode bar
@@ -856,8 +890,8 @@ final class OverlayView: NSView {
     private var highlight: CGRect? {
         switch mode {
         case nil: return nil
-        case .area, .scrollingArea, .modeBar: return selection
-        case .recordingArea: return selection ?? hoveredArea
+        case .area, .modeBar: return selection
+        case .scrollingArea, .recordingArea: return selection ?? hoveredArea
         case .window:
             guard let hovered, let window else { return nil }
             let local = window.convertFromScreen(hovered.frame)

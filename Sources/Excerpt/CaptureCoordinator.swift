@@ -208,13 +208,14 @@ final class CaptureCoordinator {
                 await deliver(still.image, scale: still.scale)
             }
         case .scrolling:
+            let windows = try await capturer.windowsFrontToBack()
             switch await select(
-                .scrollingArea(previous: lastScrollRegion), for: action, overlay: overlay,
-                stills: stills)
+                .scrollingArea(previous: lastScrollRegion, previousWindow: nil, windows: windows),
+                for: action, overlay: overlay, stills: stills)
             {
-            case .area(let still, let rect):
+            case .area(let still, let rect), .windowArea(_, let still, let rect):
                 try await use(action, still: still, pixelRect: rect, overlay: overlay)
-            case .scrolledArea(let still, let rect):
+            case .scrolledArea(let still, let rect, _):
                 try await captureScrolling(
                     still: still, pixelRect: rect, start: .manual, overlay: overlay)
             default:
@@ -252,7 +253,7 @@ final class CaptureCoordinator {
                 {
                     try await use(mode, still: still, pixelRect: rect, overlay: overlay)
                 }
-            case .scrolledArea(let still, let rect):
+            case .scrolledArea(let still, let rect, _):
                 lastModeBarRegion = ScrollRegion(
                     displayID: still.displayID, displayFrame: still.frame, scale: still.scale,
                     pixelRect: rect, primaryHeight: NSScreen.primaryHeight)
