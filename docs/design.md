@@ -393,7 +393,7 @@ kind's own options where they apply — text adds a free size (`TextStyle.points
 font (sans, mono, serif), alignment (left, centred) and its background, a step adds Move earlier / Move
 later (disabled at either end of the sequence), a path adds Closed (disabled under three points) and Fill (disabled while open). The options per kind are one pure mapping. The
 crop under `K` gets a bar with delete. A new annotation takes the colour, size and text background
-last chosen, remembered across launches, and stays selected after it is drawn so its bar is
+last chosen, steps remembering a size of their own (`AnnotationStyle.stepWidth`), across launches, and stays selected after it is drawn so its bar is
 showing.
 
 **Text** is drawn either plain in its colour or on a **background**: a rounded pill in its colour

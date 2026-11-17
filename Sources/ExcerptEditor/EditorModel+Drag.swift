@@ -187,7 +187,7 @@ extension EditorModel {
                 next.annotations.append(
                     Annotation(
                         id: id, shape: .step(center: p.original), color: style.color,
-                        width: style.width))
+                        width: style.stepWidth))
                 preview(next)
                 selection = .annotation(id)
                 // Placed on press; a drag before release moves it, and release records one step.

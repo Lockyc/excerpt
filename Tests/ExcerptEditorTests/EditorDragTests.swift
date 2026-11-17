@@ -237,6 +237,22 @@ import Testing
         #expect(m.document.annotations.map(\.shape) == [.step(center: CGPoint(x: 78, y: 50))])
     }
 
+    @Test func stepsRememberASizeOfTheirOwn() {
+        let m = model()
+        m.tool = .rectangle
+        drag(m, CGPoint(x: 20, y: 20), CGPoint(x: 120, y: 80))
+        m.setWidth(.thick)
+        m.tool = .step
+        drag(m, CGPoint(x: 200, y: 200), CGPoint(x: 200, y: 200))
+        #expect(m.document.annotations.last!.width == AnnotationStyle.initial.stepWidth)
+        m.setWidth(.thin)
+        #expect(m.document.annotations.map(\.width) == [.thick, .thin])
+        #expect(m.style.width == .thick && m.style.stepWidth == .thin)
+        m.tool = .rectangle
+        drag(m, CGPoint(x: 20, y: 150), CGPoint(x: 120, y: 190))
+        #expect(m.document.annotations.last!.width == .thick)
+    }
+
     @Test func aNewBlurIsSelected() {
         let m = model()
         m.tool = .blur

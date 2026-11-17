@@ -331,10 +331,16 @@ final class EditorModel {
         }
     }
 
-    /// Sets the size new annotations get, and resizes the selected annotation: text with its
-    /// own style takes the preset's text size.
+    /// Sets the size new annotations of the selection's kind get — steps keep their own — and
+    /// resizes the selected annotation: text with its own style takes the preset's text size.
     func setWidth(_ width: StrokeWidth) {
-        style.width = width
+        if typing == nil, building == nil, case .annotation(let id) = selection,
+            case .step = document.annotations.first(where: { $0.id == id })?.shape
+        {
+            style.stepWidth = width
+        } else {
+            style.width = width
+        }
         restyleSelection { annotation in
             annotation.width = width
             if case .text(let origin, let string, let background, var textStyle?) =
