@@ -210,39 +210,65 @@ public final class ScreenCapturer {
         let configuration: SCStreamConfiguration
     }
 
-    /// The capture of `window` with its `overlays`, without its shadow (the backdrop frames it
-    /// instead), at the scale of the display it lies on.
+    /// The capture of `window` with its `overlays` as a still: `windowFilter`'s filter at the
+    /// scale of the display the window lies on.
+    private func request(
+        for window: CapturableWindow, overlays: [SCWindow], reach: CGRect, displays: [SCDisplay]
+    ) -> WindowRequest {
+        let found = Self.windowFilter(
+            for: window.window, overlays: overlays, reach: reach, displays: displays)
+        let configuration = Self.still(
+            width: found.size.width, height: found.size.height, scale: found.scale)
+        if let sourceRect = found.sourceRect {
+            configuration.sourceRect = sourceRect
+        } else {
+            configuration.ignoreShadowsSingleWindow = true
+        }
+        return WindowRequest(
+            window: window, scale: found.scale, filter: found.filter, configuration: configuration)
+    }
+
+    /// The window alone, as its still and its scrolling stream take it: `window` with its
+    /// `overlays`, without its shadow (the backdrop frames it instead), at the scale of the
+    /// display it lies on.
     ///
     /// A window that lies on one display is cut from that display with only itself and its
     /// overlays composited, over `reach` within that display: a desktop-independent filter
     /// renders a sheet's whole window tree — the parent with the sheet on it — shrunk into the
     /// sheet's size. A window spanning displays falls back to the desktop-independent filter,
-    /// which no single display can hold, and so to the window alone.
-    private func request(
-        for window: CapturableWindow, overlays: [SCWindow], reach: CGRect, displays: [SCDisplay]
-    ) -> WindowRequest {
+    /// which no single display can hold, and so to the window alone (no `sourceRect`).
+    static func windowFilter(
+        for window: SCWindow, overlays: [SCWindow], reach: CGRect, displays: [SCDisplay]
+    ) -> WindowFilter {
         // The screen holding most of the window sets the scale.
+        let appKitFrame = DisplayGeometry.appKitRect(
+            fromQuartz: window.frame, primaryHeight: NSScreen.primaryHeight)
         let scale =
             NSScreen.screens.max {
-                $0.frame.intersection(window.frame).area < $1.frame.intersection(window.frame).area
+                $0.frame.intersection(appKitFrame).area < $1.frame.intersection(appKitFrame).area
             }?.backingScaleFactor ?? 2
-        let frame = window.window.frame
+        let frame = window.frame
         guard let display = displays.first(where: { $0.frame.contains(frame) }) else {
-            let configuration = Self.still(width: frame.width, height: frame.height, scale: scale)
-            configuration.ignoreShadowsSingleWindow = true
-            return WindowRequest(
-                window: window, scale: scale,
-                filter: SCContentFilter(desktopIndependentWindow: window.window),
-                configuration: configuration)
+            return WindowFilter(
+                filter: SCContentFilter(desktopIndependentWindow: window), sourceRect: nil,
+                size: frame.size, scale: scale)
         }
         let area = reach.intersection(display.frame)
-        let configuration = Self.still(width: area.width, height: area.height, scale: scale)
-        configuration.sourceRect = area.offsetBy(dx: -display.frame.minX, dy: -display.frame.minY)
-        return WindowRequest(
-            window: window, scale: scale,
-            filter: SCContentFilter(display: display, including: [window.window] + overlays),
-            configuration: configuration)
+        return WindowFilter(
+            filter: SCContentFilter(display: display, including: [window] + overlays),
+            sourceRect: area.offsetBy(dx: -display.frame.minX, dy: -display.frame.minY),
+            size: area.size, scale: scale)
     }
+}
+
+/// The window alone, as its still and its scrolling stream take it.
+struct WindowFilter {
+    let filter: SCContentFilter
+    /// Display-local points; nil for a filter that is the window itself.
+    let sourceRect: CGRect?
+    /// In points; times `scale` it is the capture's pixel size.
+    let size: CGSize
+    let scale: CGFloat
 }
 
 /// The on-screen windows as `ScreenCapturer.windowList` found them.

@@ -30,6 +30,19 @@ public struct ScrollRegion: Equatable, Sendable {
             forLocalPoints: localPoints, displayFrame: displayFrame)
     }
 
+    /// The part of `still`'s display that a window covers, whole: the region a scrolling capture
+    /// of the window follows. Nil when the window covers none of the display.
+    public init?(windowFrame: CGRect, still: DisplayStill, primaryHeight: CGFloat) {
+        guard let pixelRect = SelectionMath.windowArea(windowFrame, in: still) else { return nil }
+        self.init(
+            displayID: still.displayID, displayFrame: still.frame, scale: still.scale,
+            pixelRect: pixelRect, primaryHeight: primaryHeight)
+    }
+
+    public init?(window: CapturableWindow, still: DisplayStill, primaryHeight: CGFloat) {
+        self.init(windowFrame: window.frame, still: still, primaryHeight: primaryHeight)
+    }
+
     /// An AppKit rect in Quartz global points, where CGEvents are posted.
     public func quartz(_ rect: CGRect) -> CGRect {
         DisplayGeometry.quartzRect(fromAppKit: rect, primaryHeight: primaryHeight)

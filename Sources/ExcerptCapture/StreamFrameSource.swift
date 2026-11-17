@@ -41,16 +41,52 @@ public final class StreamFrameSource: FrameSource {
     public func start(region: ScrollRegion) async throws {
         precondition(stream == nil, "one stream per source: stop it before starting another")
         let filter = try await Self.ownExcludingFilter(displayID: region.displayID)
+        let configuration = Self.configuration(
+            sourceRect: region.localPoints, width: Int(region.pixelRect.width),
+            height: Int(region.pixelRect.height))
+        try await begin(filter: filter, configuration: configuration)
+    }
+
+    /// Streams `window` alone, filtered as its still is (`ScreenCapturer.windowFilter`, with no
+    /// overlays): no other window, Excerpt's own included, appears in a frame, and the window's
+    /// shadow is left out. Frames are the window's points at its display's scale. Throws
+    /// `displayGone` when `region`'s display is disconnected.
+    public func start(window: CapturableWindow, region: ScrollRegion) async throws {
+        precondition(stream == nil, "one stream per source: stop it before starting another")
+        let content = try await SCShareableContent.excludingDesktopWindows(
+            false, onScreenWindowsOnly: false)
+        guard content.displays.contains(where: { $0.displayID == region.displayID })
+        else { throw ScrollCaptureError.displayGone }
+        let found = ScreenCapturer.windowFilter(
+            for: window.window, overlays: [], reach: window.window.frame,
+            displays: content.displays)
+        let configuration = Self.configuration(
+            sourceRect: found.sourceRect, width: Int(found.size.width * found.scale),
+            height: Int(found.size.height * found.scale))
+        configuration.ignoreShadowsSingleWindow = true
+        try await begin(filter: found.filter, configuration: configuration)
+    }
+
+    /// The configuration both starts share: a window's adds only its shadow setting.
+    private static func configuration(sourceRect: CGRect?, width: Int, height: Int)
+        -> SCStreamConfiguration
+    {
         let configuration = SCStreamConfiguration()
-        configuration.sourceRect = region.localPoints
-        configuration.width = Int(region.pixelRect.width)
-        configuration.height = Int(region.pixelRect.height)
+        if let sourceRect { configuration.sourceRect = sourceRect }
+        configuration.width = width
+        configuration.height = height
         configuration.pixelFormat = kCVPixelFormatType_32BGRA
         configuration.colorSpaceName = Self.colorSpaceName
         configuration.captureResolution = .best
         configuration.showsCursor = false
         configuration.minimumFrameInterval = CMTime(value: 1, timescale: 30)
         configuration.queueDepth = 3
+        return configuration
+    }
+
+    private func begin(filter: SCContentFilter, configuration: SCStreamConfiguration)
+        async throws
+    {
         let mailbox = self.mailbox
         let output = StreamOutput(
             onFrame: { mailbox.deliver($0) },

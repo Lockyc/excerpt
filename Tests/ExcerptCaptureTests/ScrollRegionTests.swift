@@ -27,6 +27,25 @@ import Testing
         #expect(region.stepPoints == 300)
     }
 
+    @Test func aWindowRegionIsItsAreaOnTheStill() throws {
+        let context = CGContext(
+            data: nil, width: 2000, height: 1600, bitsPerComponent: 8, bytesPerRow: 0,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        let still = DisplayStill(
+            displayID: 1, frame: CGRect(x: 0, y: 0, width: 1000, height: 800), scale: 2,
+            image: context.makeImage()!)
+        let frame = CGRect(x: 100, y: 100, width: 400, height: 300)
+        let region = try #require(
+            ScrollRegion(windowFrame: frame, still: still, primaryHeight: 800))
+        #expect(region.pixelRect == SelectionMath.windowArea(frame, in: still))
+        #expect(region.displayID == 1)
+        #expect(
+            ScrollRegion(
+                windowFrame: CGRect(x: 5000, y: 0, width: 10, height: 10), still: still,
+                primaryHeight: 800) == nil)
+    }
+
     @Test func localPointsUndoPixelRect() {
         let local = CGRect(x: 10, y: 20, width: 30, height: 40)
         let pixels = DisplayGeometry.pixelRect(
