@@ -63,7 +63,7 @@ public struct EditDocument: Codable, Equatable, Sendable {
     /// Version 2 carries `crop` and `annotations`, version 3 `border`, version 4 text
     /// backgrounds and steps, version 5 paths, version 6 `firstStep` and `restartsSteps`, version
     /// 7 `marginColor`, version 8 the border's `outside`, version 9 sampled colours, patches and
-    /// text styles, version 10 ellipses; an older build rejects a newer document rather than open
+    /// text styles, version 10 ellipses and click markers; an older build rejects a newer document rather than open
     /// it without them, so its next save can't erase them.
     public static let currentVersion = 10
     /// The largest `firstStep`: more steps than a series of capped documents could hold is damage.
@@ -244,6 +244,7 @@ public struct EditDocument: Codable, Equatable, Sendable {
                     inRange(origin.x, origin.y)
                     && (style.map { TextStyle.pointsRange.contains($0.points) } ?? true)
             case .step(let center): ok = inRange(center.x, center.y)
+            case .click(let tip): ok = inRange(tip.x, tip.y)
             case .rectangle(let r), .ellipse(let r), .highlight(let r), .blur(let r),
                 .patch(let r, _):
                 ok = rectOK(r)

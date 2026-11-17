@@ -63,7 +63,7 @@ public enum HitTest {
             let bounds = AnnotationGeometry.bounds(of: annotation, scale: scale)
             let topLeft = map.point(origin, bias: .after)
             return bounds.offsetBy(dx: topLeft.x - origin.x, dy: topLeft.y - origin.y)
-        case .step(let center):
+        case .step(let center), .click(tip: let center):
             let bounds = AnnotationGeometry.bounds(of: annotation, scale: scale)
             let placed = map.point(center)
             return bounds.offsetBy(dx: placed.x - center.x, dy: placed.y - center.y)

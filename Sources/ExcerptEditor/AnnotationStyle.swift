@@ -4,10 +4,11 @@ import ExcerptCore
 /// it across launches.
 public struct AnnotationStyle: Codable, Equatable, Sendable {
     public var color: AnnotationColor
-    /// The size of every new annotation but a step.
+    /// The size of every new annotation but a marker.
     public var width: StrokeWidth
-    /// The size of new steps, chosen apart from `width` so resizing a box leaves its numbers be.
-    public var stepWidth: StrokeWidth
+    /// The size of new markers — steps and clicks — chosen apart from `width` so resizing a box
+    /// leaves the markers on it be.
+    public var markerWidth: StrokeWidth
     /// Whether new text sits on a pill of its colour.
     public var background: Bool
     /// The colour the eyedropper last took from a capture, offered as the item bar's seventh
@@ -16,24 +17,25 @@ public struct AnnotationStyle: Codable, Equatable, Sendable {
 
     public init(
         color: AnnotationColor = .initial, width: StrokeWidth = .initial,
-        stepWidth: StrokeWidth = .initial, background: Bool = true, lastSampled: RGBA? = nil
+        markerWidth: StrokeWidth = .initial, background: Bool = true, lastSampled: RGBA? = nil
     ) {
         self.color = color
         self.width = width
-        self.stepWidth = stepWidth
+        self.markerWidth = markerWidth
         self.background = background
         self.lastSampled = lastSampled
     }
 
     public static let initial = AnnotationStyle()
 
-    /// A preference saved without `stepWidth` keeps the rest and gives steps the initial size.
+    /// A preference saved without `markerWidth` keeps the rest and gives markers the initial
+    /// size.
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.init(
             color: try c.decode(AnnotationColor.self, forKey: .color),
             width: try c.decode(StrokeWidth.self, forKey: .width),
-            stepWidth: try c.decodeIfPresent(StrokeWidth.self, forKey: .stepWidth) ?? .initial,
+            markerWidth: try c.decodeIfPresent(StrokeWidth.self, forKey: .markerWidth) ?? .initial,
             background: try c.decode(Bool.self, forKey: .background),
             lastSampled: try c.decodeIfPresent(RGBA.self, forKey: .lastSampled))
     }

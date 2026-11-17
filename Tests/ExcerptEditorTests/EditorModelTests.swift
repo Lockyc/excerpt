@@ -9,7 +9,7 @@ import Testing
     @Test func everyToolHasItsKey() {
         #expect(
             Tool.allCases.map(\.key) == [
-                "v", "a", "r", "o", "p", "t", "n", "h", "b", "e", "x", "k", "c",
+                "v", "a", "r", "o", "p", "t", "n", "m", "h", "b", "e", "x", "k", "c",
             ])
         #expect(Tool(key: "K") == .crop)
         #expect(Tool(key: "P") == .path)

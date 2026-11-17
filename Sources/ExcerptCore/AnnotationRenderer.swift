@@ -101,6 +101,28 @@ public enum AnnotationRenderer {
                     numbers[annotation.id] ?? 0, at: flip.point(map.point(center)),
                     diameter: AnnotationGeometry.stepDiameter(annotation, scale: scale),
                     fill: color, ink: annotation.color.contrastingInk.cgColor, in: context)
+            case .click(let tip):
+                let height = AnnotationGeometry.clickHeight(annotation, scale: scale)
+                let marker = AnnotationGeometry.clickMarker(tip: map.point(tip), height: height)
+                let line = AnnotationGeometry.clickLineWidth(height: height)
+                let pointer = CGMutablePath()
+                pointer.addLines(between: marker.pointer.map(flip.point))
+                pointer.closeSubpath()
+                let lines = marker.lines.flatMap { [flip.point($0.0), flip.point($0.1)] }
+                context.setLineCap(.round)
+                context.setLineJoin(.round)
+                // White under everything, so the marker reads on any ground.
+                context.setStrokeColor(CGColor(gray: 1, alpha: 1))
+                context.setLineWidth(line * 2)
+                context.strokeLineSegments(between: lines)
+                context.addPath(pointer)
+                context.strokePath()
+                context.setStrokeColor(color)
+                context.setLineWidth(line)
+                context.strokeLineSegments(between: lines)
+                context.setFillColor(color)
+                context.addPath(pointer)
+                context.fillPath()
             case .path(let points, let closed, let fill):
                 let path = CGMutablePath()
                 path.addLines(between: points.map { flip.point(map.point($0)) })

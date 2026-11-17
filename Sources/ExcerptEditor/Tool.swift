@@ -9,6 +9,7 @@ public enum Tool: CaseIterable {
     case path
     case text
     case step
+    case click
     case highlight
     case blur
     case patch
@@ -25,6 +26,7 @@ public enum Tool: CaseIterable {
         case .path: "p"
         case .text: "t"
         case .step: "n"
+        case .click: "m"
         case .highlight: "h"
         case .blur: "b"
         case .patch: "e"
@@ -43,6 +45,7 @@ public enum Tool: CaseIterable {
         case .path: "Path"
         case .text: "Text"
         case .step: "Step"
+        case .click: "Click"
         case .highlight: "Highlight"
         case .blur: "Blur"
         case .patch: "Patch"
@@ -63,6 +66,7 @@ public enum Tool: CaseIterable {
         case .path: "scribble.variable"
         case .text: "textformat"
         case .step: "1.circle"
+        case .click: "cursorarrow.click"
         case .highlight: nil
         case .blur: "square.grid.3x3.fill"
         case .patch: "square.fill"
@@ -87,7 +91,7 @@ extension Tool {
         case (.arrow, .arrow), (.rectangle, .rectangle), (.ellipse, .ellipse), (.path, .path),
             (.text, .text),
             (.highlight, .highlight),
-            (.blur, .blur), (.patch, .patch), (.step, .step):
+            (.blur, .blur), (.patch, .patch), (.step, .step), (.click, .click):
             true
         default: false
         }

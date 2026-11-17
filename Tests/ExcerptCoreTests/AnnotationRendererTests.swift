@@ -142,6 +142,41 @@ import Testing
         try Golden.check(Renderer.render(image, edits: edits).image, named: "render-annotations")
     }
 
+    @Test func ellipsesAndClickMarkersGolden() throws {
+        let image = Fixtures.sheet(width: 600, height: 400)
+        let edits = EditDocument(
+            scale: 2,
+            annotations: [
+                Annotation(
+                    id: 1, shape: .ellipse(rect: CGRect(x: 60, y: 60, width: 240, height: 120)),
+                    color: .palette(.red), width: .thin),
+                Annotation(
+                    id: 2, shape: .ellipse(rect: CGRect(x: 380, y: 40, width: 140, height: 140)),
+                    color: .palette(.blue)),
+                Annotation(
+                    id: 3, shape: .click(tip: CGPoint(x: 180, y: 120)), color: .palette(.red)),
+                Annotation(
+                    id: 4, shape: .click(tip: CGPoint(x: 120, y: 280)), color: .palette(.yellow),
+                    width: .thick),
+                Annotation(
+                    id: 5, shape: .click(tip: CGPoint(x: 400, y: 300)), color: .palette(.green),
+                    width: .thin),
+            ])
+        try Golden.check(Renderer.render(image, edits: edits).image, named: "render-click-ellipse")
+    }
+
+    @Test func aClickMarkerFillsItsPointerBelowAndRightOfItsTip() {
+        let tip = CGPoint(x: 300, y: 300)
+        let marker = Annotation(id: 1, shape: .click(tip: tip), color: .palette(.blue))
+        let edits = EditDocument(scale: 1, annotations: [marker])
+        let out = PixelBuffer(Renderer.render(sheet, edits: edits).image)
+        let height = AnnotationGeometry.clickHeight(marker, scale: 1)
+        #expect(out[x: 300 + Int(height * 0.2), y: 300 + Int(height * 0.5)] == Palette.blue.rgba)
+        #expect(out[x: 300 - Int(height * 0.25), y: 300] == Palette.blue.rgba)  // a click ray
+        let clear = (x: 300 + Int(height * 0.6), y: 300 + Int(height * 0.3))
+        #expect(out[x: clear.x, y: clear.y] == PixelBuffer(sheet)[x: clear.x, y: clear.y])
+    }
+
     @Test func renderOrderGolden() throws {
         // Blur from original pixels, then the crop, then a cut with its seam, then annotations:
         // an arrow across the seam, a rectangle partly inside the cut, and a note wholly inside

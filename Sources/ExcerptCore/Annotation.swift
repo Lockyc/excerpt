@@ -58,6 +58,9 @@ public enum StrokeWidth: String, Codable, CaseIterable, Sendable {
         }
     }
 
+    /// Click marker height, tip to tail, in points.
+    public var clickPoints: Double { stepPoints * 1.25 }
+
     /// Step circle diameter in points.
     public var stepPoints: Double {
         switch self {
@@ -87,6 +90,8 @@ public enum Shape: Codable, Equatable, Sendable {
     /// A numbered circle. The number is not stored: it is the step's rank among the document's
     /// steps (`AnnotationGeometry.stepNumbers`).
     case step(center: CGPoint)
+    /// A mouse pointer with click lines beside its tip, the tip at `tip`: "click here".
+    case click(tip: CGPoint)
     /// A polyline through `points`, or a polygon when `closed`. `fill` tints a closed path's
     /// inside as a highlight does; an open path keeps it but doesn't draw it.
     case path(points: [CGPoint], closed: Bool, fill: Bool)
@@ -108,6 +113,7 @@ public enum Shape: Codable, Equatable, Sendable {
         case .blur(let rect): return .blur(rect: move(rect))
         case .patch(let rect, let autoColor): return .patch(rect: move(rect), autoColor: autoColor)
         case .step(let center): return .step(center: move(center))
+        case .click(let tip): return .click(tip: move(tip))
         case .path(let points, let closed, let fill):
             return .path(points: points.map { move($0) }, closed: closed, fill: fill)
         }
@@ -146,6 +152,14 @@ public enum Shape: Codable, Equatable, Sendable {
     public var isStep: Bool {
         if case .step = self { return true }
         return false
+    }
+
+    /// A step or a click: placed by a click, sized by the markers' own size.
+    public var isMarker: Bool {
+        switch self {
+        case .step, .click: true
+        default: false
+        }
     }
 }
 

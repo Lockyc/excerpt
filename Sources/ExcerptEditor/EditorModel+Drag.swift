@@ -101,7 +101,7 @@ extension EditorModel {
             ).map(Grab.annotation)
         case .path, .arrow:
             return vertexHandle(at: p, map: map, option: option) ?? ownAnnotation(at: p, map: map)
-        case .rectangle, .ellipse, .highlight, .step, .blur, .patch:
+        case .rectangle, .ellipse, .highlight, .step, .click, .blur, .patch:
             return ownAnnotation(at: p, map: map)
         case .crop:
             guard let crop = document.crop, let rect = map.rect(crop.cgRect) else { return nil }
@@ -200,14 +200,15 @@ extension EditorModel {
             case .blur, .crop, .patch, .replace:
                 selection = nil
                 setDrag(.region(start: p.original))
-            case .step:
+            case .step, .click:
                 let before = document
                 let id = document.nextAnnotationID
                 var next = document
                 next.annotations.append(
                     Annotation(
-                        id: id, shape: .step(center: p.original), color: style.color,
-                        width: style.stepWidth))
+                        id: id,
+                        shape: tool == .step ? .step(center: p.original) : .click(tip: p.original),
+                        color: style.color, width: style.markerWidth))
                 preview(next)
                 selection = .annotation(id)
                 // Placed on press; a drag before release moves it, and release records one step.
@@ -483,7 +484,7 @@ extension EditorModel {
         case .rectangle(let rect), .ellipse(let rect), .highlight(let rect), .blur(let rect),
             .patch(let rect, _):
             return Double(max(rect.width, rect.height)) < minimumDrag
-        case .text, .step, .path:
+        case .text, .step, .click, .path:
             return false
         }
     }

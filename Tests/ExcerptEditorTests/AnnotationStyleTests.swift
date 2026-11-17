@@ -16,6 +16,6 @@ import Testing
         let json = Data(#"{"color":"blue","width":"thick","background":false}"#.utf8)
         let style = try JSONDecoder().decode(AnnotationStyle.self, from: json)
         #expect(style.color == .palette(.blue) && style.width == .thick && !style.background)
-        #expect(style.stepWidth == AnnotationStyle.initial.stepWidth)
+        #expect(style.markerWidth == AnnotationStyle.initial.markerWidth)
     }
 }

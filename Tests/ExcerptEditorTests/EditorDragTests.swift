@@ -296,13 +296,27 @@ import Testing
         m.setWidth(.thick)
         m.tool = .step
         drag(m, CGPoint(x: 200, y: 200), CGPoint(x: 200, y: 200))
-        #expect(m.document.annotations.last!.width == AnnotationStyle.initial.stepWidth)
+        #expect(m.document.annotations.last!.width == AnnotationStyle.initial.markerWidth)
         m.setWidth(.thin)
         #expect(m.document.annotations.map(\.width) == [.thick, .thin])
-        #expect(m.style.width == .thick && m.style.stepWidth == .thin)
+        #expect(m.style.width == .thick && m.style.markerWidth == .thin)
         m.tool = .rectangle
         drag(m, CGPoint(x: 20, y: 150), CGPoint(x: 120, y: 190))
         #expect(m.document.annotations.last!.width == .thick)
+    }
+
+    @Test func theClickToolPlacesAMarkerSizedAsStepsAre() {
+        let m = model()
+        m.tool = .step
+        drag(m, CGPoint(x: 200, y: 200), CGPoint(x: 200, y: 200))
+        m.setWidth(.thick)
+        m.tool = .click
+        drag(m, CGPoint(x: 100, y: 100), CGPoint(x: 120, y: 110))
+        #expect(m.document.annotations.last?.shape == .click(tip: CGPoint(x: 120, y: 110)))
+        #expect(m.document.annotations.last?.width == .thick)
+        #expect(m.selection == .annotation(2))
+        m.undo()  // placing and dragging it was one step
+        #expect(m.document.annotations.count == 1)
     }
 
     @Test func aNewBlurIsSelected() {

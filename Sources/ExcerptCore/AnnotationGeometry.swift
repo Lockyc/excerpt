@@ -85,6 +85,33 @@ public enum AnnotationGeometry {
         annotation.width.stepPoints * scale
     }
 
+    /// A click marker `height` pixels tall with its tip at `tip`, y down: the pointer's outline,
+    /// its point on `tip`, and five short rays around the tip on the sides the pointer leaves
+    /// clear. The renderer fills the outline in the colour ringed in white and strokes the rays
+    /// `clickLineWidth(height:)` wide.
+    public static func clickMarker(tip: CGPoint, height: Double)
+        -> (pointer: [CGPoint], lines: [(CGPoint, CGPoint)])
+    {
+        func at(_ x: Double, _ y: Double) -> CGPoint {
+            CGPoint(x: Double(tip.x) + x * height, y: Double(tip.y) + y * height)
+        }
+        let pointer = [
+            (0, 0), (0, 0.78), (0.2, 0.6), (0.33, 0.9), (0.45, 0.85), (0.32, 0.55), (0.56, 0.55),
+        ].map { at($0.0, $0.1) }
+        // Down-left, left, up-left, up, up-right.
+        let lines = [135.0, 180, 225, 270, 315].map { degrees -> (CGPoint, CGPoint) in
+            let a = degrees * .pi / 180
+            return (at(0.17 * cos(a), 0.17 * sin(a)), at(0.34 * cos(a), 0.34 * sin(a)))
+        }
+        return (pointer, lines)
+    }
+
+    public static func clickLineWidth(height: Double) -> Double { height * 0.07 }
+
+    public static func clickHeight(_ annotation: Annotation, scale: Double) -> Double {
+        annotation.width.clickPoints * scale
+    }
+
     /// Each step's number by id: `first` plus its rank among the steps in annotation order.
     public static func stepNumbers(_ annotations: [Annotation], first: Int = 1) -> [Int: Int] {
         var numbers: [Int: Int] = [:]
@@ -126,6 +153,12 @@ public enum AnnotationGeometry {
                 x: Double(center.x) - r, y: Double(center.y) - r, width: 2 * r, height: 2 * r)
         case .path(let points, _, _):
             return extent(of: points).insetBy(dx: -w / 2, dy: -w / 2)
+        case .click(let tip):
+            let height = clickHeight(annotation, scale: scale)
+            let marker = clickMarker(tip: tip, height: height)
+            let ends = marker.pointer + marker.lines.flatMap { [$0.0, $0.1] }
+            let pad = clickLineWidth(height: height)
+            return extent(of: ends).insetBy(dx: -pad, dy: -pad)
         }
     }
 
@@ -165,7 +198,7 @@ public enum AnnotationGeometry {
         case .path(let points, _, _):
             // Decided on the unstroked extent, as the arrow is.
             return !map.isHidden(extent(of: points))
-        case .text, .step:
+        case .text, .step, .click:
             return true
         }
     }

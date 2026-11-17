@@ -74,6 +74,7 @@ Input Monitoring in System Settings → Privacy & Security. Your captures stay w
   | Path | P | Click or freehand lines and outlines, optionally filled |
   | Text | T | Plain or on a background of its colour, any size, bold, Sans, Mono or Serif; placed on the capture's own text, it matches that text's size, weight, font and colour |
   | Step | N | Numbered markers that carry on across captures edited together, sized apart from the other tools |
+  | Click | M | A mouse pointer marking where to click, sized with the steps |
   | Highlight | H | A translucent highlight over a region |
   | Blur | B | Blurs a region |
   | Patch | E | Conceals text with the colour around it |
