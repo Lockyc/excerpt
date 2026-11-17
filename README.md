@@ -61,7 +61,7 @@ Input Monitoring in System Settings → Privacy & Security. Your captures stay w
   days move into `YYYY/MM-Month/` folders, names unchanged. Both are settings.
 - **Scrolling capture** stitches as you go; your own scrolling takes over from auto-scroll at any
   point. Click a window instead of drawing an area to capture that window whole, its title bar
-  and edges once, on the window backdrop.
+  and edges once, on the window backdrop when that's on.
 - **The editor** keeps the original and your edits in a separate `… original.png`, so a capture
   reopened from Recent Captures is still editable. Cut and blurred content never reaches the
   saved file. **Save** (⌘S) saves, copies the image and closes.
