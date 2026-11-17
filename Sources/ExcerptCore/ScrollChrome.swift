@@ -7,9 +7,10 @@ public struct ScrollChrome: Equatable, Sendable {
     /// Rows at the bottom that are footer at least, whatever the frames share there.
     public var fixedBottom: Int
     /// The right-edge scroll-bar strip (`StitchMatcher.ignoredRightColumns`) takes each column's
-    /// commonest colour in appended rows, as a side panel does: a window's scroll bar is its own,
-    /// so its thumb shows once, from the first frame. An area's strip is copied, since page
-    /// content may reach the area's edge.
+    /// commonest colour in appended rows, as a side panel does, so a window's scroll-bar thumb
+    /// shows once, from the first frame. Page content that runs under the strip, as full-bleed
+    /// content does to a window's edge, is flattened with it: the trade for one thumb. An area's
+    /// strip is copied, thumb and all.
     public var fillsScrollBar: Bool
 
     public init(fixedTop: Int, fixedBottom: Int, fillsScrollBar: Bool) {

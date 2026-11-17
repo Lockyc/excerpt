@@ -238,7 +238,9 @@ span, or several on the same rows, halts the capture; a sticky header with a cha
 the page's flow; the stream excludes only excerpt's windows, so desktop icons under the region
 appear in it; the matcher ignores the right-edge scroll-bar strip but an area's stitch copies it (page
 content can reach the edge), so an overlay scroll bar's thumb can appear along the right edge (select the region
-without the scroll bar to avoid it).
+without the scroll bar to avoid it); a window's stitch fills the strip instead, so full-bleed
+page content in its right `StitchMatcher.scrollBarPoints` shows as a flat colour in appended
+rows.
 
 Permissions are requested on first use, per feature: Screen Recording for any capture,
 Accessibility for auto-scroll only, Input Monitoring for a recording's shortcuts only (asked once
