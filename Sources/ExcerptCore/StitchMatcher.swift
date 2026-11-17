@@ -6,9 +6,9 @@ public enum FrameMatch: Equatable, Sendable {
     case still
     /// The content in `columns` (the scrolling band) moved up by `offset` rows; `header` rows at
     /// the top and `footer` rows at the bottom of the band are the same in both frames, or covered
-    /// by something that stays in place over the page there (`StitchMatcher.overlayRows`). Columns
-    /// outside the band didn't scroll with it: margins, or side panels fixed in place or moving
-    /// by another amount.
+    /// by something that stays in place over the page there (`StitchMatcher.headOverlayRows`,
+    /// `StitchMatcher.overlayRows`). Columns outside the band didn't scroll with it: margins, or
+    /// side panels fixed in place or moving by another amount.
     case moved(offset: Int, header: Int, footer: Int, columns: Range<Int>)
     /// No offset is convincing: the content changed as it moved (video, animation), more than a
     /// frame's height went past, or the frame shows something else.
@@ -181,7 +181,8 @@ public enum StitchMatcher {
         let runnerUp: Double
         let uniqueA: [Bool]
         let uniqueB: [Bool]
-        /// Scored with an overlay limit: `footer` includes the rows the best offset left out.
+        /// Scored with an overlay limit: `header` and `footer` include the rows the best offset
+        /// left out.
         var overlaid = false
 
         /// The best offset clears the confidence threshold, clearly ahead of the others.
@@ -194,8 +195,10 @@ public enum StitchMatcher {
 
     /// `header`, when given, is taken as the sticky rows at the top instead of the rows the two
     /// frames share there. With an `overlayLimit`, each offset may leave out up to that many rows
-    /// at its overlap's end (`overlayRows`), and they join the footer. `chrome`'s fixed rows are
-    /// the least header and footer, however much of them the frames share.
+    /// at its overlap's start that are `tinted` in both frames from the header down
+    /// (`headOverlayRows`), which join the header, and up to that many at its end
+    /// (`overlayRows`), which join the footer. `chrome`'s fixed rows are the least header and
+    /// footer, however much of them the frames share.
     ///
     /// Evidence is unique rows; when they convince no offset, unique runs of rows, the run
     /// doubling up to `longestRunShare` of the content. A list whose every line recurs (each name
@@ -205,7 +208,7 @@ public enum StitchMatcher {
     /// convinces.
     static func candidate(
         _ a: RowSignatures, _ b: RowSignatures, height: Int, header given: Int? = nil,
-        overlayLimit: Int = 0, chrome: ScrollChrome = .none
+        overlayLimit: Int = 0, tinted: [Bool] = [], chrome: ScrollChrome = .none
     ) -> Candidate {
         var header = given ?? 0
         if given == nil {
@@ -219,8 +222,15 @@ public enum StitchMatcher {
             footer += 1
         }
         footer = min(max(footer, chrome.fixedBottom), height - header)
+        var headLimit = 0
+        while headLimit < overlayLimit && header + headLimit < height - footer
+            && header + headLimit < tinted.count && tinted[header + headLimit]
+        {
+            headLimit += 1
+        }
         let rows = scored(
-            a, b, header: header, footer: footer, run: 1, overlayLimit: overlayLimit)
+            a, b, header: header, footer: footer, run: 1, overlayLimit: overlayLimit,
+            headLimit: headLimit)
         guard !rows.convincing else { return rows }
         let longest = Int(Double(height - header - footer) * longestRunShare)
         var runA = a
@@ -231,7 +241,8 @@ public enum StitchMatcher {
             runB = runB.doubled(from: run)
             run *= 2
             let runs = scored(
-                runA, runB, header: header, footer: footer, run: run, overlayLimit: overlayLimit)
+                runA, runB, header: header, footer: footer, run: run, overlayLimit: overlayLimit,
+                headLimit: headLimit)
             if runs.convincing { return runs }
         }
         return rows
@@ -241,24 +252,28 @@ public enum StitchMatcher {
     /// signatures.
     private static func scored(
         _ a: RowSignatures, _ b: RowSignatures, header: Int, footer: Int, run: Int,
-        overlayLimit: Int
+        overlayLimit: Int, headLimit: Int
     ) -> Candidate {
         let content = a.hashes.count - header - footer
         let contentRows = header..<(header + content)
         let uniqueA = uniqueRows(a, in: contentRows, run: run)
         let uniqueB = uniqueRows(b, in: contentRows, run: run)
         var best: (offset: Int, score: Double)?
+        var bestHead = 0
         var bestOverlay = 0
         var runnerUp = -1.0
         if content > 1 {
             for offset in 1..<content {
-                let overlay = overlayRows(
+                let head = headOverlayRows(
                     a, b, start: header, offset: offset, count: content - offset,
+                    limit: headLimit, uniqueA: uniqueA, uniqueB: uniqueB)
+                let overlay = overlayRows(
+                    a, b, start: header + head, offset: offset, count: content - offset - head,
                     limit: overlayLimit, uniqueA: uniqueA, uniqueB: uniqueB)
                 guard
                     let s = score(
-                        a, b, previousStart: header + offset, nextStart: header,
-                        count: content - offset - overlay, previousUnique: uniqueA,
+                        a, b, previousStart: header + head + offset, nextStart: header + head,
+                        count: content - offset - head - overlay, previousUnique: uniqueA,
                         nextUnique: uniqueB)
                 else { continue }
                 if let current = best, s <= current.score {
@@ -266,13 +281,14 @@ public enum StitchMatcher {
                 } else {
                     runnerUp = max(runnerUp, best?.score ?? -1)
                     best = (offset, s)
+                    bestHead = head
                     bestOverlay = overlay
                 }
             }
         }
         return Candidate(
-            header: header, footer: footer + bestOverlay, best: best, runnerUp: runnerUp,
-            uniqueA: uniqueA, uniqueB: uniqueB, overlaid: overlayLimit > 0)
+            header: header + bestHead, footer: footer + bestOverlay, best: best,
+            runnerUp: runnerUp, uniqueA: uniqueA, uniqueB: uniqueB, overlaid: overlayLimit > 0)
     }
 
     /// The rows at the end of an offset's overlap, above the footer, that it doesn't explain:
@@ -288,6 +304,23 @@ public enum StitchMatcher {
             let p = start + offset + i
             let n = start + i
             if uniqueA[p] && uniqueB[n] && a.hashes[p] != b.hashes[n] { return count - i }
+        }
+        return 0
+    }
+
+    /// The rows at the start of an offset's overlap, below the header, that it doesn't explain:
+    /// `a`'s top rows where something that stays in place (a translucent toolbar the page scrolls
+    /// under) changes with the page beneath it. Down to the lowest evidence pair that differs among
+    /// the first `limit` rows, since the toolbar's blurred edge may fade out short of the limit;
+    /// 0 when none differs.
+    static func headOverlayRows(
+        _ a: RowSignatures, _ b: RowSignatures, start: Int, offset: Int, count: Int, limit: Int,
+        uniqueA: [Bool], uniqueB: [Bool]
+    ) -> Int {
+        for i in (0..<max(0, min(limit, count))).reversed() {
+            let p = start + offset + i
+            let n = start + i
+            if uniqueA[p] && uniqueB[n] && a.hashes[p] != b.hashes[n] { return i + 1 }
         }
         return 0
     }
@@ -314,11 +347,32 @@ public enum StitchMatcher {
             runs.sorted { ($0.end, -$0.shift) > ($1.end, -$1.shift) }.prefix(pinnedCandidates))
     }
 
+    /// Which rows show no pixel of `previous`'s background (`background`) in `columns` of either
+    /// frame: a toolbar's material tints the page it floats over, so none of its rows shows the
+    /// page's own background, where a row of the page itself does.
+    static func tintedRows(_ previous: PixelBuffer, _ next: PixelBuffer, columns: Range<Int>)
+        -> [Bool]
+    {
+        guard let background = background(previous) else {
+            return [Bool](repeating: false, count: previous.height)
+        }
+        func shows(_ frame: PixelBuffer, _ y: Int) -> Bool {
+            frame.bytes.withUnsafeBytes { raw in
+                columns.contains {
+                    raw.loadUnaligned(fromByteOffset: (y * frame.width + $0) * 4, as: UInt32.self)
+                        == background
+                }
+            }
+        }
+        return (0..<previous.height).map { !shows(previous, $0) && !shows(next, $0) }
+    }
+
     /// `c` as a move over `columns`, when it convinces, if need be `rescored`, and no row
     /// contradicts it; failing that, scored again with something that stays in place over the
-    /// page's bottom (a floating button, a composer, a footer's shadow) left out, since its rows
-    /// lower the score or, spanning the width, contradict the move. `a` and `b` are the frames'
-    /// signatures over `columns`, which `c` was scored from.
+    /// page left out (a floating button, a composer, a footer's shadow over its bottom; a
+    /// translucent toolbar over its top), since its rows lower the score or, spanning the width,
+    /// contradict the move. `a` and `b` are the frames' signatures over `columns`, which `c` was
+    /// scored from.
     static func believed(
         _ c: Candidate, _ previous: PixelBuffer, _ next: PixelBuffer, columns: Range<Int>,
         a: RowSignatures, b: RowSignatures, chrome: ScrollChrome = .none
@@ -327,7 +381,8 @@ public enum StitchMatcher {
         if !c.overlaid {
             let overlaid = candidate(
                 a, b, height: previous.height, header: c.header,
-                overlayLimit: Int(Double(previous.height) * maximumOverlayShare), chrome: chrome)
+                overlayLimit: Int(Double(previous.height) * maximumOverlayShare),
+                tinted: tintedRows(previous, next, columns: columns), chrome: chrome)
             if let moved = verified(overlaid, previous, next, columns: columns, a: a, b: b) {
                 return moved
             }

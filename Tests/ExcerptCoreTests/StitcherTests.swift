@@ -173,6 +173,25 @@ import Testing
         #expect(stitcher.image == ScrollFixtures.stack([ScrollFixtures.rows(page, 0..<720), last]))
     }
 
+    @Test func aToolbarThePageScrollsUnderShowsOnceFromTheFirstFrame() {
+        // A translucent 30-row toolbar: the page under it shows through at half brightness.
+        func tinted(_ frame: PixelBuffer) -> PixelBuffer {
+            ScrollFixtures.paint(width: 90, height: 200) { x, y in
+                let c = frame[x: x, y: y]
+                guard y < 30 else { return c }
+                return RGBA(r: c.r / 2, g: c.g / 2, b: c.b / 2, a: c.a)
+            }
+        }
+        let page = ScrollFixtures.page(width: 90, height: 920)
+        let (stitcher, _) = scrollDressed(page, tinted)
+        let firstDressed = tinted(ScrollFixtures.frame(page, offset: 0, viewport: 200))
+        #expect(
+            stitcher.image
+                == ScrollFixtures.stack([
+                    ScrollFixtures.rows(firstDressed, 0..<30), ScrollFixtures.rows(page, 30..<920),
+                ]))
+    }
+
     @Test func aLongFormWithRepeatingFieldsStitches() {
         let form = ScrollFixtures.form(width: 90, height: 1000)
         let (stitcher, _) = scroll(form, viewport: 200, step: 120)

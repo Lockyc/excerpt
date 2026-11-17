@@ -214,8 +214,10 @@ capture follows the window itself rather than the screen:
 - **A toolbar the page scrolls under** (a translucent toolbar with a blurred scroll edge, as
   most macOS 26 windows have) changes with every step, so its rows are not equal between
   frames. Rows at the top of the overlap that the best offset doesn't explain, up to
-  `StitchMatcher.maximumOverlayShare` of the height, join the header, as rows over the page's
-  bottom join the footer; the header comes from the first frame. This holds for areas too.
+  `StitchMatcher.maximumOverlayShare` of the height and within the run of rows neither frame
+  shows the page's background on (`StitchMatcher.tintedRows`), join the header, as rows over
+  the page's bottom join the footer; the header comes from the first frame. This holds for
+  areas too.
 - The right-edge scroll-bar strip, `StitchMatcher.ignoredRightColumns` wide, takes each
   column's commonest colour in appended rows, as a side panel does, so the thumb shows once,
   from the first frame, instead of once per join.

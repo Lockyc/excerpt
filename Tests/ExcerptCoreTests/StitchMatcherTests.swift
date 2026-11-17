@@ -487,6 +487,26 @@ import Testing
         #expect(StitchMatcher.match(a, b, ignoringRightColumns: 0) == .uncertain)
     }
 
+    @Test func headOverlayRowsFindTheLowestDifferingPair() {
+        // 40 rows, all unique; the overlap starts at row 5, `a` 10 rows lower than `b`.
+        let hashes = (0..<40).map { UInt64($0 + 1) }
+        let a = RowSignatures(hashes: hashes, uniform: Array(repeating: false, count: 40))
+        let unique = Array(repeating: true, count: 40)
+        func shifted(differing: Set<Int>) -> RowSignatures {
+            // `b`'s row n is `a`'s row n + 10, except the overlap's pairs in `differing`.
+            let b = (0..<40).map { n -> UInt64 in
+                differing.contains(n - 5) ? 1000 + UInt64(n) : n + 10 < 40 ? hashes[n + 10] : 0
+            }
+            return RowSignatures(hashes: b, uniform: Array(repeating: false, count: 40))
+        }
+        func head(_ b: RowSignatures) -> Int {
+            StitchMatcher.headOverlayRows(
+                a, b, start: 5, offset: 10, count: 25, limit: 10, uniqueA: unique, uniqueB: unique)
+        }
+        #expect(head(shifted(differing: [0, 3, 7])) == 8)
+        #expect(head(shifted(differing: [])) == 0)
+    }
+
     @Test func anAnimationAtThePagesEdgeIsUncertainNotABand() {
         // A video over the page's right 40 columns: the rest moves as one and is over a third
         // of the width, but the video's columns neither move with it nor by any offset of
