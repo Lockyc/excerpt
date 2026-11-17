@@ -195,6 +195,27 @@ holding one.
    way a scrolling capture fails to start or ends early is said in its HUD, with one OK, never in
    an alert.
 
+**A scrolling window.** In scrolling mode the window under the pointer is hover-highlighted as in
+Window mode; a click with no drag selects it, as its area, and a drag draws an area as before.
+Started (`Return`, Start, or a scroll over it) with that selection unmoved and unresized, the
+capture follows the window itself rather than the screen:
+
+- The window is brought to the front first, so Excerpt's scroll events, posted at the pointer,
+  reach it.
+- The stream holds the window alone (`SCContentFilter(desktopIndependentWindow:)`, no shadow,
+  at its display's scale): nothing behind its rounded corners, and nothing passing over it.
+- **The window's shape is fixed chrome.** Rows from the top or bottom that hold any pixel the
+  window doesn't cover (its rounded corners) are sticky at least: the header from the first
+  frame, the footer from the last, however the page moves between their corners. The stitch
+  is the window's title bar and toolbar once, the page, and its bottom edge once.
+- The right-edge scroll-bar strip, `StitchMatcher.ignoredRightColumns` wide, takes each
+  column's commonest colour in appended rows, as a side panel does, so the thumb shows once,
+  from the first frame, instead of once per join.
+- Saved like a window capture: on the window backdrop when that setting is on, the shadow
+  following the window's shape.
+- The window moving or resizing ends the capture with what is stitched, said in the HUD, as a
+  display change does.
+
 Known limits: a run of content identical except a narrow patch, flung past in manual mode, can
 stitch at a wrong offset (auto mode checks each step's travel); a final short step that aliases
 can be believed when the page ends next or Done comes first; any animation wider than a quarter of the scrolled
