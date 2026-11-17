@@ -40,7 +40,7 @@ public enum ScrollCaptureError: Error, Equatable, LocalizedError {
 
     public var errorDescription: String? {
         switch self {
-        case .windowChanged: "The window moved or changed size."
+        case .windowChanged: "The window moved, changed size or closed."
         case .noFrames: "The screen sent no picture of the region."
         case .displayGone: "The display the region was on is no longer connected."
         case .displayChanged: "The displays changed during the capture."

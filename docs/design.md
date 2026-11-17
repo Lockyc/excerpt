@@ -224,7 +224,7 @@ capture follows the window itself rather than the screen:
   from the first frame, instead of once per join.
 - Saved like a window capture: on the window backdrop when that setting is on, the shadow
   following the window's shape.
-- The window moving, resizing or closing ends the capture with what is stitched, said in the
+- The window moving, resizing, closing or leaving the screen ends the capture with what is stitched, said in the
   HUD, as a display change does.
 - The next scrolling capture reopens on that window, at its current frame, as a window
   selection; on its last area when the window has closed or is off every screen.

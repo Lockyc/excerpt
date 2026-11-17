@@ -453,7 +453,7 @@ final class CaptureCoordinator {
     /// kept for the next scrolling capture to open on. A capture the user started by scrolling
     /// keeps `overlay` up until its first frame. With `window`, wholly on the still's display,
     /// it follows that window: brought to the front, streamed alone, its shape fixed as chrome,
-    /// ended when it moves or resizes, and saved on the window backdrop. A window that isn't
+    /// ended by its moving, resizing or closing, and saved on the window backdrop. A window that isn't
     /// wholly on that display is captured as the area it covers.
     private func captureScrolling(
         still: DisplayStill, pixelRect: CGRect, start: ScrollStart, overlay: SelectionOverlay,

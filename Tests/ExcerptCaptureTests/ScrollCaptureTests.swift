@@ -449,7 +449,7 @@ final class AnimatedPage: FrameSource, Scroller {
     @Test func aWindowChangeSaysSo() {
         #expect(
             ScrollCaptureError.windowChanged.localizedDescription
-                == "The window moved or changed size.")
+                == "The window moved, changed size or closed.")
     }
 
     @Test func escBeforeTheFirstFrameCancels() async {
