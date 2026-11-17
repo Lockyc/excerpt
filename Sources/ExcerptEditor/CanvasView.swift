@@ -432,16 +432,24 @@ final class CanvasView: NSView, NSTextViewDelegate {
             var segments: [CGPoint] = []
             let full = CGRect(origin: .zero, size: pictureSize)
             if guides.contains(.left) {
-                segments += [CGPoint(x: rect.minX, y: full.minY), CGPoint(x: rect.minX, y: full.maxY)]
+                segments += [
+                    CGPoint(x: rect.minX, y: full.minY), CGPoint(x: rect.minX, y: full.maxY),
+                ]
             }
             if guides.contains(.right) {
-                segments += [CGPoint(x: rect.maxX, y: full.minY), CGPoint(x: rect.maxX, y: full.maxY)]
+                segments += [
+                    CGPoint(x: rect.maxX, y: full.minY), CGPoint(x: rect.maxX, y: full.maxY),
+                ]
             }
             if guides.contains(.top) {
-                segments += [CGPoint(x: full.minX, y: rect.minY), CGPoint(x: full.maxX, y: rect.minY)]
+                segments += [
+                    CGPoint(x: full.minX, y: rect.minY), CGPoint(x: full.maxX, y: rect.minY),
+                ]
             }
             if guides.contains(.bottom) {
-                segments += [CGPoint(x: full.minX, y: rect.maxY), CGPoint(x: full.maxX, y: rect.maxY)]
+                segments += [
+                    CGPoint(x: full.minX, y: rect.maxY), CGPoint(x: full.maxX, y: rect.maxY),
+                ]
             }
             context.setStrokeColor(Self.accent)
             context.setLineDash(phase: 0, lengths: [4 * line, 3 * line])

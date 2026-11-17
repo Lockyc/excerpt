@@ -42,7 +42,8 @@ import Testing
         let doc = EditDocument(
             scale: 2,
             annotations: [
-                Annotation(id: 1, shape: .ellipse(rect: CGRect(x: 10, y: 20, width: 80, height: 40)))
+                Annotation(
+                    id: 1, shape: .ellipse(rect: CGRect(x: 10, y: 20, width: 80, height: 40)))
             ])
         #expect(try EditDocument.decode(doc.encoded()) == doc)
     }

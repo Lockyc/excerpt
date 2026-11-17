@@ -27,7 +27,9 @@ public enum EdgeSnapper {
 
     /// Whether the boundary before line `boundary` steps along at least `share` of `span`,
     /// clipped to the buffer; false at the buffer's own edges and for a span that misses it.
-    public static func isEdge(at boundary: Int, axis: Axis, in buffer: PixelBuffer, span: Range<Int>)
+    public static func isEdge(
+        at boundary: Int, axis: Axis, in buffer: PixelBuffer, span: Range<Int>
+    )
         -> Bool
     {
         let extent = axis == .horizontal ? buffer.height : buffer.width
@@ -38,7 +40,8 @@ public enum EdgeSnapper {
         guard lower < upper else { return false }
         var steps = 0
         for i in lower..<upper {
-            let a = axis == .horizontal ? buffer[x: i, y: boundary - 1] : buffer[x: boundary - 1, y: i]
+            let a =
+                axis == .horizontal ? buffer[x: i, y: boundary - 1] : buffer[x: boundary - 1, y: i]
             let b = axis == .horizontal ? buffer[x: i, y: boundary] : buffer[x: boundary, y: i]
             if abs(Int(a.r) - Int(b.r)) > step || abs(Int(a.g) - Int(b.g)) > step
                 || abs(Int(a.b) - Int(b.b)) > step
