@@ -159,7 +159,8 @@ holding one.
    from the last. A bar from the page that pins under the header during a move joins the header;
    something over the page's bottom that stays in place (a floating button, a composer, a fade
    or shadow above the footer), up to `StitchMatcher.maximumOverlayShare` of the height, joins
-   the footer. A **hover overlay** — a chat message's reaction toolbar, which follows the
+   the footer, provided each row it leaves out differs as something over the page does
+   (`StitchMatcher.overlaysInPlace`). A **hover overlay** — a chat message's reaction toolbar, which follows the
    message under the pointer, so it leaves one and appears on another as the page moves — is
    left out of a move's evidence when its rows differ in one span of at most
    `StitchMatcher.hoverWidthShare` of the width, in at most `StitchMatcher.hoverRuns` runs; the

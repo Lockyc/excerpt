@@ -184,6 +184,11 @@ public enum StitchMatcher {
         /// Scored with an overlay limit: `header` and `footer` include the rows the best offset
         /// left out.
         var overlaid = false
+        /// Of `header`, the rows the best offset left out at its overlap's start
+        /// (`headOverlayRows`).
+        var headOverlay = 0
+        /// Of `footer`, the rows the best offset left out at its overlap's end (`overlayRows`).
+        var footOverlay = 0
 
         /// The best offset clears the confidence threshold, clearly ahead of the others.
         var convincing: Bool {
@@ -288,7 +293,8 @@ public enum StitchMatcher {
         }
         return Candidate(
             header: header + bestHead, footer: footer + bestOverlay, best: best,
-            runnerUp: runnerUp, uniqueA: uniqueA, uniqueB: uniqueB, overlaid: overlayLimit > 0)
+            runnerUp: runnerUp, uniqueA: uniqueA, uniqueB: uniqueB, overlaid: overlayLimit > 0,
+            headOverlay: bestHead, footOverlay: bestOverlay)
     }
 
     /// The rows at the end of an offset's overlap, above the footer, that it doesn't explain:
@@ -383,11 +389,49 @@ public enum StitchMatcher {
                 a, b, height: previous.height, header: c.header,
                 overlayLimit: Int(Double(previous.height) * maximumOverlayShare),
                 tinted: tintedRows(previous, next, columns: columns), chrome: chrome)
-            if let moved = verified(overlaid, previous, next, columns: columns, a: a, b: b) {
+            if overlaysInPlace(overlaid, previous, next, columns: columns),
+                let moved = verified(overlaid, previous, next, columns: columns, a: a, b: b)
+            {
                 return moved
             }
         }
         return verified(c, previous, next, columns: columns, a: a, b: b, hover: true)
+    }
+
+    /// Whether every evidence pair `c`'s best offset left out at its overlap's ends differs as
+    /// something over the page does: inside one span of at most `hoverWidthShare` of `columns`
+    /// (an element over part of the row: a floating button) or at every pixel (a material over
+    /// the whole row: a toolbar's tint, a fade, a shadow, a bar). Rows of other content pair
+    /// some pixels across the width that happen to match, as text against text does; an
+    /// offset that only convinces by leaving them out is an alias of repeating content. A pair
+    /// that is `nearlySame` is the same row.
+    static func overlaysInPlace(
+        _ c: Candidate, _ previous: PixelBuffer, _ next: PixelBuffer, columns: Range<Int>
+    ) -> Bool {
+        guard let best = c.best else { return true }
+        let end = previous.height - c.footer - best.offset
+        let left = Array((c.header - c.headOverlay)..<c.header) + Array(end..<(end + c.footOverlay))
+        return previous.bytes.withUnsafeBytes { pa in
+            next.bytes.withUnsafeBytes { pb in
+                left.allSatisfy { n in
+                    let p = n + best.offset
+                    guard c.uniqueA[p], c.uniqueB[n] else { return true }
+                    let rowA = pa.baseAddress! + (p * previous.width + columns.lowerBound) * 4
+                    let rowB = pb.baseAddress! + (n * next.width + columns.lowerBound) * 4
+                    guard memcmp(rowA, rowB, columns.count * 4) != 0,
+                        !nearlySame(rowA, rowB, bytes: columns.count * 4)
+                    else { return true }
+                    let differs = (0..<columns.count).map {
+                        rowA.loadUnaligned(fromByteOffset: $0 * 4, as: UInt32.self)
+                            != rowB.loadUnaligned(fromByteOffset: $0 * 4, as: UInt32.self)
+                    }
+                    if differs.allSatisfy({ $0 }) { return true }
+                    let first = differs.firstIndex(of: true)!
+                    let last = differs.lastIndex(of: true)!
+                    return Double(last - first + 1) <= Double(columns.count) * hoverWidthShare
+                }
+            }
+        }
     }
 
     /// With `hover`, contradicting rows that are one hover overlay (`isHoverOverlay`) are left
@@ -430,7 +474,8 @@ public enum StitchMatcher {
         return Candidate(
             header: c.header, footer: c.footer,
             best: (best.offset, max(best.score, Double(matches) / Double(left))),
-            runnerUp: c.runnerUp, uniqueA: c.uniqueA, uniqueB: c.uniqueB, overlaid: c.overlaid)
+            runnerUp: c.runnerUp, uniqueA: c.uniqueA, uniqueB: c.uniqueB, overlaid: c.overlaid,
+            headOverlay: c.headOverlay, footOverlay: c.footOverlay)
     }
 
     /// The most separate runs of rows a hover overlay's contradictions may fall in: where it
@@ -710,7 +755,8 @@ public enum StitchMatcher {
         return Candidate(
             header: c.header, footer: c.footer,
             best: (best.offset, Double(matches) / Double(evidence)), runnerUp: c.runnerUp,
-            uniqueA: c.uniqueA, uniqueB: c.uniqueB, overlaid: c.overlaid)
+            uniqueA: c.uniqueA, uniqueB: c.uniqueB, overlaid: c.overlaid,
+            headOverlay: c.headOverlay, footOverlay: c.footOverlay)
     }
 
     /// Which rows of `rows` have a signature no other row of `rows` shares; rows outside it are

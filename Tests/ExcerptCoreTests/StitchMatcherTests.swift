@@ -367,6 +367,53 @@ import Testing
         #expect(StitchMatcher.match(a, b, ignoringRightColumns: 0) == .uncertain)
     }
 
+    /// `frame` with its top `rows` rows full-bleed tinted: no pixel there is the page's paper.
+    func tintedTop(_ frame: PixelBuffer, rows: Int) -> PixelBuffer {
+        ScrollFixtures.paint(width: frame.width, height: frame.height) { x, y in
+            let c = frame[x: x, y: y]
+            return y < rows && c == ScrollFixtures.paper ? RGBA(r: 236, g: 240, b: 250, a: 255) : c
+        }
+    }
+
+    @Test func repeatedBlocksUnderATintedTopBandAreUncertain() {
+        // The aliases above, with the top quarter of each frame showing no background pixel:
+        // the rows that tell the alias apart sit at the top of its overlap, where a toolbar the
+        // page scrolls under would be left out of the move.
+        let long = repeating(phase: 60, block: 140)
+        let tint = 50
+        #expect(
+            StitchMatcher.match(
+                tintedTop(ScrollFixtures.frame(long, offset: 0, viewport: 200), rows: tint),
+                tintedTop(ScrollFixtures.frame(long, offset: 300, viewport: 200), rows: tint),
+                ignoringRightColumns: 0) == .uncertain)
+        let base = ScrollFixtures.page(width: 90, height: 1500, seed: 3)
+        let labelled = ScrollFixtures.paint(width: 90, height: 1500) { x, y in
+            switch y % 250 {
+            case 100..<150: base[x: x, y: 100 + (y % 250 - 100)]
+            case 60..<63, 200..<210: base[x: x, y: y]
+            default: ScrollFixtures.paper
+            }
+        }
+        #expect(
+            StitchMatcher.match(
+                tintedTop(ScrollFixtures.frame(labelled, offset: 0, viewport: 200), rows: tint),
+                tintedTop(ScrollFixtures.frame(labelled, offset: 280, viewport: 200), rows: tint),
+                ignoringRightColumns: 0) == .uncertain)
+    }
+
+    @Test func aRepeatedBlockTellingTheAliasApartOnlyAtTheOverlapsEndIsUncertain() {
+        // The alias one period away matches the block; the 20 to 50 rows of other text at its
+        // overlap's end are where something over the page's bottom would be left out.
+        for block in [150, 160, 170, 180] {
+            let long = repeating(phase: 0, block: block)
+            #expect(
+                StitchMatcher.match(
+                    ScrollFixtures.frame(long, offset: 0, viewport: 200),
+                    ScrollFixtures.frame(long, offset: 300, viewport: 200),
+                    ignoringRightColumns: 0) == .uncertain, "block \(block)")
+        }
+    }
+
     @Test func knownLimitContentDifferingOnlyInASmallPatchReadsAsAMove() {
         // Pinned limitation. A blank page repeats a 100-row block every 250 rows, with a label
         // that differs between blocks only in a 5-column patch. The pair a frame-plus-30
