@@ -63,15 +63,17 @@ public enum StitchMatcher {
 
     /// The frames as they are, failing that with faint pixels taken as background
     /// (`faintLevels`). Rows are matched, never copied, from the flattened frames: the stitch
-    /// keeps each frame's own pixels.
+    /// keeps each frame's own pixels. `chrome` holds rows sticky that the frames' content alone
+    /// might not.
     public static func match(
-        _ previous: PixelBuffer, _ next: PixelBuffer, ignoringRightColumns ignored: Int
+        _ previous: PixelBuffer, _ next: PixelBuffer, ignoringRightColumns ignored: Int,
+        chrome: ScrollChrome = .none
     ) -> FrameMatch {
-        let plain = matchPixels(previous, next, ignoringRightColumns: ignored)
+        let plain = matchPixels(previous, next, ignoringRightColumns: ignored, chrome: chrome)
         guard plain == .uncertain, let background = background(previous) else { return plain }
         return matchPixels(
             flattened(previous, toward: background), flattened(next, toward: background),
-            ignoringRightColumns: ignored)
+            ignoringRightColumns: ignored, chrome: chrome)
     }
 
     /// The frame's commonest colour over every fourth row and column; nil for an empty frame.
@@ -116,7 +118,8 @@ public enum StitchMatcher {
     }
 
     static func matchPixels(
-        _ previous: PixelBuffer, _ next: PixelBuffer, ignoringRightColumns ignored: Int
+        _ previous: PixelBuffer, _ next: PixelBuffer, ignoringRightColumns ignored: Int,
+        chrome: ScrollChrome = .none
     ) -> FrameMatch {
         guard previous.width == next.width, previous.height == next.height, previous.width > 0,
             previous.height > 0
@@ -140,22 +143,28 @@ public enum StitchMatcher {
         let wholeSpan = span == 0..<width
         let a = wholeSpan ? wholePrevious : RowSignatures(previous, columns: span)
         let b = wholeSpan ? wholeNext : RowSignatures(next, columns: span)
-        let whole = candidate(a, b, height: height)
+        let whole = candidate(a, b, height: height, chrome: chrome)
         if let stillScore, stillScore >= confidenceThreshold,
             stillScore >= (whole.best?.score ?? 0) - ambiguityMargin
         {
             return .still
         }
-        if let moved = believed(whole, previous, next, columns: span, a: a, b: b) { return moved }
+        if let moved = believed(
+            whole, previous, next, columns: span, a: a, b: b, chrome: chrome)
+        {
+            return moved
+        }
         for pinned in pinnedHeaders(a, b, after: whole.header, height: height) {
-            let c = candidate(a, b, height: height, header: pinned.end)
+            let c = candidate(a, b, height: height, header: pinned.end, chrome: chrome)
             if let best = c.best, best.offset > pinned.shift,
-                let moved = believed(c, previous, next, columns: span, a: a, b: b)
+                let moved = believed(c, previous, next, columns: span, a: a, b: b, chrome: chrome)
             {
                 return moved
             }
         }
-        if let moved = band(previous, next, span: span, width: width) { return moved }
+        if let moved = band(previous, next, span: span, width: width, chrome: chrome) {
+            return moved
+        }
         if !whole.convincing,
             isCaretSized(span, rows: changedRows(wholePrevious, wholeNext), of: previous)
         {
@@ -185,7 +194,8 @@ public enum StitchMatcher {
 
     /// `header`, when given, is taken as the sticky rows at the top instead of the rows the two
     /// frames share there. With an `overlayLimit`, each offset may leave out up to that many rows
-    /// at its overlap's end (`overlayRows`), and they join the footer.
+    /// at its overlap's end (`overlayRows`), and they join the footer. `chrome`'s fixed rows are
+    /// the least header and footer, however much of them the frames share.
     ///
     /// Evidence is unique rows; when they convince no offset, unique runs of rows, the run
     /// doubling up to `longestRunShare` of the content. A list whose every line recurs (each name
@@ -195,18 +205,20 @@ public enum StitchMatcher {
     /// convinces.
     static func candidate(
         _ a: RowSignatures, _ b: RowSignatures, height: Int, header given: Int? = nil,
-        overlayLimit: Int = 0
+        overlayLimit: Int = 0, chrome: ScrollChrome = .none
     ) -> Candidate {
         var header = given ?? 0
         if given == nil {
             while header < height && a.hashes[header] == b.hashes[header] { header += 1 }
         }
+        header = min(max(header, chrome.fixedTop), height)
         var footer = 0
         while footer < height - header
             && a.hashes[height - 1 - footer] == b.hashes[height - 1 - footer]
         {
             footer += 1
         }
+        footer = min(max(footer, chrome.fixedBottom), height - header)
         let rows = scored(
             a, b, header: header, footer: footer, run: 1, overlayLimit: overlayLimit)
         guard !rows.convincing else { return rows }
@@ -309,13 +321,13 @@ public enum StitchMatcher {
     /// signatures over `columns`, which `c` was scored from.
     static func believed(
         _ c: Candidate, _ previous: PixelBuffer, _ next: PixelBuffer, columns: Range<Int>,
-        a: RowSignatures, b: RowSignatures
+        a: RowSignatures, b: RowSignatures, chrome: ScrollChrome = .none
     ) -> FrameMatch? {
         if let moved = verified(c, previous, next, columns: columns, a: a, b: b) { return moved }
         if !c.overlaid {
             let overlaid = candidate(
                 a, b, height: previous.height, header: c.header,
-                overlayLimit: Int(Double(previous.height) * maximumOverlayShare))
+                overlayLimit: Int(Double(previous.height) * maximumOverlayShare), chrome: chrome)
             if let moved = verified(overlaid, previous, next, columns: columns, a: a, b: b) {
                 return moved
             }
@@ -400,9 +412,10 @@ public enum StitchMatcher {
     /// The widest run of `span`'s columns that moved as one when the span as a whole didn't: a
     /// page between side panels that move by another amount or change in place. Strips with no
     /// offset of their own (blank, too little evidence) may sit inside a run but never end one.
-    static func band(_ previous: PixelBuffer, _ next: PixelBuffer, span: Range<Int>, width: Int)
-        -> FrameMatch?
-    {
+    static func band(
+        _ previous: PixelBuffer, _ next: PixelBuffer, span: Range<Int>, width: Int,
+        chrome: ScrollChrome = .none
+    ) -> FrameMatch? {
         let narrowest = Int((Double(width) * minimumBandShare).rounded(.up))
         guard span.count >= narrowest else { return nil }
         let stripWidth = max(minimumStripWidth, span.count / strips)
@@ -412,7 +425,7 @@ public enum StitchMatcher {
         let offsets: [Int?] = bounds.map { columns in
             let c = candidate(
                 RowSignatures(previous, columns: columns), RowSignatures(next, columns: columns),
-                height: previous.height)
+                height: previous.height, chrome: chrome)
             return c.convincing ? c.best?.offset : nil
         }
         var runs: [(columns: Range<Int>, offset: Int)] = []
@@ -443,13 +456,15 @@ public enum StitchMatcher {
         for run in ordered where run.columns.count >= narrowest {
             let a = RowSignatures(previous, columns: run.columns)
             let b = RowSignatures(next, columns: run.columns)
-            let c = candidate(a, b, height: previous.height)
-            guard let moved = believed(c, previous, next, columns: run.columns, a: a, b: b),
+            let c = candidate(a, b, height: previous.height, chrome: chrome)
+            guard
+                let moved = believed(
+                    c, previous, next, columns: run.columns, a: a, b: b, chrome: chrome),
                 case .moved(run.offset, let header, let footer, _) = moved
             else { continue }
             if panelsOnly(
                 outside: run.columns, span: span, previous, next, offset: run.offset,
-                rows: header..<(previous.height - footer - run.offset))
+                rows: header..<(previous.height - footer - run.offset), chrome: chrome)
             {
                 return moved
             }
@@ -464,7 +479,7 @@ public enum StitchMatcher {
     /// animation at the page's edge, would be filled flat in the stitch.
     static func panelsOnly(
         outside band: Range<Int>, span: Range<Int>, _ previous: PixelBuffer, _ next: PixelBuffer,
-        offset: Int, rows: Range<Int>
+        offset: Int, rows: Range<Int>, chrome: ScrollChrome = .none
     ) -> Bool {
         func stray(_ side: Range<Int>) -> Range<Int>? {
             let x = side.filter { !columnMoved($0, previous, next, offset: offset, rows: rows) }
@@ -478,7 +493,7 @@ public enum StitchMatcher {
         return groups.allSatisfy { columns in
             candidate(
                 RowSignatures(previous, columns: columns), RowSignatures(next, columns: columns),
-                height: previous.height
+                height: previous.height, chrome: chrome
             ).convincing
         }
     }

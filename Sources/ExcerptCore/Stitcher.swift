@@ -25,6 +25,9 @@ public struct Stitcher: Sendable {
     public let frameHeight: Int
     public let maximumHeight: Int
     public let ignoredRightColumns: Int
+    /// The captured window's chrome: every frame is matched with it, and it says whether the
+    /// scroll-bar strip is filled. `.none` for an area.
+    public let chrome: ScrollChrome
     public private(set) var height: Int
     private var bytes: [UInt8]
     /// The last frame joined to the stitch: every frame is matched against it.
@@ -36,11 +39,15 @@ public struct Stitcher: Sendable {
 
     /// `maximumHeight` below the first frame's height is raised to it: the first frame is kept
     /// whole.
-    public init(first: PixelBuffer, scale: Double, maximumHeight: Int = defaultMaximumHeight) {
+    public init(
+        first: PixelBuffer, scale: Double, maximumHeight: Int = defaultMaximumHeight,
+        chrome: ScrollChrome = .none
+    ) {
         width = first.width
         frameHeight = first.height
         self.maximumHeight = max(maximumHeight, first.height)
         ignoredRightColumns = StitchMatcher.ignoredRightColumns(width: first.width, scale: scale)
+        self.chrome = chrome
         height = first.height
         bytes = first.bytes
         reference = first
@@ -51,7 +58,9 @@ public struct Stitcher: Sendable {
     /// alias a jump of more than a frame as a small move.
     public mutating func add(_ frame: PixelBuffer, travel: ClosedRange<Int>? = nil) -> StitchStep {
         guard !full else { return .reachedLimit }
-        switch StitchMatcher.match(reference, frame, ignoringRightColumns: ignoredRightColumns) {
+        switch StitchMatcher.match(
+            reference, frame, ignoringRightColumns: ignoredRightColumns, chrome: chrome)
+        {
         case .still: return .noMovement
         case .uncertain: return .uncertain
         case .moved(let offset, let header, let footer, let band):
@@ -83,7 +92,7 @@ public struct Stitcher: Sendable {
                     contentsOf: Self.content(
                         frame, rows: firstNew..<(firstNew + rows), band: band,
                         matched: width - ignoredRightColumns, previous: reference, offset: offset,
-                        overlap: overlap))
+                        overlap: overlap, fillsScrollBar: chrome.fillsScrollBar))
                 height = base + rows
                 tailFooter = 0
                 full = true
@@ -94,7 +103,7 @@ public struct Stitcher: Sendable {
                 contentsOf: Self.content(
                     frame, rows: firstNew..<(firstNew + count), band: band,
                     matched: width - ignoredRightColumns, previous: reference, offset: offset,
-                    overlap: overlap))
+                    overlap: overlap, fillsScrollBar: chrome.fillsScrollBar))
             bytes.append(contentsOf: frame.bytes[((frameHeight - footer) * rowBytes)...])
             height = base + count + footer
             tailFooter = footer
@@ -115,7 +124,7 @@ public struct Stitcher: Sendable {
     public mutating func retract(to frame: PixelBuffer) -> Bool {
         guard !full,
             case .moved(let offset, _, let footer, let band) = StitchMatcher.match(
-                frame, reference, ignoringRightColumns: ignoredRightColumns)
+                frame, reference, ignoringRightColumns: ignoredRightColumns, chrome: chrome)
         else { return false }
         let end = height - footer
         guard end - offset >= frameHeight else { return false }
@@ -149,15 +158,16 @@ public struct Stitcher: Sendable {
 
 extension Stitcher {
     /// Rows of `frame` for the stitch. The scrolling band, the scroll-bar strip (columns from
-    /// `matched` on) and every column that moved by `offset` too (each of its `overlap` rows
-    /// is `previous`'s row `offset` lower: page columns the coarse band left out, margins,
-    /// borders that repeat with the scroll, and those that do once faint pixels are taken as
-    /// background: a margin of fixed wallpaper) are copied. The rest didn't scroll with the page,
-    /// so each takes its commonest colour in the frame: a side panel shows once, where the
-    /// first frame has it, and the page's background runs on under it.
+    /// `matched` on) unless it `fillsScrollBar`, and every column that moved by `offset` too
+    /// (each of its `overlap` rows is `previous`'s row `offset` lower: page columns the coarse
+    /// band left out, margins, borders that repeat with the scroll, and those that do once faint
+    /// pixels are taken as background: a margin of fixed wallpaper) are copied. The rest didn't
+    /// scroll with the page, so each takes its commonest colour in the frame: a side panel shows
+    /// once, where the first frame has it, and the page's background runs on under it. A filled
+    /// strip is filled whether or not it moved: a scroll bar's thumb can sit still across a step.
     static func content(
         _ frame: PixelBuffer, rows: Range<Int>, band: Range<Int>, matched: Int,
-        previous: PixelBuffer, offset: Int, overlap: Range<Int>
+        previous: PixelBuffer, offset: Int, overlap: Range<Int>, fillsScrollBar: Bool = false
     ) -> [UInt8] {
         let rowBytes = frame.width * 4
         var out = Array(frame.bytes[(rows.lowerBound * rowBytes)..<(rows.upperBound * rowBytes)])
@@ -172,6 +182,7 @@ extension Stitcher {
                     flattenedToward: background)
             }
         }
+        if fillsScrollBar { side += Array(matched..<frame.width) }
         guard !side.isEmpty, !rows.isEmpty else { return out }
         let fill = commonestColours(frame, columns: side)
         out.withUnsafeMutableBytes { raw in

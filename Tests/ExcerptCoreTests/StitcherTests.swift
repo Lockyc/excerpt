@@ -5,25 +5,68 @@ import Testing
 
 @Suite struct StitcherTests {
     /// Scrolls `page` under a `viewport`-row frame by `step` rows until the end, adding each
-    /// frame; returns the stitcher and the offsets it saw.
+    /// frame passed through `dress`; returns the stitcher and the offsets it saw.
     func scroll(
         _ page: PixelBuffer, viewport: Int, step: Int, header: PixelBuffer? = nil,
-        footer: PixelBuffer? = nil, maximumHeight: Int = Stitcher.defaultMaximumHeight
+        footer: PixelBuffer? = nil, maximumHeight: Int = Stitcher.defaultMaximumHeight,
+        dress: (PixelBuffer) -> PixelBuffer = { $0 }, chrome: ScrollChrome = .none
     ) -> (Stitcher, [StitchStep]) {
         var stitcher = Stitcher(
-            first: ScrollFixtures.frame(
-                page, offset: 0, viewport: viewport, header: header, footer: footer), scale: 1,
-            maximumHeight: maximumHeight)
+            first: dress(
+                ScrollFixtures.frame(
+                    page, offset: 0, viewport: viewport, header: header, footer: footer)),
+            scale: 1, maximumHeight: maximumHeight, chrome: chrome)
         var steps: [StitchStep] = []
         var offset = 0
         while offset < page.height - viewport {
             offset = min(offset + step, page.height - viewport)
             steps.append(
                 stitcher.add(
-                    ScrollFixtures.frame(
-                        page, offset: offset, viewport: viewport, header: header, footer: footer)))
+                    dress(
+                        ScrollFixtures.frame(
+                            page, offset: offset, viewport: viewport, header: header,
+                            footer: footer))))
         }
         return (stitcher, steps)
+    }
+
+    /// A 90×1000 page scrolled 120 rows at a time under a 200-row window with 12-row rounded
+    /// corners and a 1-pixel border, stitched with the chrome its first frame's shape gives.
+    func scrollWindow() -> (
+        stitcher: Stitcher, page: PixelBuffer, first: PixelBuffer, last: PixelBuffer
+    ) {
+        let page = ScrollFixtures.page(width: 90, height: 1000)
+        let dress = { ScrollFixtures.windowShaped($0, radius: 12, edge: 1) }
+        let first = dress(ScrollFixtures.frame(page, offset: 0, viewport: 200))
+        let last = dress(ScrollFixtures.frame(page, offset: 800, viewport: 200))
+        let (stitcher, steps) = scroll(
+            page, viewport: 200, step: 120, dress: dress,
+            chrome: .window(shapeOf: first))
+        #expect(steps.allSatisfy { if case .appended = $0 { true } else { false } })
+        return (stitcher, page, first, last)
+    }
+
+    @Test func windowChromeKeepsThePageAboveTheCornersOnce() {
+        let (stitcher, page, first, last) = scrollWindow()
+        #expect(stitcher.height == 1000)
+        let image = stitcher.image
+        #expect(ScrollFixtures.rows(image, 0..<188) == ScrollFixtures.rows(first, 0..<188))
+        #expect(ScrollFixtures.rows(image, 988..<1000) == ScrollFixtures.rows(last, 188..<200))
+        let strip = 90 - stitcher.ignoredRightColumns
+        #expect(
+            ScrollFixtures.columns(ScrollFixtures.rows(image, 188..<988), 1..<strip)
+                == ScrollFixtures.columns(ScrollFixtures.rows(page, 188..<988), 1..<strip))
+        for x in strip..<90 {
+            let filled = Set((188..<988).map { image[x: x, y: $0] })
+            #expect(filled.count == 1, "column \(x) is filled with one colour")
+        }
+        // The page has marks in the strip, so a copied strip would not be one colour a column.
+        #expect(Set((188..<988).map { page[x: strip, y: $0] }).count > 1)
+    }
+
+    @Test func windowChromeFixesTheTopCornerRows() {
+        let (stitcher, _, first, _) = scrollWindow()
+        #expect(ScrollFixtures.rows(stitcher.image, 0..<12) == ScrollFixtures.rows(first, 0..<12))
     }
 
     @Test func aLongPageStitchesToThePage() {

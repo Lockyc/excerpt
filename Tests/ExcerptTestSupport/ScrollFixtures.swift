@@ -153,6 +153,38 @@ public enum ScrollFixtures {
         return out
     }
 
+    /// `frame` cut to a window's shape: a rounded rect of `radius` whose pixels outside it, or
+    /// only partly inside (the corners' anti-aliased rim), are clear, alpha 0 and colour 0; and
+    /// the shape's pixels within `edge` of its outline across or down half transparent,
+    /// alpha 128 and premultiplied, as a window's border is.
+    public static func windowShaped(_ frame: PixelBuffer, radius: Int, edge: Int) -> PixelBuffer {
+        let w = frame.width
+        let h = frame.height
+        func inside(_ x: Int, _ y: Int) -> Bool {
+            guard x >= 0, x < w, y >= 0, y < h else { return false }
+            // Every corner of the pixel lies in the rounded rect.
+            for (cx, cy) in [(x, y), (x + 1, y), (x, y + 1), (x + 1, y + 1)] {
+                let dx = max(radius - cx, cx - (w - radius), 0)
+                let dy = max(radius - cy, cy - (h - radius), 0)
+                if dx * dx + dy * dy > radius * radius { return false }
+            }
+            return true
+        }
+        return paint(width: w, height: h) { x, y in
+            guard inside(x, y) else { return RGBA(r: 0, g: 0, b: 0, a: 0) }
+            let c = frame[x: x, y: y]
+            let border =
+                edge > 0
+                && (1...edge).contains { d in
+                    !inside(x - d, y) || !inside(x + d, y) || !inside(x, y - d)
+                        || !inside(x, y + d)
+                }
+            guard border else { return c }
+            func half(_ v: UInt8) -> UInt8 { UInt8(Int(v) * 128 / 255) }
+            return RGBA(r: half(c.r), g: half(c.g), b: half(c.b), a: 128)
+        }
+    }
+
     public static func rows(_ buffer: PixelBuffer, _ range: Range<Int>) -> PixelBuffer {
         let rowBytes = buffer.width * 4
         return PixelBuffer(

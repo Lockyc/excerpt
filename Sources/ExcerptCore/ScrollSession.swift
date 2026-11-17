@@ -90,9 +90,10 @@ public struct ScrollSession: Sendable {
     /// Starts in `.auto` when Excerpt can scroll the page, `.manual(.accessibility)` when not.
     public init(
         first: PixelBuffer, scale: Double, canAutoScroll: Bool,
-        maximumHeight: Int = Stitcher.defaultMaximumHeight
+        maximumHeight: Int = Stitcher.defaultMaximumHeight, chrome: ScrollChrome = .none
     ) {
-        stitcher = Stitcher(first: first, scale: scale, maximumHeight: maximumHeight)
+        stitcher = Stitcher(
+            first: first, scale: scale, maximumHeight: maximumHeight, chrome: chrome)
         phase = canAutoScroll ? .auto : .manual(.accessibility)
         self.scale = scale
     }
@@ -109,7 +110,8 @@ public struct ScrollSession: Sendable {
         if let short = shortStep {
             shortStep = nil
             let after = StitchMatcher.match(
-                short, frame, ignoringRightColumns: stitcher.ignoredRightColumns)
+                short, frame, ignoringRightColumns: stitcher.ignoredRightColumns,
+                chrome: stitcher.chrome)
             guard after == .still else {
                 offTravel()
                 return
@@ -174,16 +176,21 @@ public struct ScrollSession: Sendable {
         // Nothing has joined the stitch: it is the first frame, where the page started.
         let start = stitcher.image
         let ignored = stitcher.ignoredRightColumns
+        let chrome = stitcher.chrome
         switch step {
         case .up:
             // Above the start, `start` is `frame` scrolled down.
-            if case .moved = StitchMatcher.match(frame, start, ignoringRightColumns: ignored) {
+            if case .moved = StitchMatcher.match(
+                frame, start, ignoringRightColumns: ignored, chrome: chrome)
+            {
                 phase = .checkingEnd(.back)
             } else {
                 phase = .manual(.noMovement)
             }
         case .back:
-            if StitchMatcher.match(start, frame, ignoringRightColumns: ignored) == .still {
+            if StitchMatcher.match(start, frame, ignoringRightColumns: ignored, chrome: chrome)
+                == .still
+            {
                 startedAtEnd = true
                 phase = .finished
             } else {
