@@ -52,12 +52,25 @@ bundle:
     ditto "$bin/Sparkle.framework" {{app}}/Contents/Frameworks/Sparkle.framework
     sed "s/__VERSION__/$(tr -d '[:space:]' < VERSION)/g" {{info_plist}} > {{app}}/Contents/Info.plist
     # Inside-out: each nested Sparkle helper before the framework, the framework before the app.
-    sign=(codesign --force --options runtime --timestamp --sign "{{sign_identity}}")
+    # Apple's timestamp server drops requests now and then; codesign gives up on one after 15s.
+    # Retry only that failure, so any other signing error still fails on the first try.
+    sign() {
+        local try out
+        for try in 1 2 3; do
+            if out=$(codesign --force --options runtime --timestamp --sign "{{sign_identity}}" "$@" 2>&1); then
+                printf '%s\n' "$out"; return 0
+            fi
+            printf '%s\n' "$out" >&2
+            grep -q 'A timestamp was expected but was not found' <<<"$out" || return 1
+            [ "$try" -lt 3 ] && echo "bundle: timestamp server did not answer; retrying ($try/3)" >&2
+        done
+        return 1
+    }
     sparkle={{app}}/Contents/Frameworks/Sparkle.framework
-    "${sign[@]}" "$sparkle/Versions/B/XPCServices/Installer.xpc"
-    "${sign[@]}" --preserve-metadata=entitlements "$sparkle/Versions/B/XPCServices/Downloader.xpc"
-    "${sign[@]}" "$sparkle/Versions/B/Autoupdate" "$sparkle/Versions/B/Updater.app" "$sparkle"
-    "${sign[@]}" {{app}}
+    sign "$sparkle/Versions/B/XPCServices/Installer.xpc"
+    sign --preserve-metadata=entitlements "$sparkle/Versions/B/XPCServices/Downloader.xpc"
+    sign "$sparkle/Versions/B/Autoupdate" "$sparkle/Versions/B/Updater.app" "$sparkle"
+    sign {{app}}
 
 [group("app")]
 [doc("Print the directory holding Sparkle's sign_update and generate_keys")]
