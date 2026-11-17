@@ -192,6 +192,44 @@ import Testing
                 ]))
     }
 
+    /// Frames of `page` under a 24-row sticky `bar` whose top 3 rows change with every frame (a
+    /// progress bar, a clock).
+    func changingHeader(_ page: PixelBuffer, bar: PixelBuffer, offset: Int) -> PixelBuffer {
+        ScrollFixtures.animated(
+            ScrollFixtures.frame(page, offset: offset, viewport: 200, header: bar), x: 0, y: 0,
+            width: 90, height: 3, phase: offset)
+    }
+
+    @Test func aStickyHeaderWithAChangingTopEdgeShowsOnceFromTheFirstFrame() {
+        // The bar shows no pixel of the page's background, so it is left out as something over
+        // the page.
+        let page = ScrollFixtures.page(width: 90, height: 920)
+        let bar = ScrollFixtures.bar(width: 90, height: 24, tone: 60)
+        var stitcher = Stitcher(first: changingHeader(page, bar: bar, offset: 0), scale: 1)
+        for offset in stride(from: 120, through: 720, by: 120) {
+            #expect(
+                stitcher.add(changingHeader(page, bar: bar, offset: offset))
+                    == .appended(rows: 120))
+        }
+        #expect(
+            stitcher.image
+                == ScrollFixtures.stack([
+                    ScrollFixtures.rows(changingHeader(page, bar: bar, offset: 0), 0..<24),
+                    ScrollFixtures.rows(page, 24..<920),
+                ]))
+    }
+
+    @Test func aStickyHeaderWithAChangingTopEdgeShowingTheBackgroundIsUncertain() {
+        // The same bar with the page's paper at its sides reads as content.
+        let page = ScrollFixtures.page(width: 90, height: 920)
+        let solid = ScrollFixtures.bar(width: 90, height: 24, tone: 60)
+        let bar = ScrollFixtures.paint(width: 90, height: 24) { x, y in
+            x < 4 || x >= 86 ? ScrollFixtures.paper : solid[x: x, y: y]
+        }
+        var stitcher = Stitcher(first: changingHeader(page, bar: bar, offset: 0), scale: 1)
+        #expect(stitcher.add(changingHeader(page, bar: bar, offset: 120)) == .uncertain)
+    }
+
     @Test func aLongFormWithRepeatingFieldsStitches() {
         let form = ScrollFixtures.form(width: 90, height: 1000)
         let (stitcher, _) = scroll(form, viewport: 200, step: 120)

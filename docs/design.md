@@ -233,7 +233,7 @@ Known limits: a run of content identical except a narrow patch, flung past in ma
 stitch at a wrong offset (auto mode checks each step's travel); a final short step that aliases
 can be believed when the page ends next or Done comes first; any animation wider than a quarter of the scrolled
 span, or several on the same rows, halts the capture; a sticky header with a changing top edge
-(progress bar, clock) reads as content and halts, as can a sticky footer that unsticks into
+(progress bar, clock) that shows the page's background reads as content and halts, as can a sticky footer that unsticks into
 the page's flow; the stream excludes only excerpt's windows, so desktop icons under the region
 appear in it; the matcher ignores the right-edge scroll-bar strip but an area's stitch copies it (page
 content can reach the edge), so an overlay scroll bar's thumb can appear along the right edge (select the region
