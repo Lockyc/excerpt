@@ -46,6 +46,17 @@ import Testing
                 primaryHeight: 800) == nil)
     }
 
+    @Test func aWindowIsFollowedOnlyWhollyOnOneDisplay() {
+        let left = CGRect(x: 0, y: 0, width: 1000, height: 800)
+        let inside = CGRect(x: 100, y: 100, width: 400, height: 300)
+        #expect(ScrollRegion.followsWindow(windowFrame: inside, displayFrame: left))
+        #expect(ScrollRegion.followsWindow(windowFrame: left, displayFrame: left))
+        let hanging = CGRect(x: 800, y: 100, width: 400, height: 300)
+        #expect(!ScrollRegion.followsWindow(windowFrame: hanging, displayFrame: left))
+        let right = CGRect(x: 1000, y: 0, width: 1000, height: 800)
+        #expect(!ScrollRegion.followsWindow(windowFrame: hanging, displayFrame: right))
+    }
+
     @Test func localPointsUndoPixelRect() {
         let local = CGRect(x: 10, y: 20, width: 30, height: 40)
         let pixels = DisplayGeometry.pixelRect(

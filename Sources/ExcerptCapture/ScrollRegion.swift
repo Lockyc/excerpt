@@ -39,6 +39,12 @@ public struct ScrollRegion: Equatable, Sendable {
             pixelRect: pixelRect, primaryHeight: primaryHeight)
     }
 
+    /// Whether a scrolling capture can follow a window: it lies wholly within one display
+    /// (both AppKit points). A window hanging off an edge or spanning displays is an area.
+    public static func followsWindow(windowFrame: CGRect, displayFrame: CGRect) -> Bool {
+        displayFrame.contains(windowFrame)
+    }
+
     public init?(window: CapturableWindow, still: DisplayStill, primaryHeight: CGFloat) {
         self.init(windowFrame: window.frame, still: still, primaryHeight: primaryHeight)
     }

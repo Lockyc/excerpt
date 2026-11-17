@@ -49,8 +49,8 @@ public final class StreamFrameSource: FrameSource {
 
     /// Streams `window` alone, filtered as its still is (`ScreenCapturer.windowFilter`, with no
     /// overlays): no other window, Excerpt's own included, appears in a frame, and the window's
-    /// shadow is left out. Frames are the window's points at its display's scale. Throws
-    /// `displayGone` when `region`'s display is disconnected.
+    /// shadow is left out. Every frame is exactly `region`. Throws `displayGone` when `region`'s
+    /// display is disconnected, `windowNotOnOneDisplay` when the window is not wholly on one.
     public func start(window: CapturableWindow, region: ScrollRegion) async throws {
         precondition(stream == nil, "one stream per source: stop it before starting another")
         let content = try await SCShareableContent.excludingDesktopWindows(
@@ -60,9 +60,10 @@ public final class StreamFrameSource: FrameSource {
         let found = ScreenCapturer.windowFilter(
             for: window.window, overlays: [], reach: window.window.frame,
             displays: content.displays)
+        guard found.sourceRect != nil else { throw ScrollCaptureError.windowNotOnOneDisplay }
         let configuration = Self.configuration(
-            sourceRect: found.sourceRect, width: Int(found.size.width * found.scale),
-            height: Int(found.size.height * found.scale))
+            sourceRect: region.localPoints, width: Int(region.pixelRect.width),
+            height: Int(region.pixelRect.height))
         configuration.ignoreShadowsSingleWindow = true
         try await begin(filter: found.filter, configuration: configuration)
     }

@@ -203,10 +203,9 @@ capture follows the window itself rather than the screen:
 - The window is brought to the front first, so Excerpt's scroll events, posted at the pointer,
   reach it.
 - The stream holds the window alone, filtered as its still is (`ScreenCapturer.windowFilter`:
-  the window by itself on its display, over its frame there; a window spanning displays,
-  desktop-independent), so nothing behind its rounded corners and nothing passing over it is
+  the window by itself on its display, over its frame there), so nothing behind its rounded corners and nothing passing over it is
   in a frame. Windows that open during the capture — popovers, menus, a sheet — are other
-  windows, so they stay out.
+  windows, so they stay out. A window not wholly on one display is captured as an area.
 - **The window's shape is fixed chrome.** Rows from the top or bottom that hold any pixel the
   window doesn't cover (its rounded corners) are sticky at least: the header from the first
   frame, the footer from the last, however the page moves between their corners. The stitch
