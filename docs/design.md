@@ -202,12 +202,21 @@ capture follows the window itself rather than the screen:
 
 - The window is brought to the front first, so Excerpt's scroll events, posted at the pointer,
   reach it.
-- The stream holds the window alone (`SCContentFilter(desktopIndependentWindow:)`, no shadow,
-  at its display's scale): nothing behind its rounded corners, and nothing passing over it.
+- The stream holds the whole window alone (`SCContentFilter(desktopIndependentWindow:)`, no
+  shadow, at the scale of the display holding most of it), parts off screen or on another
+  display included: nothing behind its rounded corners, and nothing passing over it. Popovers
+  and menus opening during the capture are other windows, so they stay out. A sheet, or a
+  window with a sheet or child window attached, is picked as an area instead: that filter
+  renders a sheet's whole window tree shrunk into the sheet's size.
 - **The window's shape is fixed chrome.** Rows from the top or bottom that hold any pixel the
   window doesn't cover (its rounded corners) are sticky at least: the header from the first
   frame, the footer from the last, however the page moves between their corners. The stitch
   is the window's title bar and toolbar once, the page, and its bottom edge once.
+- **A toolbar the page scrolls under** (a translucent toolbar with a blurred scroll edge, as
+  most macOS 26 windows have) changes with every step, so its rows are not equal between
+  frames. Rows at the top of the overlap that the best offset doesn't explain, up to
+  `StitchMatcher.maximumOverlayShare` of the height, join the header, as rows over the page's
+  bottom join the footer; the header comes from the first frame. This holds for areas too.
 - The right-edge scroll-bar strip, `StitchMatcher.ignoredRightColumns` wide, takes each
   column's commonest colour in appended rows, as a side panel does, so the thumb shows once,
   from the first frame, instead of once per join.
@@ -215,6 +224,8 @@ capture follows the window itself rather than the screen:
   following the window's shape.
 - The window moving or resizing ends the capture with what is stitched, said in the HUD, as a
   display change does.
+- The next scrolling capture reopens on that window, at its current frame, as a window
+  selection; on its last area when the window has closed.
 
 Known limits: a run of content identical except a narrow patch, flung past in manual mode, can
 stitch at a wrong offset (auto mode checks each step's travel); a final short step that aliases
@@ -419,7 +430,7 @@ kind's own options where they apply — text adds a free size (`TextStyle.points
 font (sans, mono, serif), alignment (left, centred) and its background, a step adds Move earlier / Move
 later (disabled at either end of the sequence), a path adds Closed (disabled under three points) and Fill (disabled while open). The options per kind are one pure mapping. The
 crop under `K` gets a bar with delete. A new annotation takes the colour, size and text background
-last chosen, steps remembering a size of their own (`AnnotationStyle.stepWidth`), across launches, and stays selected after it is drawn so its bar is
+last chosen, steps remembering a size of their own (`AnnotationStyle.markerWidth`), across launches, and stays selected after it is drawn so its bar is
 showing.
 
 **Text** is drawn either plain in its colour or on a **background**: a rounded pill in its colour
