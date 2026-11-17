@@ -203,9 +203,10 @@ capture follows the window itself rather than the screen:
 - The window is brought to the front first, so Excerpt's scroll events, posted at the pointer,
   reach it.
 - The stream holds the window alone, filtered as its still is (`ScreenCapturer.windowFilter`:
-  the window by itself on its display, over its frame there), so nothing behind its rounded corners and nothing passing over it is
-  in a frame. Windows that open during the capture — popovers, menus, a sheet — are other
-  windows, so they stay out. A window not wholly on one display is captured as an area.
+  the window by itself on its display, over its frame there), so nothing behind its rounded
+  corners and nothing passing over it is in a frame. Windows that open during the capture —
+  popovers, menus, a sheet — are other windows, so they stay out. A window not wholly on one
+  display is captured as an area.
 - **The window's shape is fixed chrome.** Rows from the top or bottom that hold any pixel the
   window doesn't cover (its rounded corners) are sticky at least: the header from the first
   frame, the footer from the last, however the page moves between their corners. The stitch
@@ -222,10 +223,10 @@ capture follows the window itself rather than the screen:
   from the first frame, instead of once per join.
 - Saved like a window capture: on the window backdrop when that setting is on, the shadow
   following the window's shape.
-- The window moving or resizing ends the capture with what is stitched, said in the HUD, as a
-  display change does.
+- The window moving, resizing or closing ends the capture with what is stitched, said in the
+  HUD, as a display change does.
 - The next scrolling capture reopens on that window, at its current frame, as a window
-  selection; on its last area when the window has closed.
+  selection; on its last area when the window has closed or is off every screen.
 
 Known limits: a run of content identical except a narrow patch, flung past in manual mode, can
 stitch at a wrong offset (auto mode checks each step's travel); a final short step that aliases
@@ -233,7 +234,7 @@ can be believed when the page ends next or Done comes first; any animation wider
 span, or several on the same rows, halts the capture; a sticky header with a changing top edge
 (progress bar, clock) reads as content and halts, as can a sticky footer that unsticks into
 the page's flow; the stream excludes only excerpt's windows, so desktop icons under the region
-appear in it; the matcher ignores the right-edge scroll-bar strip but the stitch copies it (page
+appear in it; the matcher ignores the right-edge scroll-bar strip but an area's stitch copies it (page
 content can reach the edge), so an overlay scroll bar's thumb can appear along the right edge (select the region
 without the scroll bar to avoid it).
 
