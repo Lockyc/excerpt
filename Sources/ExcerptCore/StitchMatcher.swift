@@ -376,20 +376,24 @@ public enum StitchMatcher {
     /// `c` as a move over `columns`, when it convinces, if need be `rescored`, and no row
     /// contradicts it; failing that, scored again with something that stays in place over the
     /// page left out (a floating button, a composer, a footer's shadow over its bottom; a
-    /// translucent toolbar over its top), since its rows lower the score or, spanning the width,
-    /// contradict the move. `a` and `b` are the frames' signatures over `columns`, which `c` was
-    /// scored from.
+    /// translucent toolbar over its top, in a window only), since its rows lower the score or,
+    /// spanning the width, contradict the move. `a` and `b` are the frames' signatures over
+    /// `columns`, which `c` was scored from. Only a window's chrome (`fixedTop > 0`) admits the
+    /// toolbar and the `overlaysInPlace` check: an area has no title bar to place a toolbar
+    /// under, and repeated content seen through a tint aliases there.
     static func believed(
         _ c: Candidate, _ previous: PixelBuffer, _ next: PixelBuffer, columns: Range<Int>,
         a: RowSignatures, b: RowSignatures, chrome: ScrollChrome = .none
     ) -> FrameMatch? {
         if let moved = verified(c, previous, next, columns: columns, a: a, b: b) { return moved }
         if !c.overlaid {
+            let window = chrome.fixedTop > 0
             let overlaid = candidate(
                 a, b, height: previous.height, header: c.header,
                 overlayLimit: Int(Double(previous.height) * maximumOverlayShare),
-                tinted: tintedRows(previous, next, columns: columns), chrome: chrome)
-            if overlaysInPlace(overlaid, previous, next, columns: columns),
+                tinted: window ? tintedRows(previous, next, columns: columns) : [],
+                chrome: chrome)
+            if !window || overlaysInPlace(overlaid, previous, next, columns: columns),
                 let moved = verified(overlaid, previous, next, columns: columns, a: a, b: b)
             {
                 return moved

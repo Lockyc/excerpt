@@ -159,8 +159,7 @@ holding one.
    from the last. A bar from the page that pins under the header during a move joins the header;
    something over the page's bottom that stays in place (a floating button, a composer, a fade
    or shadow above the footer), up to `StitchMatcher.maximumOverlayShare` of the height, joins
-   the footer, provided each row it leaves out differs as something over the page does
-   (`StitchMatcher.overlaysInPlace`). A **hover overlay** — a chat message's reaction toolbar, which follows the
+   the footer. A **hover overlay** — a chat message's reaction toolbar, which follows the
    message under the pointer, so it leaves one and appears on another as the page moves — is
    left out of a move's evidence when its rows differ in one span of at most
    `StitchMatcher.hoverWidthShare` of the width, in at most `StitchMatcher.hoverRuns` runs; the
@@ -218,8 +217,8 @@ capture follows the window itself rather than the screen:
   frames. Rows at the top of the overlap that the best offset doesn't explain, up to
   `StitchMatcher.maximumOverlayShare` of the height and within the run of rows neither frame
   shows the page's background on (`StitchMatcher.tintedRows`), join the header, as rows over
-  the page's bottom join the footer; the header comes from the first frame. This holds for
-  areas too.
+  the page's bottom join the footer, each left-out row differing as something over the page
+  does (`StitchMatcher.overlaysInPlace`); the header comes from the first frame.
 - The right-edge scroll-bar strip, `StitchMatcher.ignoredRightColumns` wide, takes each
   column's commonest colour in appended rows, as a side panel does, so the thumb shows once,
   from the first frame, instead of once per join.
@@ -234,8 +233,10 @@ Known limits: a run of content identical except a narrow patch, flung past in ma
 stitch at a wrong offset (auto mode checks each step's travel); a final short step that aliases
 can be believed when the page ends next or Done comes first; any animation wider than a quarter of the scrolled
 span, or several on the same rows, halts the capture; a sticky header with a changing top edge
-(progress bar, clock) that shows the page's background reads as content and halts, as can a sticky footer that unsticks into
-the page's flow; the stream excludes only excerpt's windows, so desktop icons under the region
+(progress bar, clock) reads as content and halts (in a window, only one that shows the page's
+background), as can a sticky footer that unsticks into the page's flow; in a window, repeated
+content scrolled under a translucent toolbar, flung past in manual mode, can stitch at a wrong
+offset; the stream excludes only excerpt's windows, so desktop icons under the region
 appear in it; the matcher ignores the right-edge scroll-bar strip but an area's stitch copies it (page
 content can reach the edge), so an overlay scroll bar's thumb can appear along the right edge (select the region
 without the scroll bar to avoid it); a window's stitch fills the strip instead, so full-bleed

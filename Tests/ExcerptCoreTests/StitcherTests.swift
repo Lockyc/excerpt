@@ -173,8 +173,31 @@ import Testing
         #expect(stitcher.image == ScrollFixtures.stack([ScrollFixtures.rows(page, 0..<720), last]))
     }
 
+    @Test func aFooterWithAFadeTowardThePagesBackgroundShowsOnceFromTheLastFrame() {
+        // As above, the 24 rows blending toward the page's own white: an area's overlay rows
+        // need not differ at every pixel.
+        let footer = ScrollFixtures.bar(width: 90, height: 30, tone: 140)
+        let (stitcher, last) = scrollDressed(ScrollFixtures.page(width: 90, height: 920)) {
+            frame in
+            let barred = ScrollFixtures.overlay(frame, footer, atRow: 170)
+            return ScrollFixtures.paint(width: 90, height: 200) { x, y in
+                let c = barred[x: x, y: y]
+                guard (146..<170).contains(y) else { return c }
+                let t = Double(y - 145) / 25
+                func blend(_ v: UInt8) -> UInt8 { UInt8(Double(v) * (1 - t) + 255 * t) }
+                return RGBA(r: blend(c.r), g: blend(c.g), b: blend(c.b), a: 255)
+            }
+        }
+        let page = ScrollFixtures.page(width: 90, height: 920)
+        #expect(stitcher.image == ScrollFixtures.stack([ScrollFixtures.rows(page, 0..<720), last]))
+    }
+
+    /// A window's chrome with no corners to speak of: what turns on the window-only rules.
+    let window = ScrollChrome(fixedTop: 2, fixedBottom: 0, fillsScrollBar: false)
+
     @Test func aToolbarThePageScrollsUnderShowsOnceFromTheFirstFrame() {
-        // A translucent 30-row toolbar: the page under it shows through at half brightness.
+        // A window's translucent 30-row toolbar: the page under it shows through at half
+        // brightness.
         func tinted(_ frame: PixelBuffer) -> PixelBuffer {
             ScrollFixtures.paint(width: 90, height: 200) { x, y in
                 let c = frame[x: x, y: y]
@@ -183,7 +206,7 @@ import Testing
             }
         }
         let page = ScrollFixtures.page(width: 90, height: 920)
-        let (stitcher, _) = scrollDressed(page, tinted)
+        let (stitcher, _) = scroll(page, viewport: 200, step: 120, dress: tinted, chrome: window)
         let firstDressed = tinted(ScrollFixtures.frame(page, offset: 0, viewport: 200))
         #expect(
             stitcher.image
@@ -200,12 +223,13 @@ import Testing
             width: 90, height: 3, phase: offset)
     }
 
-    @Test func aStickyHeaderWithAChangingTopEdgeShowsOnceFromTheFirstFrame() {
-        // The bar shows no pixel of the page's background, so it is left out as something over
-        // the page.
+    @Test func aWindowsStickyHeaderWithAChangingTopEdgeShowsOnceFromTheFirstFrame() {
+        // The bar shows no pixel of the page's background, so a window leaves it out as
+        // something over the page.
         let page = ScrollFixtures.page(width: 90, height: 920)
         let bar = ScrollFixtures.bar(width: 90, height: 24, tone: 60)
-        var stitcher = Stitcher(first: changingHeader(page, bar: bar, offset: 0), scale: 1)
+        var stitcher = Stitcher(
+            first: changingHeader(page, bar: bar, offset: 0), scale: 1, chrome: window)
         for offset in stride(from: 120, through: 720, by: 120) {
             #expect(
                 stitcher.add(changingHeader(page, bar: bar, offset: offset))
@@ -219,14 +243,22 @@ import Testing
                 ]))
     }
 
-    @Test func aStickyHeaderWithAChangingTopEdgeShowingTheBackgroundIsUncertain() {
+    @Test func anAreasStickyHeaderWithAChangingTopEdgeIsUncertain() {
+        let page = ScrollFixtures.page(width: 90, height: 920)
+        let bar = ScrollFixtures.bar(width: 90, height: 24, tone: 60)
+        var stitcher = Stitcher(first: changingHeader(page, bar: bar, offset: 0), scale: 1)
+        #expect(stitcher.add(changingHeader(page, bar: bar, offset: 120)) == .uncertain)
+    }
+
+    @Test func aWindowsStickyHeaderWithAChangingTopEdgeShowingTheBackgroundIsUncertain() {
         // The same bar with the page's paper at its sides reads as content.
         let page = ScrollFixtures.page(width: 90, height: 920)
         let solid = ScrollFixtures.bar(width: 90, height: 24, tone: 60)
         let bar = ScrollFixtures.paint(width: 90, height: 24) { x, y in
             x < 4 || x >= 86 ? ScrollFixtures.paper : solid[x: x, y: y]
         }
-        var stitcher = Stitcher(first: changingHeader(page, bar: bar, offset: 0), scale: 1)
+        var stitcher = Stitcher(
+            first: changingHeader(page, bar: bar, offset: 0), scale: 1, chrome: window)
         #expect(stitcher.add(changingHeader(page, bar: bar, offset: 120)) == .uncertain)
     }
 
