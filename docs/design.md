@@ -202,12 +202,11 @@ capture follows the window itself rather than the screen:
 
 - The window is brought to the front first, so Excerpt's scroll events, posted at the pointer,
   reach it.
-- The stream holds the whole window alone (`SCContentFilter(desktopIndependentWindow:)`, no
-  shadow, at the scale of the display holding most of it), parts off screen or on another
-  display included: nothing behind its rounded corners, and nothing passing over it. Popovers
-  and menus opening during the capture are other windows, so they stay out. A sheet, or a
-  window with a sheet or child window attached, is picked as an area instead: that filter
-  renders a sheet's whole window tree shrunk into the sheet's size.
+- The stream holds the window alone, filtered as its still is (`ScreenCapturer.windowFilter`:
+  the window by itself on its display, over its frame there; a window spanning displays,
+  desktop-independent), so nothing behind its rounded corners and nothing passing over it is
+  in a frame. Windows that open during the capture — popovers, menus, a sheet — are other
+  windows, so they stay out.
 - **The window's shape is fixed chrome.** Rows from the top or bottom that hold any pixel the
   window doesn't cover (its rounded corners) are sticky at least: the header from the first
   frame, the footer from the last, however the page moves between their corners. The stitch
@@ -400,7 +399,7 @@ in the menu bar, or by opening a capture (registered as an Open With handler for
 Dock icon. Several captures opened together — the thumbnails' Edit All, a multiple choice in Open
 Capture…, several files handed over at once by Finder or another app — open as one **series**.
 
-Tools: `V` select · `A` arrow · `R` rectangle · `O` ellipse (`⇧` for a circle) · `P` path · `T` text · `N` step · `H` highlight ·
+Tools: `V` select · `A` arrow · `R` rectangle · `O` ellipse (`⇧` for a circle) · `P` path · `T` text · `N` step · `M` click · `H` highlight ·
 `B` blur · `E` patch · `X` replace · `K` crop · `C` cut, each key shown on its toolbar
 button. The toolbar is one row: tools and Border centred while there is room, the actions at the
 right; the editor's notes (snapping, the cut limit, a Replace that found no text, annotations
@@ -430,7 +429,7 @@ kind's own options where they apply — text adds a free size (`TextStyle.points
 font (sans, mono, serif), alignment (left, centred) and its background, a step adds Move earlier / Move
 later (disabled at either end of the sequence), a path adds Closed (disabled under three points) and Fill (disabled while open). The options per kind are one pure mapping. The
 crop under `K` gets a bar with delete. A new annotation takes the colour, size and text background
-last chosen, steps remembering a size of their own (`AnnotationStyle.markerWidth`), across launches, and stays selected after it is drawn so its bar is
+last chosen, steps and clicks remembering a size of their own (`AnnotationStyle.markerWidth`), across launches, and stays selected after it is drawn so its bar is
 showing.
 
 **Text** is drawn either plain in its colour or on a **background**: a rounded pill in its colour
@@ -453,6 +452,10 @@ over its ink and matched text holding its string — one undo step — and types
 reading order with its string selected (`EditorModel.replace(in:)`). Over no line it makes a
 patch over the drag and empty text in the last style, and the subtitle says no text was found.
 Like text, it waits for the reading under a busy cursor.
+
+**Clicks** (`M`): each click places a mouse pointer in its colour, ringed in white, its point on
+the spot clicked and short rays around it (`AnnotationGeometry.clickMarker`); a drag before
+release moves it, as a step's does.
 
 **Steps** (`N`): each click places a numbered circle in its colour, the number in
 `Palette.contrastingInk`, ringed in white. The number is not stored: it is the document's first
@@ -520,7 +523,7 @@ known strings. The noise is seeded from a per-document salt stored in the master
 shows the true result.
 
 **The edit document** holds the cuts, an optional crop, the annotations (arrow, rectangle, ellipse, path,
-text, step, highlight, blur, patch), all in original pixels, with sampled colours and text styles, an optional border, the first step number
+text, step, click, highlight, blur, patch), all in original pixels, with sampled colours and text styles, an optional border, the first step number
 and whether it restarts a series' numbering, the margin colour, plus the blur salt, so every edit stays adjustable
 from the master and a capture reopened on its own renders the numbers it was saved with.
 Render order: blur (from original pixels) → crop → cuts and their labels → margin → annotations,
