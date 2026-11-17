@@ -101,7 +101,7 @@ extension EditorModel {
             ).map(Grab.annotation)
         case .path, .arrow:
             return vertexHandle(at: p, map: map, option: option) ?? ownAnnotation(at: p, map: map)
-        case .rectangle, .highlight, .step, .blur, .patch:
+        case .rectangle, .ellipse, .highlight, .step, .blur, .patch:
             return ownAnnotation(at: p, map: map)
         case .crop:
             guard let crop = document.crop, let rect = map.rect(crop.cgRect) else { return nil }
@@ -186,7 +186,7 @@ extension EditorModel {
             case .select, .cut:
                 selection = nil
                 if tool == .cut { setDrag(.region(start: p.original)) }
-            case .arrow, .rectangle, .highlight:
+            case .arrow, .rectangle, .ellipse, .highlight:
                 let before = document
                 let id = document.nextAnnotationID
                 var next = document
@@ -220,13 +220,14 @@ extension EditorModel {
         }
     }
 
-    func mouseDragged(_ p: Pointer, map: RenderMap, snap: Bool) {
+    /// `square` (⇧) draws an ellipse as a circle.
+    func mouseDragged(_ p: Pointer, map: RenderMap, snap: Bool, square: Bool = false) {
         batch {
             switch drag {
             case .shape(let id, let start, _):
                 var next = document
                 if let i = next.annotations.firstIndex(where: { $0.id == id }) {
-                    next.annotations[i].shape = shape(from: start, to: p.original)
+                    next.annotations[i].shape = shape(from: start, to: p.original, square: square)
                     preview(next)
                 }
             case .region(let start):
@@ -271,9 +272,9 @@ extension EditorModel {
         }
     }
 
-    func mouseUp(_ p: Pointer, map: RenderMap, snap: Bool) {
+    func mouseUp(_ p: Pointer, map: RenderMap, snap: Bool, square: Bool = false) {
         batch {
-            mouseDragged(p, map: map, snap: snap)
+            mouseDragged(p, map: map, snap: snap, square: square)
             let finished = drag
             let shown = pending
             setDrag(nil)
@@ -400,12 +401,21 @@ extension EditorModel {
         }
     }
 
-    /// The new annotation for a drag: an arrow's head is where the drag started.
-    func shape(from start: CGPoint, to end: CGPoint) -> Shape {
+    /// The new annotation for a drag: an arrow's head is where the drag started; with `square`
+    /// an ellipse is a circle, its side the drag's longer reach.
+    func shape(from start: CGPoint, to end: CGPoint, square: Bool = false) -> Shape {
+        var end = end
+        if square && tool == .ellipse {
+            let side = max(abs(end.x - start.x), abs(end.y - start.y))
+            end = CGPoint(
+                x: start.x + (end.x < start.x ? -side : side),
+                y: start.y + (end.y < start.y ? -side : side))
+        }
         let rect = Gestures.rect(from: start, to: end)
         switch tool {
         case .arrow: return .arrow(tail: end, head: start)
         case .highlight: return .highlight(rect: rect)
+        case .ellipse: return .ellipse(rect: rect)
         default: return .rectangle(rect: rect)
         }
     }
@@ -470,7 +480,8 @@ extension EditorModel {
         switch shape {
         case .arrow(let tail, let head):
             return Double(hypot(head.x - tail.x, head.y - tail.y)) < minimumDrag
-        case .rectangle(let rect), .highlight(let rect), .blur(let rect), .patch(let rect, _):
+        case .rectangle(let rect), .ellipse(let rect), .highlight(let rect), .blur(let rect),
+            .patch(let rect, _):
             return Double(max(rect.width, rect.height)) < minimumDrag
         case .text, .step, .path:
             return false

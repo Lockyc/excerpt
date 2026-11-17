@@ -55,7 +55,7 @@ public enum HitTest {
     {
         let w = AnnotationGeometry.lineWidth(annotation, scale: scale)
         switch annotation.shape {
-        case .rectangle(let rect):
+        case .rectangle(let rect), .ellipse(let rect):
             return map.rect(rect.standardized)?.insetBy(dx: -w / 2, dy: -w / 2)
         case .highlight(let rect), .blur(let rect), .patch(let rect, _):
             return map.rect(rect.standardized)

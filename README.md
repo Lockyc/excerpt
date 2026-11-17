@@ -70,14 +70,15 @@ Input Monitoring in System Settings → Privacy & Security. Your captures stay w
   | Select | V | Select, move and restyle items; a selected item's colour, size and options float beside it |
   | Arrow | A | An arrow |
   | Rectangle | R | A rectangle outline |
+  | Ellipse | O | An ellipse outline; hold ⇧ for a circle |
   | Path | P | Click or freehand lines and outlines, optionally filled |
   | Text | T | Plain or on a background of its colour, any size, bold, Sans, Mono or Serif; placed on the capture's own text, it matches that text's size, weight, font and colour |
-  | Step | N | Numbered markers that carry on across captures edited together |
+  | Step | N | Numbered markers that carry on across captures edited together, sized apart from the other tools |
   | Highlight | H | A translucent highlight over a region |
   | Blur | B | Blurs a region |
   | Patch | E | Conceals text with the colour around it |
   | Replace | X | Patches a recognised line and lets you retype it in the same size, weight and colour |
-  | Crop | K | Crops |
+  | Crop | K | Crops, snapping to the borders in the picture; drag a corner or side to adjust it |
   | Cut | C | Drag across rows or columns to remove them; the join becomes a torn seam |
 
   The colour control's eyedropper samples any colour from the capture. **Border** frames the image

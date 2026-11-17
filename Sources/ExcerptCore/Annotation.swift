@@ -73,6 +73,8 @@ public enum Shape: Codable, Equatable, Sendable {
     /// The head is where the arrow points.
     case arrow(tail: CGPoint, head: CGPoint)
     case rectangle(rect: CGRect)
+    /// The ellipse inscribed in `rect`, stroked as a rectangle is.
+    case ellipse(rect: CGRect)
     /// `origin` is the top-left of the first line, with or without a background. `background`
     /// true sets the text on a pill of its colour; nil, which text saved before backgrounds
     /// has, draws plain like false. `style` nil is legacy text (`TextStyle`); with one,
@@ -99,6 +101,7 @@ public enum Shape: Codable, Equatable, Sendable {
         switch self {
         case .arrow(let tail, let head): return .arrow(tail: move(tail), head: move(head))
         case .rectangle(let rect): return .rectangle(rect: move(rect))
+        case .ellipse(let rect): return .ellipse(rect: move(rect))
         case .text(let origin, let string, let background, let style):
             return .text(origin: move(origin), string: string, background: background, style: style)
         case .highlight(let rect): return .highlight(rect: move(rect))

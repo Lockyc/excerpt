@@ -26,16 +26,25 @@ import Testing
         let doc = EditDocument(scale: 2, cuts: [Cut(axis: .vertical, lower: 1, upper: 2)])
         #expect(try doc.encoded() == doc.encoded())
         let json = String(decoding: try doc.encoded(), as: UTF8.self)
-        #expect(json.contains("\"version\":9") && !json.contains("border"))
+        #expect(json.contains("\"version\":10") && !json.contains("border"))
     }
 
-    @Test func currentVersionIsNine() {
-        #expect(EditDocument.currentVersion == 9)
+    @Test func currentVersionIsTen() {
+        #expect(EditDocument.currentVersion == 10)
     }
 
     @Test func rejectsANewerVersion() {
-        let json = Data(#"{"version":10,"scale":2,"cuts":[]}"#.utf8)
-        #expect(throws: EditDocumentError.unsupportedVersion(10)) { try EditDocument.decode(json) }
+        let json = Data(#"{"version":11,"scale":2,"cuts":[]}"#.utf8)
+        #expect(throws: EditDocumentError.unsupportedVersion(11)) { try EditDocument.decode(json) }
+    }
+
+    @Test func anEllipseRoundTripsAndIsValidated() throws {
+        let doc = EditDocument(
+            scale: 2,
+            annotations: [
+                Annotation(id: 1, shape: .ellipse(rect: CGRect(x: 10, y: 20, width: 80, height: 40)))
+            ])
+        #expect(try EditDocument.decode(doc.encoded()) == doc)
     }
 
     @Test func firstStepAndRestartRoundTrip() throws {
@@ -155,7 +164,9 @@ import Testing
         // A missing salt is random, not a public seed, and persists once saved.
         #expect(try EditDocument.decode(json).salt != doc.salt)
         #expect(try EditDocument.decode(doc.encoded()).salt == doc.salt)
-        #expect(String(decoding: try doc.encoded(), as: UTF8.self).contains("\"version\":9"))
+        #expect(
+            String(decoding: try doc.encoded(), as: UTF8.self)
+                .contains("\"version\":\(EditDocument.currentVersion)"))
     }
 
     @Test func borderRoundTripsAndReadsOffWhenAbsent() throws {

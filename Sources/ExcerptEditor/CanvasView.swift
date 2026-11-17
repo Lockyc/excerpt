@@ -622,14 +622,18 @@ final class CanvasView: NSView, NSTextViewDelegate {
     }
 
     override func mouseDragged(with event: NSEvent) {
-        model.mouseDragged(pointer(event), map: map, snap: snap(event))
+        model.mouseDragged(
+            pointer(event), map: map, snap: snap(event),
+            square: event.modifierFlags.contains(.shift))
     }
 
     override func mouseUp(with event: NSEvent) {
         let pendingCut: Cut?
         if case .cut(let cut)? = model.pending { pendingCut = cut } else { pendingCut = nil }
         let before = pendingCut.map(bandRect)
-        model.mouseUp(pointer(event), map: map, snap: snap(event))
+        model.mouseUp(
+            pointer(event), map: map, snap: snap(event),
+            square: event.modifierFlags.contains(.shift))
         if let cut = pendingCut, let before { animateCollapse(of: cut, from: before) }
         if model.tool == .replace { openTyping() }
     }

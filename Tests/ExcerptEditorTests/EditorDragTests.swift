@@ -179,6 +179,30 @@ import Testing
         #expect(m.document.crop == PixelRect(x: 61, y: 20, width: 239, height: 220))
     }
 
+    @Test func theEllipseToolDrawsAnEllipseAndWithShiftACircle() {
+        let m = model()
+        m.tool = .ellipse
+        drag(m, CGPoint(x: 20, y: 30), CGPoint(x: 140, y: 90))
+        #expect(
+            m.document.annotations.map(\.shape) == [
+                .ellipse(rect: CGRect(x: 20, y: 30, width: 120, height: 60))
+            ])
+        #expect(m.selection == .annotation(1))
+        let map = map(m)
+        m.mouseDown(Pointer(rendered: CGPoint(x: 300, y: 300), map: map), map: map)
+        m.mouseUp(
+            Pointer(rendered: CGPoint(x: 260, y: 290), map: map), map: map, snap: false,
+            square: true)
+        #expect(
+            m.document.annotations.last?.shape
+                == .ellipse(rect: CGRect(x: 260, y: 260, width: 40, height: 40)))
+        // A press on an ellipse under the ellipse tool moves it.
+        drag(m, CGPoint(x: 21, y: 60), CGPoint(x: 31, y: 70))
+        #expect(
+            m.document.annotations[0].shape
+                == .ellipse(rect: CGRect(x: 30, y: 40, width: 120, height: 60)))
+    }
+
     @Test func aCropsHandlesMoveOnlyTheirSides() {
         let m = model(
             EditDocument(scale: 1, crop: PixelRect(x: 60, y: 40, width: 200, height: 200), salt: 7))

@@ -46,6 +46,12 @@ public enum AnnotationRenderer {
                     context.setLineJoin(.round)
                     context.stroke(flip.rect(placed))
                 }
+            case .ellipse(let rect):
+                if let placed = map.rect(rect.standardized) {
+                    context.setStrokeColor(color)
+                    context.setLineWidth(w)
+                    context.strokeEllipse(in: flip.rect(placed))
+                }
             case .highlight(let rect):
                 if let placed = map.rect(rect.standardized) {
                     context.setBlendMode(.multiply)

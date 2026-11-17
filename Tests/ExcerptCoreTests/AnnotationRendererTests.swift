@@ -32,6 +32,22 @@ import Testing
         #expect(out[x: 200, y: 440] == PixelBuffer(sheet)[x: 200, y: 440])  // clear of it
     }
 
+    @Test func anEllipseIsStrokedInsideItsRectsCorners() {
+        let edits = EditDocument(
+            scale: 1,
+            annotations: [
+                Annotation(
+                    id: 1, shape: .ellipse(rect: CGRect(x: 100, y: 200, width: 300, height: 200)),
+                    color: .palette(.blue), width: .thin)
+            ])
+        let out = PixelBuffer(Renderer.render(sheet, edits: edits).image)
+        let plain = PixelBuffer(sheet)
+        #expect(out[x: 100, y: 300] == Palette.blue.rgba)  // the left of its curve
+        #expect(out[x: 250, y: 200] == Palette.blue.rgba)  // its top
+        #expect(out[x: 102, y: 202] == plain[x: 102, y: 202])  // the rect's corner, clear
+        #expect(out[x: 250, y: 300] == plain[x: 250, y: 300])  // its middle, clear
+    }
+
     @Test func anAnnotationHiddenByACutDrawsNothing() {
         let cut = Cut(axis: .horizontal, lower: 200, upper: 500)
         let hidden = Annotation(

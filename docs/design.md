@@ -368,7 +368,7 @@ in the menu bar, or by opening a capture (registered as an Open With handler for
 Dock icon. Several captures opened together — the thumbnails' Edit All, a multiple choice in Open
 Capture…, several files handed over at once by Finder or another app — open as one **series**.
 
-Tools: `V` select · `A` arrow · `R` rectangle · `P` path · `T` text · `N` step · `H` highlight ·
+Tools: `V` select · `A` arrow · `R` rectangle · `O` ellipse (`⇧` for a circle) · `P` path · `T` text · `N` step · `H` highlight ·
 `B` blur · `E` patch · `X` replace · `K` crop · `C` cut, each key shown on its toolbar
 button. The toolbar is one row: tools and Border centred while there is room, the actions at the
 right; the editor's notes (snapping, the cut limit, a Replace that found no text, annotations
@@ -487,7 +487,7 @@ cannot be read from the primary; pixelation defeats reading, not candidate-match
 known strings. The noise is seeded from a per-document salt stored in the master. The editor
 shows the true result.
 
-**The edit document** holds the cuts, an optional crop, the annotations (arrow, rectangle, path,
+**The edit document** holds the cuts, an optional crop, the annotations (arrow, rectangle, ellipse, path,
 text, step, highlight, blur, patch), all in original pixels, with sampled colours and text styles, an optional border, the first step number
 and whether it restarts a series' numbering, the margin colour, plus the blur salt, so every edit stays adjustable
 from the master and a capture reopened on its own renders the numbers it was saved with.
