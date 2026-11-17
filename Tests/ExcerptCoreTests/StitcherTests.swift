@@ -64,9 +64,31 @@ import Testing
         #expect(Set((188..<988).map { page[x: strip, y: $0] }).count > 1)
     }
 
-    @Test func windowChromeFixesTheTopCornerRows() {
-        let (stitcher, _, first, _) = scrollWindow()
-        #expect(ScrollFixtures.rows(stitcher.image, 0..<12) == ScrollFixtures.rows(first, 0..<12))
+    @Test func windowChromeMakesTheCornerRowsHeaderAndFooter() {
+        // The page's top and bottom rows differ between the frames, so the frames share no
+        // header or footer of their own: only the chrome makes the corner rows sticky.
+        let page = ScrollFixtures.page(width: 90, height: 1000)
+        let a = ScrollFixtures.windowShaped(
+            ScrollFixtures.frame(page, offset: 0, viewport: 200), radius: 12, edge: 1)
+        let b = ScrollFixtures.windowShaped(
+            ScrollFixtures.frame(page, offset: 120, viewport: 200), radius: 12, edge: 1)
+        let ignored = StitchMatcher.ignoredRightColumns(width: 90, scale: 1)
+        guard
+            case .moved(120, let header, let footer, _) = StitchMatcher.match(
+                a, b, ignoringRightColumns: ignored, chrome: .window(shapeOf: a))
+        else {
+            Issue.record("expected a 120-row move with the window's chrome")
+            return
+        }
+        #expect(header >= 12 && footer >= 12)
+        guard
+            case .moved(120, let plainHeader, _, _) = StitchMatcher.match(
+                a, b, ignoringRightColumns: ignored)
+        else {
+            Issue.record("expected a 120-row move without chrome")
+            return
+        }
+        #expect(plainHeader < 12)
     }
 
     @Test func aLongPageStitchesToThePage() {
