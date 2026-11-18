@@ -1,4 +1,5 @@
 import ExcerptTestSupport
+import PropertyBased
 import Testing
 
 @testable import ExcerptCore
@@ -16,6 +17,36 @@ import Testing
         ScrollSession(
             first: frame(offset), scale: 1, canAutoScroll: canAutoScroll,
             maximumHeight: maximumHeight)
+    }
+
+    /// Auto-scrolling a generated page of unique rows a step at a time, the page stopping at its
+    /// end, finishes with the page: no seam is lost, doubled or misplaced. The one shortfall
+    /// allowed is blank rows at the very end: a last step of a few rows whose frames end in the
+    /// same blank rows reads as a footer that grew over them, so they never join.
+    @Test func anAutoScrolledPageOfUniqueRowsStitchesToThePage() async {
+        await propertyCheck(
+            count: propertyRuns(gate: 12), input: ScrollSceneGen.plain, Gen.int(in: 1...600)
+        ) { scene, extra in
+            let height = scene.viewport + extra
+            let page = scene.page(height: height)
+            let travel = Int((Double(scene.viewport) * ScrollSession.stepShare).rounded())
+            var s = ScrollSession(
+                first: scene.frame(page, offset: 0), scale: 1, canAutoScroll: true)
+            var offset = 0
+            for _ in 0..<(height / travel + ScrollSession.stillStepsToStop + 2)
+            where s.phase == .auto {
+                offset = min(offset + travel, height - scene.viewport)
+                s.stepped(scene.frame(page, offset: offset), travel: travel)
+            }
+            #expect(s.phase == .finished, "\(scene), height \(height)")
+            let image = s.stitcher.image
+            let kept = min(image.height, height)
+            let blankTail = ScrollFixtures.rows(page, max(0, kept - 1)..<height).bytes
+                .allSatisfy { $0 == 255 }
+            #expect(
+                image == ScrollFixtures.rows(page, 0..<kept) && (kept == height || blankTail),
+                "\(scene), height \(height): stitched \(image.height) rows")
+        }
     }
 
     @Test func stepsAreSixtyPercentOfTheRegionInPoints() {

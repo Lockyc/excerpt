@@ -19,6 +19,12 @@ build:
 test:
     swift test
 
+# Occasional: the gate runs a few dozen generated cases per property; this runs many more.
+[group("dev")]
+[doc("Run the property tests over `runs` generated cases each")]
+properties runs="1000":
+    EXCERPT_PROPERTY_RUNS={{runs}} swift test --filter 'anyMatchIsTheTrueOffsetOrUncertain|anAutoScrolledPageOfUniqueRows'
+
 [group("dev")]
 [doc("Format sources in place")]
 fmt:

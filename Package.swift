@@ -8,7 +8,8 @@ let package = Package(
     name: "excerpt",
     platforms: [.macOS(.v15)],
     dependencies: [
-        .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.10.0")
+        .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.10.0"),
+        .package(url: "https://github.com/x-sheep/swift-property-based", exact: "2.0.1"),
     ],
     targets: [
         .target(name: "ExcerptCore"),
@@ -36,7 +37,11 @@ let package = Package(
             name: "ExcerptTestSupport", dependencies: ["ExcerptCore"],
             path: "Tests/ExcerptTestSupport"),
         .testTarget(
-            name: "ExcerptCoreTests", dependencies: ["ExcerptCore", "ExcerptTestSupport"],
+            name: "ExcerptCoreTests",
+            dependencies: [
+                "ExcerptCore", "ExcerptTestSupport",
+                .product(name: "PropertyBased", package: "swift-property-based"),
+            ],
             exclude: ["Goldens"]),
         .testTarget(
             name: "ExcerptCaptureTests",
@@ -47,7 +52,10 @@ let package = Package(
         ),
         .testTarget(
             name: "ExcerptEditorTests",
-            dependencies: ["ExcerptEditor", "ExcerptRecording", "ExcerptTestSupport"],
+            dependencies: [
+                "ExcerptEditor", "ExcerptRecording", "ExcerptTestSupport",
+                .product(name: "PropertyBased", package: "swift-property-based"),
+            ],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .testTarget(

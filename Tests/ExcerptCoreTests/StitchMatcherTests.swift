@@ -1,4 +1,5 @@
 import ExcerptTestSupport
+import PropertyBased
 import Testing
 
 @testable import ExcerptCore
@@ -18,6 +19,82 @@ import Testing
         -> PixelBuffer
     {
         ScrollFixtures.frame(page, offset: offset, viewport: 200, header: header, footer: footer)
+    }
+
+    /// Two frames of a generated scene `move` rows apart, the first at page row `offset`, the
+    /// hover block at row `hoverRow` and then `hoverShift` rows lower (the next message under the
+    /// pointer); `strip` leaves out the scroll-bar strip.
+    func generatedMatch(
+        _ scene: ScrollFixtures.Scene, offset: Int, move: Int, hoverRow: Int, hoverShift: Int,
+        strip: Bool
+    ) -> FrameMatch {
+        let page = scene.page(height: offset + move + scene.viewport)
+        let width = scene.width + scene.panel
+        return StitchMatcher.match(
+            scene.frame(page, offset: offset, hoverRow: hoverRow),
+            scene.frame(page, offset: offset + move, hoverRow: hoverRow + hoverShift),
+            ignoringRightColumns: strip
+                ? StitchMatcher.ignoredRightColumns(width: width, scale: 1)
+                : 0,
+            chrome: scene.chrome)
+    }
+
+    /// `alias` is a whole number of repeated-block periods from the true `move`, and once the
+    /// rows a move may leave out are left out (the sticky header and any blank rows that line up
+    /// under it, the sticky footer and an overlay over the page above it) no more page rows than
+    /// the contradictions a move tolerates differ between the frames there: the known limit
+    /// `knownIssueARepeatedBlockWithItsTellingRowsHiddenAliases`.
+    func blockAliasIsKnownLimit(
+        _ scene: ScrollFixtures.Scene, offset: Int, move: Int, match: FrameMatch
+    ) -> Bool {
+        guard scene.block > 0, case .moved(let alias, let header, let footer, _) = match,
+            alias > 0, (move - alias) % ScrollFixtures.Scene.repeatPeriod == 0,
+            header <= scene.header + 6,
+            footer
+                <= scene.footer
+                + Int(Double(scene.viewport) * StitchMatcher.maximumOverlayShare) + 6
+        else { return false }
+        let page = scene.page(height: offset + move + scene.viewport)
+        func row(_ y: Int) -> PixelBuffer { ScrollFixtures.rows(page, y..<(y + 1)) }
+        func blank(_ row: PixelBuffer) -> Bool { row.bytes.allSatisfy { $0 == 255 } }
+        // A blank row is no evidence either way: only two rows of text can contradict.
+        let differing = (header..<max(header, scene.viewport - alias - footer)).count {
+            let a = row(offset + alias + $0)
+            let b = row(offset + move + $0)
+            return a != b && !blank(a) && !blank(b)
+        }
+        return differing <= StitchMatcher.maximumContradictions
+    }
+
+    /// The matcher must never fabricate a seam: whatever bars, toolbar band, wallpaper, hover
+    /// block, side panel or repeated block a generated scene shows, a move is the true one or the
+    /// match is uncertain. A move is within a frame, or a period of the repeated block further:
+    /// past any overlap, where only an alias one period short could match.
+    @Test func anyMatchIsTheTrueOffsetOrUncertain() async {
+        await propertyCheck(
+            count: propertyRuns(gate: 60),
+            input: ScrollSceneGen.scene, Gen.int(in: 0...400), Gen.int(in: 1...100), Gen.bool,
+            Gen.int(in: 0...280), Gen.int(in: -40...40), Gen.bool
+        ) { scene, offset, moveShare, jump, hoverRow, hoverShift, strip in
+            let move =
+                max(1, scene.viewport * moveShare / 100)
+                + (jump ? ScrollFixtures.Scene.repeatPeriod : 0)
+            let match = generatedMatch(
+                scene, offset: offset, move: move, hoverRow: hoverRow, hoverShift: hoverShift,
+                strip: strip)
+            switch match {
+            case .uncertain: break
+            case .moved(let found, _, _, _) where found == move: break
+            case .moved
+            where blockAliasIsKnownLimit(scene, offset: offset, move: move, match: match):
+                break
+            default:
+                let input =
+                    "\(scene), offset \(offset), move \(move), hover \(hoverRow)+\(hoverShift), "
+                    + "strip \(strip)"
+                Issue.record("\(input): \(match)")
+            }
+        }
     }
 
     @Test func findsTheOffset() {
@@ -367,19 +444,6 @@ import Testing
         #expect(StitchMatcher.match(a, b, ignoringRightColumns: 0) == .uncertain)
     }
 
-    /// `frame` with its top `rows` rows blended a fifth of the way toward blue-grey at every
-    /// pixel, ink too, as a translucent toolbar tints the page under it.
-    func tintedTop(_ frame: PixelBuffer, rows: Int) -> PixelBuffer {
-        ScrollFixtures.paint(width: frame.width, height: frame.height) { x, y in
-            let c = frame[x: x, y: y]
-            guard y < rows else { return c }
-            func blend(_ v: UInt8, _ toward: Double) -> UInt8 {
-                UInt8((Double(v) * 0.8 + toward * 0.2).rounded())
-            }
-            return RGBA(r: blend(c.r, 120), g: blend(c.g, 130), b: blend(c.b, 160), a: c.a)
-        }
-    }
-
     @Test func knownIssueRepeatedContentUnderAWindowsToolbarCanAlias() {
         // The long repeated-block alias above, in a window with a translucent toolbar over its
         // top quarter: the rows that tell the alias apart sit under the toolbar, whose rows are
@@ -391,9 +455,38 @@ import Testing
         ) {
             #expect(
                 StitchMatcher.match(
-                    tintedTop(ScrollFixtures.frame(long, offset: 0, viewport: 200), rows: 50),
-                    tintedTop(ScrollFixtures.frame(long, offset: 300, viewport: 200), rows: 50),
+                    ScrollFixtures.tinted(
+                        ScrollFixtures.frame(long, offset: 0, viewport: 200), rows: 50),
+                    ScrollFixtures.tinted(
+                        ScrollFixtures.frame(long, offset: 300, viewport: 200), rows: 50),
                     ignoringRightColumns: 0, chrome: window) == .uncertain)
+        }
+    }
+
+    @Test func knownIssueARepeatedBlockWithItsTellingRowsHiddenAliases() {
+        // Found by `anyMatchIsTheTrueOffsetOrUncertain`. A block repeats every 250 rows and the
+        // page jumps more than a frame, so only the frame one period short overlaps. The rows
+        // that tell it apart from the block sit where a move may leave rows out.
+        withKnownIssue("a repeated block aliases when the rows that tell it apart are hidden") {
+            // Jumping 389 past a 90-row block: of the 112-row overlap the sticky header covers
+            // 13, 2 rows of text differ (within the contradictions a move tolerates as
+            // animation), then 6 blank rows and the block's 88 match.
+            let under = ScrollFixtures.Scene(
+                seed: 1, block: 90, width: 64, viewport: 251, header: 13)
+            let page = under.page(height: 640)
+            #expect(
+                StitchMatcher.match(
+                    under.frame(page, offset: 0), under.frame(page, offset: 389),
+                    ignoringRightColumns: 0) == .uncertain)
+            // Jumping 304 past a 40-row block under a 39-row header: the differing rows at the
+            // overlap's end read as an overlay over the page above the footer.
+            let over = ScrollFixtures.Scene(
+                seed: 1, block: 40, width: 64, viewport: 156, header: 39)
+            let long = over.page(height: 820)
+            #expect(
+                StitchMatcher.match(
+                    over.frame(long, offset: 359), over.frame(long, offset: 663),
+                    ignoringRightColumns: 0) == .uncertain)
         }
     }
 
