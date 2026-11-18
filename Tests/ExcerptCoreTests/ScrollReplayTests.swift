@@ -24,6 +24,13 @@ import Testing
         for result in ScrollReplay.run(page: stripes, regionHeights: [200], pointers: [nil]) {
             if case .reachedEnd = result.outcome { Issue.record("stripes can't stitch exactly") }
         }
+        // A session that finishes with a stitch the page's height but not the page is wrong.
+        let page = ScrollFixtures.page(width: 90, height: 600, seed: 4)
+        #expect(
+            ScrollReplay.outcome(.finished, image: stripes, page: page, hover: false)
+                == .wrong(height: 600))
+        #expect(
+            ScrollReplay.outcome(.finished, image: page, page: page, hover: false) == .reachedEnd)
     }
 
     @Test(.enabled(if: ProcessInfo.processInfo.environment["EXCERPT_REPLAY_DIR"] != nil))

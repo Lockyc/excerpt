@@ -68,11 +68,19 @@ public enum ScrollReplay {
             offset = min(offset + travel, end)
             session.stepped(frame(offset), travel: travel)
         }
-        guard session.phase == .finished else { return .halted(session.phase) }
-        let image = session.stitcher.image
+        return outcome(
+            session.phase, image: session.stitcher.image, page: page, hover: c.pointer != nil)
+    }
+
+    /// The verdict on a replay of `page` that ended in `phase` with `image` stitched, `hover`
+    /// when a hover block was on the region.
+    public static func outcome(
+        _ phase: ScrollPhase, image: PixelBuffer, page: PixelBuffer, hover: Bool
+    ) -> Outcome {
+        guard phase == .finished else { return .halted(phase) }
         // With a hover block the stitch keeps each frame's own pixels, so only its size and the
         // rows clear of the block can be held to the page.
-        if c.pointer == nil {
+        if !hover {
             return image == page ? .reachedEnd : .wrong(height: image.height)
         }
         return image.height == page.height ? .reachedEnd : .wrong(height: image.height)
