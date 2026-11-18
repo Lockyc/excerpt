@@ -25,6 +25,12 @@ test:
 properties runs="1000":
     EXCERPT_PROPERTY_RUNS={{runs}} swift test --filter 'anyMatchIsTheTrueOffsetOrUncertain|anAutoScrolledPageOfUniqueRows|aSpanSetAtThePlayheadCoversEveryExport'
 
+# Occasional: real pages that failed a capture stay out of this public tree, in a local folder.
+[group("dev")]
+[doc("Replay every PNG in `dir` as auto-scroll captures at several region heights and pointers")]
+stitch-replay dir:
+    EXCERPT_REPLAY_DIR="$(cd "{{dir}}" && pwd)" swift test --filter 'ScrollReplayTests/everyLocalPageReplaysToItsEnd'
+
 [group("dev")]
 [doc("Format sources in place")]
 fmt:
