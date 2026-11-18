@@ -16,23 +16,18 @@ final class CaptureCoordinator {
     private let onRecorded: (URL, CGImage, String?) -> Void
     /// The recorded time as the menu bar shows it while recording; nil once it has ended.
     private let onRecordingTime: (String?) -> Void
-    private var running = false
+    /// What runs, records and saves, and when a quit may answer.
+    private var lifecycle = CaptureLifecycle<
+        HotKeyAction, RecordingSession, CheckedContinuation<Void, Never>
+    >(record: .record, selector: .selector)
     /// The app that was frontmost as this capture began, before any of Excerpt's windows.
     private var frontmostAtStart: NSRunningApplication?
-    /// The recording in progress.
-    private var recording: RecordingSession?
-    /// Stopped recordings still being rendered, saved and delivered.
-    private var saves: [UUID: Task<Void, Never>] = [:]
-    /// `finishRecordings` calls waiting for the recording and the saves to end.
-    private var settling: [CheckedContinuation<Void, Never>] = []
     /// The area last recorded, for the next recording to open on; held for this launch.
     private var lastRecordRegion: ScrollRegion?
     /// Whether this launch has asked for Input Monitoring.
     private var askedForInputMonitoring = false
-    /// The overlay waiting on a selection, and the mode it is selecting for.
-    private var selecting: (overlay: SelectionOverlay, action: HotKeyAction)?
-    /// The mode a hotkey pressed mid-selection switched to.
-    private var switchedTo: HotKeyAction?
+    /// The overlay waiting on the selection `lifecycle.selecting` is up for.
+    private var selectingOverlay: SelectionOverlay?
     /// Whether this launch has shown the system's Accessibility prompt.
     private var askedForAccessibility = false
     /// How the scrolling capture in progress was asked to end: the first request wins.
@@ -64,42 +59,45 @@ final class CaptureCoordinator {
     }
 
     /// Stops the recording in progress, if any, keeping it.
-    func stopRecording() { recording?.stop() }
+    func stopRecording() { lifecycle.recording?.stop() }
 
     /// Whether a capture is under way, selecting or delivering.
-    var isRunning: Bool { running }
+    var isRunning: Bool { lifecycle.running }
 
     /// Whether a recording is in progress or a stopped one is still saving.
-    var isRecordingOrSaving: Bool { recording != nil || !saves.isEmpty }
+    var isRecordingOrSaving: Bool { lifecycle.isRecordingOrSaving }
 
     /// Stops the recording in progress, keeping it, and returns once it and every other
     /// stopped recording are saved.
     func finishRecordings() async {
-        recording?.stop()
-        while isRecordingOrSaving {
-            await withCheckedContinuation { settling.append($0) }
+        await withCheckedContinuation { waiter in
+            let quit = lifecycle.quitRequested(waiter)
+            quit.stop?.stop()
+            Self.resume(quit.replies)
         }
     }
 
-    /// Wakes `finishRecordings` to look again.
-    private func settled() {
-        let waiting = settling
-        settling = []
-        for continuation in waiting { continuation.resume() }
+    private static func resume(_ waiters: [CheckedContinuation<Void, Never>]) {
+        for waiter in waiters { waiter.resume() }
     }
 
+    /// A hotkey for another mode, pressed while a selection is up, ends that selection and runs
+    /// the new mode on the same stills; any other press mid-capture is ignored. The Record
+    /// hotkey again is one of the ways to stop a recording.
     func run(_ requested: HotKeyAction) async {
-        // The Record hotkey again is one of the ways to stop.
-        if requested == .record, let recording {
+        switch lifecycle.hotkey(requested) {
+        case .stopRecording(let recording):
             recording.stop()
             return
-        }
-        guard !running else {
-            switchMode(to: requested)
+        case .switchMode:
+            selectingOverlay?.interrupt()
             return
+        case .ignore:
+            return
+        case .start:
+            break
         }
-        running = true
-        defer { running = false }
+        defer { lifecycle.captureEnded() }
         // Read before an alert activates Excerpt.
         frontmostAtStart = NSWorkspace.shared.frontmostApplication
         started += 1
@@ -132,11 +130,11 @@ final class CaptureCoordinator {
             let stills = try await capturer.stills()
             var action = requested
             while true {
-                switchedTo = nil
+                lifecycle.switchedTo = nil
                 try await capture(
                     action, stills: stills, windowList: windowList, windowStills: windowStills,
                     overlay: overlay)
-                guard let next = switchedTo else { return }
+                guard let next = lifecycle.switchedTo else { return }
                 if next == .scrolling && !overlay.aside({ scrollingMayStart() }) { return }
                 action = next
             }
@@ -148,21 +146,17 @@ final class CaptureCoordinator {
         }
     }
 
-    /// A hotkey for another mode, pressed while a selection is up, ends that selection and runs
-    /// the new mode on the same stills; any other press mid-capture is ignored.
-    private func switchMode(to action: HotKeyAction) {
-        guard let selecting, action != selecting.action, action != .selector else { return }
-        switchedTo = action
-        selecting.overlay.interrupt()
-    }
-
     /// Waits on `overlay` for a selection in `mode`, switchable by another mode's hotkey meanwhile.
     private func select(
         _ mode: SelectionMode, for action: HotKeyAction, overlay: SelectionOverlay,
         stills: [DisplayStill]
     ) async -> SelectionResult {
-        selecting = (overlay, action)
-        defer { selecting = nil }
+        lifecycle.selectionBegan(action)
+        selectingOverlay = overlay
+        defer {
+            lifecycle.selectionEnded()
+            selectingOverlay = nil
+        }
         return await overlay.run(mode: mode, stills: stills)
     }
 
@@ -258,7 +252,7 @@ final class CaptureCoordinator {
                 try await captureScrolling(
                     still: still, pixelRect: rect, start: .manual, overlay: overlay, window: nil)
             case .chosen(let id):
-                switchedTo = HotKeyAction(rawValue: id)
+                lifecycle.switchedTo = HotKeyAction(rawValue: id)
             default:
                 break
             }
@@ -318,11 +312,13 @@ final class CaptureCoordinator {
         session.onTick = { [weak self] in
             self?.onRecordingTime(RecordingChrome.timeText(recorded: $0, remaining: nil))
         }
-        recording = session
-        // After the outcome is handled, so a save it starts is already in `saves`.
-        defer { settled() }
+        lifecycle.recordingStarted(session)
         let outcome = await session.run()
-        recording = nil
+        let kept: Bool
+        if case .saved = outcome { kept = true } else { kept = false }
+        let ended = lifecycle.recordingEnded(kept: kept)
+        // After the outcome is handled.
+        defer { Self.resume(ended.replies) }
         onRecordingTime(nil)
         switch outcome {
         case .discarded:
@@ -338,12 +334,11 @@ final class CaptureCoordinator {
                 "Recording failed", Alerts.sentence(error.localizedDescription) + kept)
         case .saved(let master, let stoppedEarly, let eventsSaved):
             // Its own task, so the hotkeys work again while it renders: this capture ends now.
-            let id = UUID()
-            saves[id] = Task {
+            guard let id = ended.save else { break }
+            Task {
                 await deliverRecording(
                     master, paths: paths, stoppedEarly: stoppedEarly, eventsSaved: eventsSaved)
-                saves[id] = nil
-                settled()
+                Self.resume(lifecycle.saveEnded(id))
             }
         }
     }
