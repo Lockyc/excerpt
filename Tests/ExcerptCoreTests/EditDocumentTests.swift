@@ -1,10 +1,113 @@
 import CoreGraphics
+import ExcerptTestSupport
 import Foundation
+import PropertyBased
 import Testing
 
 @testable import ExcerptCore
 
 @Suite struct EditDocumentTests {
+    /// A document holding every shape, cuts, a crop, a border and a margin colour: every field
+    /// a crafted file can set.
+    static let everyField = EditDocument(
+        scale: 2, cuts: [Cut(axis: .horizontal, lower: 40, upper: 60)],
+        crop: PixelRect(x: 4, y: 4, width: 220, height: 150),
+        annotations: [
+            Annotation(
+                id: 1, shape: .arrow(tail: CGPoint(x: 10, y: 10), head: .init(x: 90, y: 40))),
+            Annotation(id: 2, shape: .rectangle(rect: CGRect(x: 20, y: 20, width: 60, height: 30))),
+            Annotation(id: 3, shape: .ellipse(rect: CGRect(x: 30, y: 70, width: 40, height: 20))),
+            Annotation(
+                id: 4,
+                shape: .text(
+                    origin: CGPoint(x: 100, y: 30), string: "Note", background: true,
+                    style: TextStyle(points: 18))),
+            Annotation(id: 5, shape: .highlight(rect: CGRect(x: 5, y: 120, width: 90, height: 12))),
+            Annotation(id: 6, shape: .blur(rect: CGRect(x: 140, y: 90, width: 50, height: 30))),
+            Annotation(id: 7, shape: .step(center: CGPoint(x: 200, y: 20))),
+            Annotation(id: 8, shape: .click(tip: CGPoint(x: 180, y: 120))),
+            Annotation(
+                id: 9,
+                shape: .path(
+                    points: [.init(x: 10, y: 140), .init(x: 60, y: 100), .init(x: 90, y: 150)],
+                    closed: true, fill: true)),
+            Annotation(
+                id: 10,
+                shape: .patch(rect: CGRect(x: 120, y: 10, width: 30, height: 20), autoColor: false),
+                color: .sampled(RGBA(r: 10, g: 200, b: 30, a: 255))),
+        ],
+        border: .initial, firstStep: 3, marginColor: RGBA(r: 255, g: 255, b: 255, a: 255),
+        salt: 7)
+
+    /// Values a crafted file puts in a number's place: zero, negatives, the edges of the text
+    /// sizes, past every limit, past a Double and past an Int.
+    static let numbers = [
+        "0", "-1", "-0.5", "0.5", "3", "3.9", "4", "200", "201", "1e9", "-1e9", "1e308", "-1e308",
+        "1e309", "9223372036854775807", "18446744073709551616",
+    ]
+    /// Values a crafted file puts in a string's place: unknown shape and colour names.
+    static let strings = ["\"bogus\"", "\"\"", "\"sampled\"", "\"palette\"", "\"path\"", "null"]
+
+    /// `json` with its `mutations` applied: each replaces the value of one key, a number with one
+    /// of `numbers` or a string with one of `strings`, chosen by `value`. `token` picks the key
+    /// name first, then which of its occurrences, so a field that appears once (a text size, the
+    /// scale) is as likely as one that appears in every shape.
+    static func mutated(_ json: String, _ mutations: [(token: Int, isNumber: Bool, value: Int)])
+        -> String
+    {
+        var json = json
+        for m in mutations {
+            let value = m.isNumber ? #"-?\d+(\.\d+)?([eE][+-]?\d+)?"# : #""[^"]*"|null"#
+            let pairs = json.matches(of: try! Regex(#""(\w+)":("# + value + ")"))
+            let keys = Array(Set(pairs.compactMap { $0.output[1].substring.map(String.init) }))
+                .sorted()
+            guard !keys.isEmpty else { continue }
+            let key = keys[m.token % keys.count]
+            let found = pairs.filter { $0.output[1].substring.map(String.init) == key }
+            let pick = found[(m.token / keys.count) % found.count]
+            guard let range = pick.output[2].range else { continue }
+            let pool = m.isNumber ? numbers : strings
+            json.replaceSubrange(range, with: pool[m.value % pool.count])
+        }
+        return json
+    }
+
+    /// Whatever a crafted file's edit document holds, it is refused, or every text size is in
+    /// `TextStyle.pointsRange`, every coordinate finite, the scale in range, and the editor's
+    /// limits check either refuses it or it renders over a capture without trapping, at the size
+    /// its map says.
+    @Test func anyDecodedDocumentRendersWithinLimits() async throws {
+        let json = String(decoding: try Self.everyField.encoded(), as: UTF8.self)
+        let sheet = Fixtures.sheet(width: 240, height: 160)
+        await propertyCheck(
+            count: propertyRuns(gate: 500),
+            input: zip(Gen.int(in: 0...10_000), Gen.bool, Gen.int(in: 0...100)).array(of: 1...3)
+        ) { mutations in
+            let crafted = Self.mutated(json, mutations.map { ($0.0, $0.1, $0.2) })
+            guard let doc = try? EditDocument.decode(Data(crafted.utf8)) else { return }
+            #expect(EditDocument.scaleRange.contains(doc.scale), "\(crafted)")
+            for note in doc.annotations {
+                switch note.shape {
+                case .text(let origin, _, _, let style):
+                    #expect(origin.x.isFinite && origin.y.isFinite, "\(crafted)")
+                    if let style {
+                        #expect(TextStyle.pointsRange.contains(style.points), "\(crafted)")
+                    }
+                case .rectangle(let r), .ellipse(let r), .highlight(let r), .blur(let r),
+                    .patch(let r, _):
+                    #expect(r.minX.isFinite && r.minY.isFinite && r.width.isFinite, "\(crafted)")
+                    #expect(r.height.isFinite, "\(crafted)")
+                default: break
+                }
+            }
+            guard (try? EditLimits.check("crafted", width: 240, height: 160, edits: doc)) != nil
+            else { return }
+            let result = Renderer.render(sheet, edits: doc)
+            #expect(result.image.width == result.map.renderedWidth, "\(crafted)")
+            #expect(result.image.height == result.map.renderedHeight, "\(crafted)")
+        }
+    }
+
     @Test func roundTrips() throws {
         let doc = EditDocument(scale: 2, cuts: [Cut(axis: .horizontal, lower: 10, upper: 90)])
         #expect(try EditDocument.decode(doc.encoded()) == doc)

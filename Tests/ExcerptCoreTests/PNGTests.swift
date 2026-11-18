@@ -1,6 +1,7 @@
 import ExcerptTestSupport
 import Foundation
 import ImageIO
+import PropertyBased
 import Testing
 import UniformTypeIdentifiers
 
@@ -9,6 +10,31 @@ import UniformTypeIdentifiers
 @Suite struct PNGTests {
     @Test func crcMatchesTheKnownVector() {
         #expect(PNGChunks.crc32(Array("123456789".utf8)) == 0xCBF4_3926)
+    }
+
+    /// Any file can carry an edits chunk, so a corrupt one is ordinary input: overwriting bytes
+    /// of a PNG that carries edits, and cutting it short, the chunk scan throws or answers, never
+    /// traps, and says the file is complete exactly when its last chunk is IEND.
+    @Test func aCorruptPNGScansWithoutTrapping() async throws {
+        let png = try PNGChunks.settingText(
+            String(decoding: try EditDocumentTests.everyField.encoded(), as: UTF8.self),
+            keyword: PNGChunks.editsKeyword,
+            in: PNGCodec.encode(Fixtures.sheet(width: 24, height: 16), scale: 2))
+        await propertyCheck(
+            count: propertyRuns(gate: 300),
+            input: zip(Gen.int(in: 0...100_000), Gen.int(in: 0...255)).array(of: 0...4),
+            Gen.int(in: 1...100)
+        ) { writes, keep in
+            var bytes = [UInt8](png)
+            for (at, value) in writes { bytes[at % bytes.count] = UInt8(value) }
+            let crafted = Data(bytes.prefix(bytes.count * keep / 100))
+            guard let scan = try? PNGChunks.scan(crafted, keyword: PNGChunks.editsKeyword) else {
+                return
+            }
+            let types = try? PNGChunks.chunkTypes(in: crafted)
+            #expect(scan.isComplete == (types?.last == "IEND"), "\(writes), keep \(keep)%")
+            _ = try? PNGCodec.decode(crafted)
+        }
     }
 
     @Test func codecRoundTripsPixelsAndScale() throws {
