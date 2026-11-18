@@ -23,7 +23,7 @@ test:
 [group("dev")]
 [doc("Run the property tests over `runs` generated cases each")]
 properties runs="1000":
-    EXCERPT_PROPERTY_RUNS={{runs}} swift test --filter 'anyMatchIsTheTrueOffsetOrUncertain|anAutoScrolledPageOfUniqueRows'
+    EXCERPT_PROPERTY_RUNS={{runs}} swift test --filter 'anyMatchIsTheTrueOffsetOrUncertain|anAutoScrolledPageOfUniqueRows|aSpanSetAtThePlayheadCoversEveryExport'
 
 [group("dev")]
 [doc("Format sources in place")]

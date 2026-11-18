@@ -3,6 +3,28 @@ import Testing
 @testable import ExcerptCore
 
 @Suite struct ShortcutFilterTests {
+    /// Typed text never reaches the event log: over every key code, every printable ASCII
+    /// character and the characters ⌥ types on common layouts, and every set of ⌥ and ⇧, the
+    /// label is what the key alone would log, never the character.
+    @Test func noCharacterLogsWithoutCommandOrControl() {
+        let typed =
+            (0x20...0x7E).map { String(UnicodeScalar(UInt8($0))) }
+            + ["£", "–", "—", "€", "©", "π", "å", "ß", "∑", "…", "é", "ü"]
+        let typing: [KeyModifiers] = [[], [.option], [.shift], [.option, .shift]]
+        for keyCode in UInt16(0)...0x7F {
+            for modifiers in typing {
+                let key = ShortcutFilter.label(
+                    keyCode: keyCode, modifiers: modifiers, character: nil)
+                for character in typed {
+                    let label = ShortcutFilter.label(
+                        keyCode: keyCode, modifiers: modifiers, character: character)
+                    #expect(
+                        label == key,
+                        "key \(keyCode), modifiers \(modifiers.rawValue), \(character)")
+                }
+            }
+        }
+    }
     @Test func plainAndShiftedCharactersAreNeverLogged() {
         #expect(ShortcutFilter.label(keyCode: 0x00, modifiers: [], character: "A") == nil)
         #expect(ShortcutFilter.label(keyCode: 0x00, modifiers: [.shift], character: "A") == nil)

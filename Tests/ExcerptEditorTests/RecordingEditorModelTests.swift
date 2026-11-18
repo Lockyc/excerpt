@@ -1,5 +1,7 @@
 import CoreGraphics
 import ExcerptCore
+import ExcerptTestSupport
+import PropertyBased
 import Testing
 
 @testable import ExcerptEditor
@@ -26,6 +28,76 @@ import Testing
     /// The frame the exporter renders at `t`, for non-empty `times`.
     func exportedFrame(at t: Double, in times: [Double]) -> Int {
         RecordingExporter.frameIndex(at: t, in: times)!
+    }
+
+    /// Generated stamps that rise strictly, then a tail to the clip's end, in seconds. Uneven:
+    /// gaps from a tenth of a millisecond to seconds (a still screen sends no frames). On the
+    /// grid: whole thirtieths of a second apart, each stamp up to 0.8 ms either side of its
+    /// thirtieth, where the export's samples fall, so stamps sit at and around the tolerance.
+    static let stamps = zip(
+        Gen.bool, Gen.int(in: 0...5_000), Gen.int(in: 1...40_000).array(of: 0...24),
+        Gen.int(in: 1...20_000)
+    ).map { grid, first, gaps, tail in
+        let times: [Double]
+        if grid {
+            var thirtieth = first % 90
+            times = ([first] + gaps).enumerated().map { index, value in
+                if index > 0 { thirtieth += value % 90 + 1 }
+                return max(0, Double(thirtieth) / 30 + Double(value % 17 - 8) / 10_000)
+            }
+        } else {
+            times = gaps.reduce(into: [Double(first) / 10_000]) {
+                $0.append($0.last! + Double($1) / 10_000)
+            }
+        }
+        return (times: times, duration: times.last! + Double(tail) / 10_000)
+    }
+
+    /// Whatever the stamps, trim and playhead, a span started or ended at the playhead covers
+    /// every export sample of the frame shown there, at every rate the export renders, and the
+    /// preview decodes that frame: no sample of it renders unblurred in the primary.
+    @Test func aSpanSetAtThePlayheadCoversEveryExportSampleOfItsFrame() async {
+        await propertyCheck(
+            count: propertyRuns(gate: 300),
+            input: Self.stamps, Gen.int(in: 0...1000), Gen.int(in: 0...1000), Gen.bool,
+            zip(Gen.int(in: 0...1000), Gen.int(in: 0...1)).array(of: 1...3)
+        ) { clip, trimA, trimB, snapTrim, steps in
+            let (times, duration) = clip
+            var model = model(duration: duration, frameTimes: times)
+            // A trim on whole thirtieths keeps the export's samples on the stamps' grid.
+            let ends = [trimA, trimB].sorted().map {
+                let end = duration * Double($0) / 1000
+                return snapTrim ? min(duration, (end * 30).rounded(.down) / 30) : end
+            }
+            model.setTrim(ends[0]...ends[1])
+            model.addBlur(CGRect(x: 0, y: 0, width: 50, height: 50))
+            for (at, step) in steps {
+                model.playhead = duration * Double(at) / 1000
+                if step == 0 { model.startSpan(ofBlur: 0) } else { model.endSpan(ofBlur: 0) }
+                let input =
+                    "stamps \(times), duration \(duration), trim \(model.edits.trim), "
+                    + "playhead \(model.playhead), \(step == 0 ? "start" : "end")"
+                guard let span = model.edits.blurs[0].span,
+                    let shown = RecordingExporter.frameIndex(at: model.playhead, in: times)
+                else {
+                    Issue.record("no span: \(input)")
+                    return
+                }
+                #expect(model.shownFrameIndex == shown, "\(input)")
+                #expect(
+                    RecordingExporter.frameIndex(at: model.previewFrameTime, in: times) == shown,
+                    "\(input)")
+                #expect(
+                    decodedFrame(at: model.previewFrameTime, in: times) == shown, "\(input)")
+                for fps in RecordingExporter.gifRates + [RecordingExporter.mp4Rate] {
+                    for sample in RecordingExporter.samples(over: model.edits.trim, fps: fps)
+                    where exportedFrame(at: sample.time, in: times) == shown {
+                        #expect(
+                            span.contains(sample.time), "\(sample.time) s at \(fps) fps: \(input)")
+                    }
+                }
+            }
+        }
     }
 
     @Test func aSpanSetAtThePlayheadCoversEverySampleOfItsFrame() throws {
