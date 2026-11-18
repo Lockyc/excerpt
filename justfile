@@ -23,7 +23,7 @@ test:
 [group("dev")]
 [doc("Run the property tests over `runs` generated cases each")]
 properties runs="1000":
-    EXCERPT_PROPERTY_RUNS={{runs}} swift test --filter 'anyMatchIsTheTrueOffsetOrUncertain|anAutoScrolledPageOfUniqueRows|aSpanSetAtThePlayheadCoversEveryExport|anyDecodedDocumentRendersWithinLimits|aCorruptPNGScansWithoutTrapping'
+    EXCERPT_PROPERTY_RUNS={{runs}} swift test --filter 'anyMatchIsTheTrueOffsetOrUncertain|anAutoScrolledPageOfUniqueRows|aSpanSetAtThePlayheadCoversEveryExport|anyDecodedDocumentRendersWithinLimits|aCorruptPNGScansWithoutTrapping|anyCommandSequenceKeepsTheLifecycleRules'
 
 # Occasional: real pages that failed a capture stay out of this public tree, in a local folder.
 [group("dev")]

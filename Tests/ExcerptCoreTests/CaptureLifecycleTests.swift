@@ -1,3 +1,5 @@
+import ExcerptTestSupport
+import PropertyBased
 import Testing
 
 @testable import ExcerptCore
@@ -79,5 +81,140 @@ extension Lifecycle.Dispatch {
         #expect(life.switchedTo == nil)
         #expect(life.hotkey(.window).switches)
         #expect(life.switchedTo == .window)
+    }
+}
+
+/// The coordinator's side of a lifecycle, driven one command at a time in any order the app
+/// allows, checking each answer against the rules the app relies on.
+struct LifecycleMachine {
+    var life = lifecycle()
+    var running = false
+    var selecting: Mode?
+    var recording: Int?
+    var saves: [Int] = []
+    /// Quits asked and not yet answered.
+    var waiting: Set<Int> = []
+    var nextRecording = 1
+    var nextQuit = 1
+    var log: [String] = []
+
+    static let modes: [Mode] = [.area, .window, .record, .selector]
+
+    /// The commands the app can issue in this state: a hotkey and a quit at any time, the rest
+    /// in the order a capture runs them.
+    var enabled: [Int] {
+        let idle = running && selecting == nil && recording == nil
+        return [0, 7] + (idle ? [1, 3, 5] : []) + (selecting != nil ? [2] : [])
+            + (recording != nil ? [4] : []) + (saves.isEmpty ? [] : [6])
+    }
+
+    /// Runs the `pick`th enabled command with `arg`, so no generated command is wasted.
+    mutating func step(_ pick: Int, _ arg: Int) {
+        let kinds = enabled
+        run(kinds[pick % kinds.count], arg)
+    }
+
+    mutating func run(_ kind: Int, _ arg: Int) {
+        switch kind {
+        case 0:
+            let mode = Self.modes[arg % Self.modes.count]
+            log.append("hotkey(\(mode))")
+            let dispatch = life.hotkey(mode)
+            if mode == .record, let recording {
+                #expect(dispatch.stops == recording, "\(log)")
+            } else if running {
+                if let selecting, mode != selecting, mode != .selector {
+                    #expect(dispatch.switches, "\(log)")
+                    #expect(life.switchedTo == mode, "\(log)")
+                } else {
+                    #expect(dispatch.ignores, "\(log)")
+                }
+            } else {
+                // Whatever saves are pending: a render never holds the hotkeys.
+                #expect(dispatch.starts, "\(log)")
+                running = true
+            }
+        case 1 where running && selecting == nil && recording == nil:
+            let mode = Self.modes[arg % Self.modes.count]
+            log.append("selectionBegan(\(mode))")
+            life.selectionBegan(mode)
+            selecting = mode
+        case 2 where selecting != nil:
+            log.append("selectionEnded")
+            life.selectionEnded()
+            selecting = nil
+        case 3 where running && selecting == nil && recording == nil:
+            log.append("recordingStarted")
+            life.recordingStarted(nextRecording)
+            recording = nextRecording
+            nextRecording += 1
+        case 4 where recording != nil:
+            let kept = arg % 2 == 1
+            log.append("recordingEnded(kept: \(kept))")
+            recording = nil
+            let ended = life.recordingEnded(kept: kept)
+            #expect((ended.save != nil) == kept, "\(log)")
+            if let save = ended.save {
+                #expect(!saves.contains(save), "\(log)")
+                saves.append(save)
+            }
+            answered(ended.replies)
+        case 5 where running && selecting == nil && recording == nil:
+            log.append("captureEnded")
+            life.captureEnded()
+            running = false
+        case 6 where !saves.isEmpty:
+            let save = saves.remove(at: arg % saves.count)
+            log.append("saveEnded")
+            answered(life.saveEnded(save))
+        case 7:
+            let quit = nextQuit
+            nextQuit += 1
+            log.append("quitRequested")
+            waiting.insert(quit)
+            let asked = life.quitRequested(quit)
+            // A live recording is stopped and kept, never left running under the quit.
+            #expect(asked.stop == recording, "\(log)")
+            answered(asked.replies)
+        default:
+            return
+        }
+        #expect(life.running == running, "\(log)")
+        #expect(life.isRecordingOrSaving == (recording != nil || !saves.isEmpty), "\(log)")
+    }
+
+    /// Quits answer only once no recording is live and no save is pending, and then every
+    /// waiting quit answers, each exactly once.
+    mutating func answered(_ replies: [Int]) {
+        #expect(Set(replies).count == replies.count, "\(log)")
+        if recording == nil && saves.isEmpty {
+            #expect(Set(replies) == waiting, "\(log)")
+            waiting = []
+        } else {
+            #expect(replies.isEmpty, "\(log)")
+        }
+    }
+
+    /// Lets a live recording end kept and every save end: no quit is left unanswered.
+    mutating func settle() {
+        if recording != nil { run(4, 1) }
+        while !saves.isEmpty { run(6, 0) }
+        #expect(waiting.isEmpty, "\(log)")
+    }
+}
+
+extension CaptureLifecycleTests {
+    /// Any sequence of hotkeys, selections, recordings, saves and quits: a hotkey starts a
+    /// capture whenever none is under way, a quit stops a live recording and answers only once
+    /// it is kept and every save has ended, and every quit answers exactly once.
+    @Test func anyCommandSequenceKeepsTheLifecycleRules() async {
+        await propertyCheck(
+            count: propertyRuns(gate: 300),
+            input: zip(Gen.int(in: 0...7), Gen.int(in: 0...3)).array(of: 1...15)
+        ) { commands in
+            var machine = LifecycleMachine()
+            for (kind, arg) in commands { machine.step(kind, arg) }
+            machine.settle()
+        }
     }
 }
