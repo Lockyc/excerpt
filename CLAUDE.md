@@ -9,7 +9,7 @@ A macOS menu-bar screenshot tool in Swift (SwiftPM, macOS 15+). The architecture
 [docs/design.md](docs/design.md); what's next, and each phase's status in its Lane column, is
 [docs/roadmap.md](docs/roadmap.md) — start there before planning work.
 
-`just gate` per change; `just run` launches a signed build.
+`just gate` per change; `just run` builds the signed app and starts it in the background.
 
 ## Conventions
 
@@ -31,7 +31,7 @@ A macOS menu-bar screenshot tool in Swift (SwiftPM, macOS 15+). The architecture
 non-force `git push origin HEAD:main` to the release commit (fast-forward only, and the shared
 checkout never switches branch); or by a docs-only commit forward-merged into `dev` straight
 after. The version's one source is the tracked root `VERSION` file; a release tags
-`v<version>` and publishes `Excerpt.zip` in a GitHub release with notes. The maintainer's
+`v<version>` and publishes `Excerpt.zip` and the Sparkle `appcast.xml` in a GitHub release with notes. The maintainer's
 release tooling, outside this repo, cuts it from a clean, pushed `dev`. The interface it relies on
 is `just gate`, and `just bundle` signing the justfile's `app` with the Developer ID named by
 `APPLE_SIGNING_IDENTITY` and the hardened runtime. No CI: excerpt ships on macOS only, so the

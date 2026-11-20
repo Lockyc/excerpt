@@ -552,8 +552,9 @@ any other way with unsaved edits asks.
 
 ## Install and release
 
-A release is one asset, `Excerpt.zip`: the Developer ID–signed app, notarized and stapled,
-cut by the maintainer's release tooling from a clean, pushed `dev` at `VERSION`.
+A release carries `Excerpt.zip` — the Developer ID–signed app, notarized and stapled — and
+the Sparkle `appcast.xml` that `SUFeedURL` reads, cut by the maintainer's release tooling from
+a clean, pushed `dev` at `VERSION`.
 `install.sh` downloads the latest one and refuses it, before anything in the install
 directories changes, unless its signature verifies, its Team ID is `G9V8U6ZU5E` and Gatekeeper
 accepts it as notarized. It then quits the user's running Excerpt, replaces

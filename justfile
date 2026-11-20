@@ -100,7 +100,7 @@ run: bundle quit
 install: bundle quit
     rm -rf /Applications/Excerpt.app
     ditto {{app}} /Applications/Excerpt.app
-    @# the commit this build came from: lets a later release (lockstep.sh) tell whether it is newer before replacing it
+    @# the commit this build came from: lets the maintainer's release tooling tell whether a later release is newer before replacing it
     xattr -w com.lockyc.build-commit "$(git rev-parse HEAD)$(git status --porcelain | grep -q . && echo -dirty)" /Applications/Excerpt.app
     @just launch /Applications/Excerpt.app
 
@@ -118,5 +118,5 @@ quit:
 [private]
 launch path:
     #!/usr/bin/env bash
-    for _ in {1..20}; do open "{{path}}" 2>/dev/null && exit 0; sleep 0.25; done
-    open "{{path}}"
+    for _ in {1..20}; do open -g -j "{{path}}" 2>/dev/null && exit 0; sleep 0.25; done
+    open -g -j "{{path}}"

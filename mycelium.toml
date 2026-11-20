@@ -1,13 +1,13 @@
 name = "excerpt"
-summary = "macOS screenshot tool: capture, scrolling capture and annotation, plus a cut tool that removes the middle of a screenshot and marks it with a torn seam"
+summary = "macOS screenshot tool: capture, scrolling capture, annotation and screen recording to GIF or MP4, plus a cut tool that removes the middle of a screenshot and marks it with a torn seam"
 status = "active"
-tags = ["screenshot", "scrolling-capture", "annotation", "ocr", "macos"]
+tags = ["screenshot", "scrolling-capture", "annotation", "screen-recording", "ocr", "macos"]
 
 [github]
 topics_extra = ["screenshot-tool", "scrolling-screenshot", "menu-bar-app"]
-description = "macOS screenshot tool: capture, scrolling capture and annotation, plus a cut tool that removes the middle of a screenshot and marks it with a torn seam"
-topics = ["annotation", "macos", "menu-bar-app", "ocr", "screencapturekit", "screenshot", "screenshot-tool", "scrolling-screenshot", "swift", "swiftui", "scrolling-capture"]
+description = "macOS screenshot tool: capture, scrolling capture, annotation and screen recording to GIF or MP4, plus a cut tool that removes the middle of a screenshot and marks it with a torn seam"
+topics = ["annotation", "macos", "menu-bar-app", "ocr", "screencapturekit", "screenshot", "screenshot-tool", "scrolling-screenshot", "swift", "swiftui", "scrolling-capture", "screen-recording"]
 
 [[provides]]
 name = "screenshot-capture"
-summary = "Screenshot capture with scrolling capture, annotation and cut-out-the-middle editing"
+summary = "Screenshot capture with scrolling capture, annotation, GIF/MP4 screen recording and cut-out-the-middle editing"
