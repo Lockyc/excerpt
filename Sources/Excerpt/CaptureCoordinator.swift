@@ -179,6 +179,9 @@ final class CaptureCoordinator {
                 .window(windows: windows), for: action, overlay: overlay, stills: stills),
                 let shot = try await windowStills.value?.still(of: window.window.windowID)
             {
+                // replayd takes stills one at a time: the backdrop's wallpaper still would
+                // otherwise queue behind every window nobody picked.
+                await (try? windowStills.value)??.cancel()
                 let image = await windowBackdrop(shot.image, scale: shot.scale, frame: window.frame)
                 await deliver(image, scale: shot.scale)
             }
