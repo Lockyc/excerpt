@@ -3,6 +3,7 @@ import ExcerptCapture
 import ExcerptCore
 import ExcerptExport
 import ExcerptRecording
+import os
 
 /// Runs one capture end to end: permission → frozen stills → selection → image → deliver.
 /// Main-actor: the overlay, alerts and sound are AppKit, and a plain async method would run off
@@ -41,6 +42,8 @@ final class CaptureCoordinator {
     private var lastModeBarRegion: ScrollRegion?
     /// Counts captures started; a text read copies only while no capture has started since it.
     private var started = 0
+    /// When the capture under way began; `stage` logs each step's time since.
+    private var startedAt = ContinuousClock.now
     static let shutter = NSSound(
         contentsOfFile:
             "/System/Library/Components/CoreAudio.component/Contents/SharedSupport/SystemSounds/system/Screen Capture.aif",
@@ -77,6 +80,12 @@ final class CaptureCoordinator {
         }
     }
 
+    /// Logs that the capture under way reached `name`, with its milliseconds since it began.
+    private func stage(_ name: String) {
+        let ms = (ContinuousClock.now - startedAt) / .milliseconds(1)
+        Log.capture.info("\(name, privacy: .public) at \(ms, format: .fixed(precision: 0)) ms")
+    }
+
     private static func resume(_ waiters: [CheckedContinuation<Void, Never>]) {
         for waiter in waiters { waiter.resume() }
     }
@@ -101,6 +110,8 @@ final class CaptureCoordinator {
         // Read before an alert activates Excerpt.
         frontmostAtStart = NSWorkspace.shared.frontmostApplication
         started += 1
+        startedAt = .now
+        stage("\(requested) started")
         guard ensurePermission() else { return }
         if requested == .scrolling && !scrollingMayStart() { return }
         // Up before the stills are taken, so a click made meanwhile lands on the overlay.
@@ -128,6 +139,7 @@ final class CaptureCoordinator {
         }
         do {
             let stills = try await capturer.stills()
+            stage("stills taken")
             var action = requested
             while true {
                 lifecycle.switchedTo = nil
@@ -142,6 +154,7 @@ final class CaptureCoordinator {
             // The deferred close runs only once this catch returns, and the clear overlay sits
             // above the alert taking every click on every display.
             overlay.close()
+            stage("failed")
             Alerts.captureFailed(error)
         }
     }
@@ -157,7 +170,9 @@ final class CaptureCoordinator {
             lifecycle.selectionEnded()
             selectingOverlay = nil
         }
-        return await overlay.run(mode: mode, stills: stills)
+        let result = await overlay.run(mode: mode, stills: stills)
+        stage("selection ended")
+        return result
     }
 
     /// Runs `action` on the stills already taken.
@@ -179,6 +194,7 @@ final class CaptureCoordinator {
                 .window(windows: windows), for: action, overlay: overlay, stills: stills),
                 let shot = try await windowStills.value?.still(of: window.window.windowID)
             {
+                stage("window still in hand")
                 // replayd takes stills one at a time: the backdrop's wallpaper still would
                 // otherwise queue behind every window nobody picked.
                 await (try? windowStills.value)??.cancel()
@@ -664,10 +680,18 @@ final class CaptureCoordinator {
         let screen = NSScreen.screens.filter { $0.frame.intersects(frame) }.max {
             Self.overlap($0.frame, frame) < Self.overlap($1.frame, frame)
         }
-        if preferences.backdropStyle == .wallpaper, let displayID = screen?.displayID,
-            let wallpaper = try? await capturer.wallpaper(displayID: displayID, scale: scale)
-        {
-            fill = .image(wallpaper)
+        if preferences.backdropStyle == .wallpaper, let displayID = screen?.displayID {
+            do {
+                if let wallpaper = try await capturer.wallpaper(displayID: displayID, scale: scale)
+                {
+                    fill = .image(wallpaper)
+                }
+            } catch {
+                Log.capture.error(
+                    "wallpaper failed, backdrop colour used: \(error.localizedDescription, privacy: .public)"
+                )
+            }
+            stage("wallpaper fetched")
         }
         return Backdrop.compose(
             image, padding: Int(preferences.windowPaddingPoints * scale), fill: fill)
@@ -704,6 +728,7 @@ final class CaptureCoordinator {
             let url = try await Task.detached(priority: .userInitiated) {
                 try store.saveCapture(image, scale: Double(scale), at: date)
             }.value
+            stage("saved")
             do {
                 try Pasteboard.copyPNG(at: url)
             } catch {
@@ -711,6 +736,7 @@ final class CaptureCoordinator {
             }
             if preferences.playSound { Self.shutter?.play() }
             onDelivered(url, image)
+            stage("thumbnail shown")
             return true
         } catch let error as PNGError {
             Alerts.encodeFailed(error)

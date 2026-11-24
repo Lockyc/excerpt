@@ -21,6 +21,8 @@ A macOS menu-bar screenshot tool in Swift (SwiftPM, macOS 15+). The architecture
 - **The primary file is clean.** Nothing the user removed — cut bands, blurred pixels, the
   original — may be embedded in the dated primary PNG. The original and the edits live only in
   `… original.png`.
+- **Nothing fails silently.** A failure the app recovers from without telling the user is
+  logged through Core's `Log`, and a capture logs each stage's timing there.
 - **Golden images** pin the renderer; a deliberate visual change regenerates them in the same
   commit. `EXCERPT_RECORD_GOLDENS=1 swift test` re-records goldens; inspect every recorded PNG
   before committing it.

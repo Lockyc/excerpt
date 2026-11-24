@@ -1,6 +1,7 @@
 import AVFoundation
 import ExcerptCore
 import ExcerptRecording
+import os
 
 /// The master's frame at a time, rendered with the edits through `RecordingRenderer`, the
 /// renderer that writes the primary. Only the latest request renders: one asked for while
@@ -58,8 +59,14 @@ final class FramePreview {
     private func frame(at t: Double) async -> CGImage? {
         if let decoded, decoded.time == t { return decoded.image }
         let time = CMTime(seconds: t, preferredTimescale: 1_000_000)
-        guard let image = try? await generator.image(at: time).image else { return nil }
-        decoded = (t, image)
-        return image
+        do {
+            let image = try await generator.image(at: time).image
+            decoded = (t, image)
+            return image
+        } catch {
+            Log.recording.error(
+                "frame at \(t) s failed: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
     }
 }

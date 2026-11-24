@@ -3,10 +3,12 @@ import ExcerptCapture
 import ExcerptCore
 import ExcerptExport
 import ScreenCaptureKit
+import os
 
 @MainActor
 enum Alerts {
     static func show(_ title: String, _ message: String) {
+        Log.alert.error("\(title, privacy: .public): \(message, privacy: .public)")
         let alert = NSAlert()
         alert.messageText = title
         alert.informativeText = message

@@ -4,6 +4,7 @@ import ExcerptCapture
 import ExcerptCore
 import ExcerptRecording
 import ImageIO
+import os
 
 /// One recording from countdown to a readable master: the 3-2-1 countdown, then the recorder,
 /// the event logger and the control bar together until Stop, Discard, the time limit or a
@@ -258,6 +259,13 @@ enum RecordingPoster {
         generator.appliesPreferredTrackTransform = true
         generator.requestedTimeToleranceBefore = .zero
         generator.requestedTimeToleranceAfter = .zero
-        return try? await generator.image(at: .zero).image
+        do {
+            return try await generator.image(at: .zero).image
+        } catch {
+            Log.recording.error(
+                "poster of \(url.lastPathComponent, privacy: .public) failed: \(error.localizedDescription, privacy: .public)"
+            )
+            return nil
+        }
     }
 }

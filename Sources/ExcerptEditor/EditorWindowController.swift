@@ -1,5 +1,6 @@
 import AppKit
 import ExcerptCore
+import os
 
 /// Keeps a document narrower than the window centred horizontally, and (being flipped) sits a
 /// document shorter than the window at the top.
@@ -550,6 +551,9 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
             } catch is CancellationError {
                 return false
             } catch {
+                Log.alert.error(
+                    "Couldn't save \(page.capture.primary.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)"
+                )
                 let alert = NSAlert()
                 alert.messageText = "Couldn't save \(page.capture.primary.lastPathComponent)"
                 alert.informativeText = error.localizedDescription

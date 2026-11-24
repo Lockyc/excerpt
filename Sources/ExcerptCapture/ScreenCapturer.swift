@@ -189,11 +189,21 @@ public final class ScreenCapturer {
         let work = QueuedWork<CGWindowID, WindowStill>(
             keys: requests.map(\.window.window.windowID), width: Self.windowStillsInFlight
         ) { id in
-            guard let request = byWindow[id],
-                let image = try? await SCScreenshotManager.captureImage(
+            guard let request = byWindow[id] else { return nil }
+            let interval = Log.stills.beginInterval("window still", id: Log.stills.makeSignpostID())
+            defer { Log.stills.endInterval("window still", interval) }
+            do {
+                let image = try await SCScreenshotManager.captureImage(
                     contentFilter: request.filter, configuration: request.configuration)
-            else { return nil }
-            return WindowStill(window: request.window, image: image, scale: request.scale)
+                return WindowStill(window: request.window, image: image, scale: request.scale)
+            } catch {
+                if !Task.isCancelled {
+                    Log.capture.error(
+                        "window \(id) still failed: \(error.localizedDescription, privacy: .public)"
+                    )
+                }
+                return nil
+            }
         }
         return WindowStills(
             work: work,
