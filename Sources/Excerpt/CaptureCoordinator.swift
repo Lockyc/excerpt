@@ -191,9 +191,16 @@ final class CaptureCoordinator {
         case .window:
             let windows = try await windowList.value?.pickable ?? []
             if case .window(let window) = await select(
-                .window(windows: windows), for: action, overlay: overlay, stills: stills),
-                let shot = try await windowStills.value?.still(of: window.window.windowID)
+                .window(windows: windows), for: action, overlay: overlay, stills: stills)
             {
+                // The still's own failure, when it threw, is logged where it was taken.
+                guard let shot = try await windowStills.value?.still(of: window.window.windowID)
+                else {
+                    stage("window \(window.window.windowID) has no still")
+                    Toast.show(
+                        "Couldn't capture that window · it closed, or macOS refused its image")
+                    return
+                }
                 stage("window still in hand")
                 // replayd takes stills one at a time: the backdrop's wallpaper still would
                 // otherwise queue behind every window nobody picked.
