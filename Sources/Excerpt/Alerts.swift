@@ -138,6 +138,19 @@ enum Alerts {
         show("Couldn't read the text", sentence(error.localizedDescription))
     }
 
+    /// Asks before a save renders `primary` again from its master's original over a change made
+    /// to it outside Excerpt; true on Replace.
+    static func overwriteChangedPrimary(_ primary: URL) -> Bool {
+        let alert = NSAlert()
+        alert.messageText = "Replace \(primary.lastPathComponent)?"
+        alert.informativeText = sentence(
+            LibraryError.primaryChanged(primary).localizedDescription)
+        alert.addButton(withTitle: "Replace")
+        alert.addButton(withTitle: "Cancel")
+        NSApp.activate()
+        return alert.runModal() == .alertFirstButtonReturn
+    }
+
     /// The editor's current image could not be put on the clipboard.
     static func copyFailed(_ file: URL, _ error: Error) {
         show(

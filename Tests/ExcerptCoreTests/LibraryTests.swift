@@ -314,6 +314,49 @@ import Testing
         #expect(reopened.edits == newer && !reopened.supersedesMaster)
     }
 
+    /// Review focus (privacy): the master opened directly loads the original, so saving it would
+    /// re-render the primary from pixels a redaction drawn over it elsewhere covers. That save
+    /// is refused, writing nothing, until the caller says to overwrite the changed primary.
+    @Test func savingTheMasterOverAPrimaryChangedElsewhereIsRefusedUntilConfirmed() throws {
+        let store = LibraryStore(folder: tempFolder(), naming: LibraryNaming(timeZone: utc))
+        let original = Fixtures.sheet(width: 200, height: 400)
+        let primary = try store.saveCapture(original, scale: 2, at: date)
+        let edits = EditDocument(scale: 2, cuts: [Cut(axis: .horizontal, lower: 241, upper: 321)])
+        try store.saveEdits(primary: primary, original: original, edits: edits)
+        let master = primary.deletingLastPathComponent()
+            .appendingPathComponent(
+                LibraryNaming.originalName(forPrimary: primary.lastPathComponent))
+
+        var redacted = PixelBuffer(try PNGCodec.decode(Data(contentsOf: primary)).image)
+        for y in 20..<60 {
+            for x in 10..<190 {
+                let i = (y * redacted.width + x) * 4
+                redacted.bytes[i..<(i + 4)] = [0, 0, 0, 255]
+            }
+        }
+        try PNGCodec.encode(redacted.makeImage(), scale: 2).write(to: primary)
+        let primaryBefore = try Data(contentsOf: primary)
+        let masterBefore = try Data(contentsOf: master)
+
+        let direct = try store.load(master)
+        let newer = EditDocument(scale: 2, cuts: [Cut(axis: .vertical, lower: 150, upper: 170)])
+        #expect(throws: LibraryError.primaryChanged(primary)) {
+            try store.saveEdits(
+                primary: direct.primary, original: direct.original, edits: newer,
+                replacingMaster: direct.supersedesMaster)
+        }
+        #expect(try Data(contentsOf: primary) == primaryBefore)
+        #expect(try Data(contentsOf: master) == masterBefore)
+
+        try store.saveEdits(
+            primary: direct.primary, original: direct.original, edits: newer,
+            replacingMaster: direct.supersedesMaster, overwritingChangedPrimary: true)
+        let saved = PixelBuffer(try PNGCodec.decode(Data(contentsOf: primary)).image)
+        #expect(saved == PixelBuffer(Renderer.render(original, edits: newer).image))
+        let resaved = EditDocument(scale: 2)
+        try store.saveEdits(primary: primary, original: original, edits: resaved)
+    }
+
     /// Every image `load` takes pixels from is admitted first — the master with its edits, then
     /// the primary it is checked against — and a refusal stops the open.
     @Test func loadAdmitsEachImageBeforeReadingIt() throws {

@@ -95,7 +95,8 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
 
     /// `captures` is the series in order, one capture for a plain editor. `save` writes a
     /// capture's document (the app's `LibraryStore.saveEdits`, off the main thread) and returns
-    /// the primary's PNG it wrote; `copy`, Save's last step, is handed a closure that returns
+    /// the primary's PNG it wrote, or throws `CancellationError` when the user declined the write,
+    /// which stops the save without an alert; `copy`, Save's last step, is handed a closure that returns
     /// every capture's PNG in order, or why one couldn't be rendered, puts them on the
     /// pasteboard, reports any failure, the render's included, and returns whether it worked;
     /// `borderStyle` is the border a capture without one gets when turned on, and
@@ -540,12 +541,14 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
     }
 
     /// Writes the primary and master of each capture with the document it was unsaved with;
-    /// false (after telling the user) at the first that failed.
+    /// false at the first that failed, after telling the user unless they declined it.
     private func writeDocuments(_ unsaved: [(page: Page, document: EditDocument)]) async -> Bool {
         for (page, document) in unsaved {
             do {
                 page.written = (document, try await save(page.capture, document))
                 page.model.markSaved(document)
+            } catch is CancellationError {
+                return false
             } catch {
                 let alert = NSAlert()
                 alert.messageText = "Couldn't save \(page.capture.primary.lastPathComponent)"

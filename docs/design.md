@@ -48,8 +48,9 @@ Captures land in the **library** — `~/Documents/Screenshots/` by default (a se
 - **Re-editing** the master loads the original plus its edits. The primary loads them too only
   while re-rendering them reproduces it pixel for pixel; a primary changed elsewhere (a
   redaction drawn over it) opens as a flat image, and saving it makes it the master's new
-  original, so nothing it covers comes back. A primary whose original is gone opens flat.
-  Saving re-renders the primary.
+  original, so nothing it covers comes back. Saving the master opened directly over such a
+  primary asks before replacing it. A primary whose original is gone opens flat. Saving
+  re-renders the primary.
 - Sidecar files and a separate edits database are both wrong here: library files get moved and
   sorted by other tools, which would orphan either one. The edits travel inside the master.
 - **The top level holds the last 30 days; older files sit in `YYYY/MM-Month/`** (by creation

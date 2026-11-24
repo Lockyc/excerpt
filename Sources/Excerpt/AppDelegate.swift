@@ -216,11 +216,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let editor = EditorWindowController(
             captures: series,
             save: { capture, document in
-                try await Task.detached(priority: .userInitiated) {
-                    try store.saveEdits(
-                        primary: capture.primary, original: capture.original, edits: document,
-                        replacingMaster: capture.supersedesMaster)
-                }.value
+                let write = { @Sendable (overwriting: Bool) in
+                    try await Task.detached(priority: .userInitiated) {
+                        try store.saveEdits(
+                            primary: capture.primary, original: capture.original, edits: document,
+                            replacingMaster: capture.supersedesMaster,
+                            overwritingChangedPrimary: overwriting)
+                    }.value
+                }
+                do {
+                    return try await write(false)
+                } catch LibraryError.primaryChanged(let primary) {
+                    guard Alerts.overwriteChangedPrimary(primary) else { throw CancellationError() }
+                    return try await write(true)
+                }
             },
             copy: { makePNGs in
                 do {

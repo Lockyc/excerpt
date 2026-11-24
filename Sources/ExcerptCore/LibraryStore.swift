@@ -4,11 +4,16 @@ import Foundation
 public enum LibraryError: Error, Equatable, LocalizedError {
     /// A file named like this capture's master exists but isn't Excerpt's (no edits chunk).
     case foreignOriginal(URL)
+    /// The primary was changed since Excerpt saved it, and saving would render it again from
+    /// the master's original.
+    case primaryChanged(URL)
 
     public var errorDescription: String? {
         switch self {
         case .foreignOriginal(let file):
             "A file named '\(file.lastPathComponent)' beside it isn't Excerpt's. Rename or move it, then save again."
+        case .primaryChanged(let file):
+            "'\(file.lastPathComponent)' was changed outside Excerpt. Saving renders it again from the original, so anything drawn over it there, such as a redaction, is lost."
         }
     }
 }
@@ -144,12 +149,15 @@ public struct LibraryStore: Sendable {
     /// an edited primary without its original. An existing master keeps its pixels: only its
     /// edits chunk is rewritten; the first edit, and every save `replacingMaster` (a primary
     /// loaded with `supersedesMaster`), encodes `original`. A file at the master's path that
-    /// isn't Excerpt's throws `foreignOriginal` before anything is written. Returns the
+    /// isn't Excerpt's throws `foreignOriginal` before anything is written. So does a primary
+    /// the master's saved edits no longer reproduce (redacted elsewhere, then the master opened
+    /// directly), with `primaryChanged`, unless `overwritingChangedPrimary`. Returns the
     /// primary's PNG as written. The primary is rendered and encoded while the master is
     /// prepared: a first save encodes both in full.
     @discardableResult
     public func saveEdits(
-        primary: URL, original: CGImage, edits: EditDocument, replacingMaster: Bool = false
+        primary: URL, original: CGImage, edits: EditDocument, replacingMaster: Bool = false,
+        overwritingChangedPrimary: Bool = false
     ) throws -> Data {
         let master = primary.deletingLastPathComponent()
             .appendingPathComponent(
@@ -166,6 +174,17 @@ public struct LibraryStore: Sendable {
             if replacingMaster {
                 masterData = try MasterFile.encode(original: original, edits: edits)
             } else {
+                if !overwritingChangedPrimary,
+                    let saved = try PNGChunks.text(keyword: PNGChunks.editsKeyword, in: existing),
+                    let onDisk = try? Data(contentsOf: primary)
+                {
+                    let savedEdits = try EditDocument.decode(Data(saved.utf8))
+                    let kept = (try? PNGCodec.decode(onDisk)).map {
+                        MasterFile.reproduces(
+                            PixelBuffer($0.image), from: original, edits: savedEdits)
+                    }
+                    guard kept == true else { throw LibraryError.primaryChanged(primary) }
+                }
                 let json = String(decoding: try edits.encoded(), as: UTF8.self)
                 masterData = try PNGChunks.settingText(
                     json, keyword: PNGChunks.editsKeyword, in: existing)
