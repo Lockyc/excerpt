@@ -7,8 +7,11 @@ import os
 
 @MainActor
 enum Alerts {
-    static func show(_ title: String, _ message: String) {
-        Log.alert.error("\(title, privacy: .public): \(message, privacy: .public)")
+    /// Logs the alert with `error`'s whole chain, so the log names the cause the sentence leaves out.
+    static func show(_ title: String, _ message: String, error: Error? = nil) {
+        let cause = error.map { " — " + Log.describe($0) } ?? ""
+        Log.alert.error(
+            "\(title, privacy: .public): \(message, privacy: .public)\(cause, privacy: .public)")
         let alert = NSAlert()
         alert.messageText = title
         alert.informativeText = message
@@ -24,7 +27,7 @@ enum Alerts {
         guard nsError.domain == SCStreamErrorDomain,
             nsError.code == SCStreamError.Code.userDeclined.rawValue,
             ScreenCapturer.hasPermission()
-        else { return show("Capture failed", sentence(error.localizedDescription)) }
+        else { return show("Capture failed", sentence(error.localizedDescription), error: error) }
         let alert = NSAlert()
         alert.messageText = "Excerpt needs to reopen to capture"
         alert.informativeText =
@@ -44,7 +47,9 @@ enum Alerts {
         ) { _, error in
             DispatchQueue.main.async {
                 if let error {
-                    show("Couldn't reopen Excerpt", sentence(error.localizedDescription))
+                    show(
+                        "Couldn't reopen Excerpt", sentence(error.localizedDescription),
+                        error: error)
                 } else {
                     NSApp.terminate(nil)
                 }
@@ -64,7 +69,8 @@ enum Alerts {
         show(
             "Couldn't use the library folder",
             sentence("Excerpt couldn't write to \(folder.path): \(error.localizedDescription)")
-                + " Choose another library folder in Settings."
+                + " Choose another library folder in Settings.",
+            error: error
         )
     }
 
@@ -72,7 +78,8 @@ enum Alerts {
     static func encodeFailed(_ error: Error) {
         show(
             "Couldn't encode the capture",
-            sentence("Excerpt couldn't make a PNG from the capture: \(error)")
+            sentence("Excerpt couldn't make a PNG from the capture: \(error)"),
+            error: error
         )
     }
 
@@ -82,7 +89,8 @@ enum Alerts {
             "Couldn't copy to the clipboard",
             sentence(
                 "The capture is saved as \(file.lastPathComponent), but Excerpt couldn't read it back to copy: \(error.localizedDescription)"
-            )
+            ),
+            error: error
         )
     }
 
@@ -122,7 +130,7 @@ enum Alerts {
             "Couldn't file captures",
             sentence(
                 "Excerpt files captures into month folders, but couldn't read \(folder.path): \(error.localizedDescription)"
-            ))
+            ), error: error)
     }
 
     /// Capture Text recognised the selection's text but could not put it on the clipboard, which
@@ -132,12 +140,12 @@ enum Alerts {
             "Couldn't copy to the clipboard",
             sentence(
                 "Excerpt read the text but couldn't copy it, and the clipboard is now empty: \(error.localizedDescription)"
-            ))
+            ), error: error)
     }
 
     /// Capture Text could not read the selection's text.
     static func textUnreadable(_ error: Error) {
-        show("Couldn't read the text", sentence(error.localizedDescription))
+        show("Couldn't read the text", sentence(error.localizedDescription), error: error)
     }
 
     /// Asks before a save renders `primary` again from its master's original over a change made
@@ -158,12 +166,14 @@ enum Alerts {
         show(
             "Couldn't copy to the clipboard",
             sentence(
-                "Excerpt couldn't copy \(file.lastPathComponent): \(error.localizedDescription)"))
+                "Excerpt couldn't copy \(file.lastPathComponent): \(error.localizedDescription)"),
+            error: error)
     }
 
     /// A file the editor can't open: not an image, unreadable, too large, damaged, or edited by
     /// a newer Excerpt. The title names the file at fault.
     static func openFailed(_ opened: URL, _ error: Error) {
+        let original = error
         var file = opened
         var error = error
         if let unreadable = error as? MasterUnreadable {
@@ -177,18 +187,20 @@ enum Alerts {
         case is PNGError: reason = "It isn't a PNG Excerpt can read."
         default: reason = sentence(error.localizedDescription)
         }
-        show("Couldn't open \(file.lastPathComponent)", reason)
+        show("Couldn't open \(file.lastPathComponent)", reason, error: original)
     }
 }
 
-/// A scrolling capture's own failures, said in its HUD where the user is looking, not an alert.
+/// A scrolling capture's own failures, said in its HUD where the user is looking, not an alert,
+/// and logged with the error's whole chain as an alert is.
 @MainActor
 extension ScrollHUDText {
     /// The region couldn't be streamed, so nothing was captured.
     static func couldNotStart(_ error: Error) -> ScrollHUDText {
-        ScrollHUDText(
-            title: "Couldn't start the scrolling capture",
-            detail: Alerts.sentence(error.localizedDescription), tone: .attention)
+        logged(
+            ScrollHUDText(
+                title: "Couldn't start the scrolling capture",
+                detail: Alerts.sentence(error.localizedDescription), tone: .attention), error)
     }
 
     /// A scrolling capture ended part-way, because its stream stopped or the displays changed;
@@ -199,19 +211,29 @@ extension ScrollHUDText {
             ? "The displays changed, so the capture ended."
             : Alerts.sentence(
                 "Excerpt lost the picture of the region: \(error.localizedDescription)")
-        return ScrollHUDText(
-            title: "Scrolling capture stopped",
-            detail: cause + " "
-                + (savedPartial ? "What was stitched before that is saved." : "Nothing was saved."),
-            tone: .attention)
+        return logged(
+            ScrollHUDText(
+                title: "Scrolling capture stopped",
+                detail: cause + " "
+                    + (savedPartial
+                        ? "What was stitched before that is saved." : "Nothing was saved."),
+                tone: .attention), error)
     }
 
     /// The region's screen recording could not be stopped after a scrolling capture ended.
     static func recordingNotStopped(_ error: Error, saved: Bool) -> ScrollHUDText {
-        ScrollHUDText(
-            title: "Couldn't stop recording the region",
-            detail: Alerts.sentence(
-                "Excerpt couldn't stop recording the screen: \(error.localizedDescription)")
-                + (saved ? " The capture is saved." : ""), tone: .attention)
+        logged(
+            ScrollHUDText(
+                title: "Couldn't stop recording the region",
+                detail: Alerts.sentence(
+                    "Excerpt couldn't stop recording the screen: \(error.localizedDescription)")
+                    + (saved ? " The capture is saved." : ""), tone: .attention), error)
+    }
+
+    private static func logged(_ text: ScrollHUDText, _ error: Error) -> ScrollHUDText {
+        Log.alert.error(
+            "\(text.title, privacy: .public): \(text.detail, privacy: .public) — \(Log.describe(error), privacy: .public)"
+        )
+        return text
     }
 }

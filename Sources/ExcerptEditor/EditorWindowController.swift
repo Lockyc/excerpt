@@ -552,7 +552,7 @@ public final class EditorWindowController: NSWindowController, NSWindowDelegate 
                 return false
             } catch {
                 Log.alert.error(
-                    "Couldn't save \(page.capture.primary.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)"
+                    "Couldn't save \(page.capture.primary.lastPathComponent, privacy: .public): \(Log.describe(error), privacy: .public)"
                 )
                 let alert = NSAlert()
                 alert.messageText = "Couldn't save \(page.capture.primary.lastPathComponent)"

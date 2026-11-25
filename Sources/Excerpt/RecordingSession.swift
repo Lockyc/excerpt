@@ -214,7 +214,7 @@ enum RecordingSave {
                 "Couldn't save the recording",
                 Alerts.sentence(
                     "The recording is kept as \(master.url.lastPathComponent), but Excerpt couldn't \(failure.step): \(failure.error.localizedDescription)"
-                ))
+                ), error: failure.error)
             return nil
         }
     }
@@ -263,7 +263,7 @@ enum RecordingPoster {
             return try await generator.image(at: .zero).image
         } catch {
             Log.recording.error(
-                "poster of \(url.lastPathComponent, privacy: .public) failed: \(error.localizedDescription, privacy: .public)"
+                "poster of \(url.lastPathComponent, privacy: .public) failed: \(Log.describe(error), privacy: .public)"
             )
             return nil
         }

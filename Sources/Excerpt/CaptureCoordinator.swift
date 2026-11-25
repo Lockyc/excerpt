@@ -357,7 +357,8 @@ final class CaptureCoordinator {
                 FileManager.default.fileExists(atPath: paths.master.path)
                 ? " The recording is kept as \(paths.master.lastPathComponent)." : ""
             Alerts.show(
-                "Recording failed", Alerts.sentence(error.localizedDescription) + kept)
+                "Recording failed", Alerts.sentence(error.localizedDescription) + kept,
+                error: error)
         case .saved(let master, let stoppedEarly, let eventsSaved):
             // Its own task, so the hotkeys work again while it renders: this capture ends now.
             guard let id = ended.save else { break }
@@ -695,7 +696,7 @@ final class CaptureCoordinator {
                 }
             } catch {
                 Log.capture.error(
-                    "wallpaper failed, backdrop colour used: \(error.localizedDescription, privacy: .public)"
+                    "wallpaper failed, backdrop colour used: \(Log.describe(error), privacy: .public)"
                 )
             }
             stage("wallpaper fetched")

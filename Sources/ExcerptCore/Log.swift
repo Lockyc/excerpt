@@ -38,7 +38,9 @@ public enum Log {
         if !extra.isEmpty { line += " [\(extra.joined(separator: ", "))]" }
         guard depth < 8 else { return line }
         var underlying = ns.userInfo[NSMultipleUnderlyingErrorsKey] as? [Error] ?? []
-        if let single = ns.userInfo[NSUnderlyingErrorKey] as? Error { underlying.insert(single, at: 0) }
+        if let single = ns.userInfo[NSUnderlyingErrorKey] as? Error {
+            underlying.insert(single, at: 0)
+        }
         for cause in underlying { line += " ← " + describe(cause, depth: depth + 1) }
         return line
     }

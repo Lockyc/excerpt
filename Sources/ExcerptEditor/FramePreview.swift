@@ -65,7 +65,7 @@ final class FramePreview {
             return image
         } catch {
             Log.recording.error(
-                "frame at \(t) s failed: \(error.localizedDescription, privacy: .public)")
+                "frame at \(t) s failed: \(Log.describe(error), privacy: .public)")
             return nil
         }
     }

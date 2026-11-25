@@ -199,7 +199,7 @@ public final class ScreenCapturer {
             } catch {
                 if !Task.isCancelled {
                     Log.capture.error(
-                        "window \(id) still failed: \(error.localizedDescription, privacy: .public)"
+                        "window \(id) still failed: \(Log.describe(error), privacy: .public)"
                     )
                 }
                 return nil
