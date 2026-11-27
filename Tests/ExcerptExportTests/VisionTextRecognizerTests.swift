@@ -15,6 +15,21 @@ import Testing
         #expect(rect == CGRect(x: 100, y: 50, width: 200, height: 50))
     }
 
+    /// macOS purging the process's Caches folder under disk pressure deletes the compiled model
+    /// Vision loaded; reading still works.
+    @Test(.timeLimit(.minutes(3))) func readsTextAfterTheModelCacheIsPurged() throws {
+        let image = TextFixtures.page(["Northwind Traders 4821"], width: 420)
+        let render = Renderer.render(image, edits: EditDocument(scale: 2, annotations: [], salt: 7))
+        let read = { try CaptureText.read(render.image, scale: 2, recognizer: VisionTextRecognizer()) }
+        #expect(try read().contains("Northwind Traders 4821"))
+        let cache = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent(Bundle.main.bundleIdentifier ?? ProcessInfo.processInfo.processName)
+            .appendingPathComponent("com.apple.e5rt.e5bundlecache")
+        try #require(FileManager.default.fileExists(atPath: cache.path), "\(cache.path)")
+        try FileManager.default.removeItem(at: cache)
+        #expect(try read().contains("Northwind Traders 4821"))
+    }
+
     /// A real recognition pass over drawn text: the words come back in reading order, and the
     /// line under a blur does not come back at all. The first run after login compiles Vision's
     /// recognition model (about 38 s); later runs are fast. The limit allows for the first.

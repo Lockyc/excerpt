@@ -1,6 +1,8 @@
 import CoreGraphics
+import CoreML
 import ExcerptCore
 import Vision
+import os
 
 /// Vision's accurate text recognition, on device, plus QR codes: a code's payload is a run at
 /// the code's bounds, so it reads in place among the text. Language correction is off:
@@ -10,7 +12,28 @@ import Vision
 public struct VisionTextRecognizer: TextRecognizer {
     public init() {}
 
+    /// Set once the default compute devices have failed where the CPU succeeded: they stay
+    /// broken for the rest of the process. Vision loads its compiled Neural Engine model from
+    /// the app's Caches folder, and once macOS purges that folder under disk pressure every
+    /// later request fails with an E5RT error until the app restarts. The CPU path does not
+    /// load that bundle.
+    private static let cpuOnly = OSAllocatedUnfairLock(initialState: false)
+
     public func recognize(_ image: CGImage) throws -> [ExcerptCore.RecognizedText] {
+        if Self.cpuOnly.withLock({ $0 }) { return try recognize(image, onCPU: true) }
+        do {
+            return try recognize(image, onCPU: false)
+        } catch {
+            // The CPU's own failure would hide the cause, so the first error is the one thrown.
+            guard let lines = try? recognize(image, onCPU: true) else { throw error }
+            Self.cpuOnly.withLock { $0 = true }
+            Log.capture.error(
+                "text recognition moved to the CPU: \(Log.describe(error), privacy: .public)")
+            return lines
+        }
+    }
+
+    private func recognize(_ image: CGImage, onCPU: Bool) throws -> [ExcerptCore.RecognizedText] {
         // The request revisions are the OS default on purpose: current accuracy.
         let text = VNRecognizeTextRequest()
         text.recognitionLevel = .accurate
@@ -18,6 +41,7 @@ public struct VisionTextRecognizer: TextRecognizer {
         text.automaticallyDetectsLanguage = true
         let codes = VNDetectBarcodesRequest()
         codes.symbologies = [.qr]
+        if onCPU { try [text, codes].forEach(Self.runOnCPU) }
         try VNImageRequestHandler(cgImage: image).perform([text, codes])
         let lines: [ExcerptCore.RecognizedText] = (text.results ?? []).compactMap { observation in
             guard let candidate = observation.topCandidates(1).first else { return nil }
@@ -34,6 +58,14 @@ public struct VisionTextRecognizer: TextRecognizer {
                 payload, pixelRect(observation.boundingBox, image), isBarcode: true)
         }
         return lines + payloads
+    }
+
+    private static func runOnCPU(_ request: VNRequest) throws {
+        for (stage, devices) in try request.supportedComputeStageDevices {
+            if let cpu = devices.first(where: { if case .cpu = $0 { true } else { false } }) {
+                request.setComputeDevice(cpu, for: stage)
+            }
+        }
     }
 
     private func pixelRect(_ box: CGRect, _ image: CGImage) -> CGRect {
