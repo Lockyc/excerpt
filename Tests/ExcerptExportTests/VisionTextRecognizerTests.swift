@@ -20,10 +20,14 @@ import Testing
     @Test(.timeLimit(.minutes(3))) func readsTextAfterTheModelCacheIsPurged() throws {
         let image = TextFixtures.page(["Northwind Traders 4821"], width: 420)
         let render = Renderer.render(image, edits: EditDocument(scale: 2, annotations: [], salt: 7))
-        let read = { try CaptureText.read(render.image, scale: 2, recognizer: VisionTextRecognizer()) }
+        let read = {
+            try CaptureText.read(render.image, scale: 2, recognizer: VisionTextRecognizer())
+        }
         #expect(try read().contains("Northwind Traders 4821"))
         let cache = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent(Bundle.main.bundleIdentifier ?? ProcessInfo.processInfo.processName)
+            .appendingPathComponent(
+                Bundle.main.bundleIdentifier ?? ProcessInfo.processInfo.processName
+            )
             .appendingPathComponent("com.apple.e5rt.e5bundlecache")
         try #require(FileManager.default.fileExists(atPath: cache.path), "\(cache.path)")
         try FileManager.default.removeItem(at: cache)
