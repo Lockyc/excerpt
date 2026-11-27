@@ -14,9 +14,9 @@ public struct VisionTextRecognizer: TextRecognizer {
 
     /// Set once the default compute devices have failed where the CPU succeeded: they stay
     /// broken for the rest of the process. Vision loads its compiled Neural Engine model from
-    /// the app's Caches folder, and once macOS purges that folder under disk pressure every
-    /// later request fails with an E5RT error until the app restarts. The CPU path does not
-    /// load that bundle.
+    /// the app's Caches folder, and once those files are deleted from under the running app
+    /// every later request fails with an E5RT error until the app restarts. The CPU path does
+    /// not load that bundle.
     private static let cpuOnly = OSAllocatedUnfairLock(initialState: false)
 
     public func recognize(_ image: CGImage) throws -> [ExcerptCore.RecognizedText] {
